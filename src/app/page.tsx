@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { serif as serif_, numeric } from "@/lib/typography";
 
 export default function Home() {
   return (
@@ -7,7 +8,7 @@ export default function Home() {
         minHeight: "100vh",
         background: "#FAFAF7",
         color: "#0A0A0A",
-        fontFamily: "Georgia, 'Source Serif Pro', serif",
+        ...serif_,
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",

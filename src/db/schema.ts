@@ -384,6 +384,37 @@ export const transactions = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Trade attachments — PDF memos uploaded with trades
+// ---------------------------------------------------------------------------
+
+/**
+ * Files attached to a transaction at submit time. v1 supports PDF only.
+ * Storage URL points to Vercel Blob; the URL is "public" only in the sense
+ * that the Blob is accessible by URL — in practice the app gates downloads
+ * by checking auth on /api/funds/[slug]/trades/[id]/memo.
+ */
+export const tradeAttachments = pgTable(
+  "trade_attachments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    storageUrl: text("storage_url").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+    uploadedByUserId: uuid("uploaded_by_user_id")
+      .notNull()
+      .references(() => users.id),
+  },
+  (t) => ({
+    txnIdx: index("trade_attachments_txn_idx").on(t.transactionId),
+  })
+);
+
+// ---------------------------------------------------------------------------
 // Positions and post-mortems (lifecycle: opened → ... → closed)
 // ---------------------------------------------------------------------------
 

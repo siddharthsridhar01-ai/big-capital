@@ -2,6 +2,8 @@ import { getOrCreateUser } from "@/lib/auth";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import SearchModal from "@/components/SearchModal";
+import { serif } from "@/lib/typography";
 
 export default async function DashboardLayout({
   children,
@@ -24,7 +26,6 @@ export default async function DashboardLayout({
         minHeight: "100vh",
         background: "#FAFAF7",
         color: "#0A0A0A",
-        fontFamily: "Georgia, 'Source Serif Pro', serif",
       }}
     >
       <header
@@ -65,7 +66,7 @@ export default async function DashboardLayout({
             </svg>
             <span
               style={{
-                fontFamily: "Georgia, 'Source Serif Pro', serif",
+                ...serif,
                 fontSize: 15,
                 color: "#00183A",
                 fontWeight: 500,
@@ -90,6 +91,21 @@ export default async function DashboardLayout({
             >
               Funds
             </Link>
+            {user.role === "admin" && (
+              <Link
+                href="/dashboard/admin"
+                style={{
+                  fontFamily: "system-ui, sans-serif",
+                  fontSize: 13,
+                  color: "#6B6B66",
+                  padding: "6px 12px",
+                  borderRadius: 4,
+                  textDecoration: "none",
+                }}
+              >
+                Admin
+              </Link>
+            )}
           </nav>
         </div>
         <div
@@ -102,6 +118,7 @@ export default async function DashboardLayout({
             color: "#6B6B66",
           }}
         >
+          <SearchModal />
           <span
             style={{
               background:

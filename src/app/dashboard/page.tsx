@@ -3,6 +3,7 @@ import { funds as fundsTable, fundMembers } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
 import { eq, isNull, and } from "drizzle-orm";
 import Link from "next/link";
+import { serif as serif_, numeric } from "@/lib/typography";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function DashboardHome() {
       </div>
       <h1
         style={{
-          fontFamily: "Georgia, 'Source Serif Pro', serif",
+          ...serif_,
           fontWeight: 400,
           fontSize: 32,
           color: "#00183A",
@@ -109,7 +110,7 @@ export default async function DashboardHome() {
             </div>
             <div
               style={{
-                fontFamily: "Georgia, serif",
+                ...serif_,
                 fontSize: 18,
                 color: "#00183A",
                 marginBottom: 8,

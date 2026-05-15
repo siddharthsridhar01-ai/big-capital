@@ -1,4 +1,5 @@
 import { SignIn } from "@clerk/nextjs";
+import { serif as serif_, numeric } from "@/lib/typography";
 
 export default function Page() {
   return (
@@ -33,7 +34,7 @@ export default function Page() {
         </svg>
         <div
           style={{
-            fontFamily: "Georgia, 'Source Serif Pro', serif",
+            ...serif_,
             fontSize: 22,
             color: "#00183A",
           }}

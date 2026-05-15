@@ -217,7 +217,16 @@ export async function GET(req: NextRequest) {
           inceptionDate: INCEPTION_DATE,
           startingNav: f.startingNav,
         })
-        .onConflictDoNothing();
+        .onConflictDoUpdate({
+          // Re-running setup keeps schema-driven fields current. Notably, this
+          // applies a NAV bump to funds that already exist in the DB.
+          target: schema.funds.slug,
+          set: {
+            name: f.name,
+            strategyDescription: f.strategyDescription,
+            startingNav: f.startingNav,
+          },
+        });
       result.seed.funds++;
     }
 
@@ -297,8 +306,30 @@ export async function GET(req: NextRequest) {
       result.seed.tickers++;
     }
 
-    // Insert recent close prices
+    // Clear any existing seed prices (source='seed'). This lets us correct
+    // stale seed values by re-running setup. Real EODHD data (source='EODHD')
+    // is preserved.
+    await db.delete(schema.prices).where(eq(schema.prices.source, "seed"));
+
+    // Insert today's seed close prices, AND a yesterday close so the daily
+    // change indicators have something to render against. Yesterday's prices
+    // are computed by reversing a deterministic small percentage move per
+    // ticker — so the dashboard shows a believable mix of greens and reds
+    // without requiring real EODHD data. Once EODHD is wired (Phase 4), real
+    // daily prices replace all of this.
     const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+    // Pseudo-deterministic % move per ticker for the "yesterday → today" delta.
+    // Range roughly ±2%. Mixes positives and negatives.
+    function fakeDailyMovePct(ticker: string): number {
+      // Hash the ticker to a number in [-0.02, +0.02]
+      let h = 0;
+      for (const ch of ticker) h = (h * 31 + ch.charCodeAt(0)) & 0xffffffff;
+      const x = ((h % 401) - 200) / 10000; // -0.020 to +0.020
+      return x;
+    }
+
     for (const t of SEED_TICKERS) {
       const sec = await db
         .select()
@@ -312,18 +343,12 @@ export async function GET(req: NextRequest) {
         .limit(1);
       if (sec.length === 0) continue;
 
-      const existingPrice = await db
-        .select()
-        .from(schema.prices)
-        .where(
-          and(
-            eq(schema.prices.securityId, sec[0].id),
-            eq(schema.prices.date, today)
-          )
-        )
-        .limit(1);
-      if (existingPrice.length > 0) continue;
+      const todayPrice = parseFloat(t.recentClose);
+      const movePct = fakeDailyMovePct(t.ticker);
+      // today = yesterday * (1 + movePct)  →  yesterday = today / (1 + movePct)
+      const yesterdayPrice = todayPrice / (1 + movePct);
 
+      // Today's close
       await db.insert(schema.prices).values({
         securityId: sec[0].id,
         date: today,
@@ -332,6 +357,19 @@ export async function GET(req: NextRequest) {
         source: "seed",
       });
       result.seed.prices++;
+
+      // Yesterday's close (only if it isn't the same date as today, e.g. set up
+      // around midnight could produce identical strings — defensive)
+      if (yesterday !== today) {
+        await db.insert(schema.prices).values({
+          securityId: sec[0].id,
+          date: yesterday,
+          closePrice: yesterdayPrice.toFixed(4),
+          currency: t.currency,
+          source: "seed",
+        });
+        result.seed.prices++;
+      }
     }
 
     // Link tickers to fund investable universes

@@ -28,37 +28,41 @@ export interface SeedTicker {
 
 export const SEED_TICKERS: SeedTicker[] = [
   // ===== UK (LSE) — for UK Equity Fund, also Global =====
+  // NOTE: LSE typically quotes in pence, but we store all prices in MAJOR units
+  // (pounds) for consistency across the system. EODHD's `eod` endpoint can be
+  // configured to return major-unit prices for LSE, which we'll use when we
+  // wire real ingestion. Approximate Q2 2026 closing prices:
   { ticker: "AZN", exchange: "LSE", name: "AstraZeneca PLC", currency: "GBP",
     gicsSector: "Health Care", gicsIndustry: "Pharmaceuticals",
-    isin: "GB0009895292", recentClose: "10540.00",
+    isin: "GB0009895292", recentClose: "105.40",
     universes: ["uk-equity", "global-equity", "long-short"] },
   { ticker: "SHEL", exchange: "LSE", name: "Shell PLC", currency: "GBP",
     gicsSector: "Energy", gicsIndustry: "Integrated Oil & Gas",
-    isin: "GB00BP6MXD84", recentClose: "2810.50",
+    isin: "GB00BP6MXD84", recentClose: "28.10",
     universes: ["uk-equity", "global-equity", "long-short"] },
   { ticker: "HSBA", exchange: "LSE", name: "HSBC Holdings PLC", currency: "GBP",
     gicsSector: "Financials", gicsIndustry: "Diversified Banks",
-    isin: "GB0005405286", recentClose: "905.20",
+    isin: "GB0005405286", recentClose: "9.05",
     universes: ["uk-equity", "global-equity"] },
   { ticker: "ULVR", exchange: "LSE", name: "Unilever PLC", currency: "GBP",
     gicsSector: "Consumer Staples", gicsIndustry: "Household Products",
-    isin: "GB00B10RZP78", recentClose: "4780.00",
+    isin: "GB00B10RZP78", recentClose: "47.80",
     universes: ["uk-equity", "global-equity"] },
   { ticker: "BARC", exchange: "LSE", name: "Barclays PLC", currency: "GBP",
     gicsSector: "Financials", gicsIndustry: "Diversified Banks",
-    isin: "GB0031348658", recentClose: "352.40",
+    isin: "GB0031348658", recentClose: "3.52",
     universes: ["uk-equity", "long-short"] },
   { ticker: "RIO", exchange: "LSE", name: "Rio Tinto PLC", currency: "GBP",
     gicsSector: "Materials", gicsIndustry: "Diversified Metals & Mining",
-    isin: "GB0007188757", recentClose: "4915.00",
+    isin: "GB0007188757", recentClose: "49.15",
     universes: ["uk-equity", "global-equity"] },
   { ticker: "BP", exchange: "LSE", name: "BP PLC", currency: "GBP",
     gicsSector: "Energy", gicsIndustry: "Integrated Oil & Gas",
-    isin: "GB0007980591", recentClose: "421.80",
+    isin: "GB0007980591", recentClose: "4.21",
     universes: ["uk-equity", "long-short"] },
   { ticker: "REL", exchange: "LSE", name: "RELX PLC", currency: "GBP",
     gicsSector: "Industrials", gicsIndustry: "Research & Consulting Services",
-    isin: "GB00B2B0DG97", recentClose: "3760.00",
+    isin: "GB00B2B0DG97", recentClose: "37.60",
     universes: ["uk-equity", "global-equity"] },
 
   // ===== US (NYSE/NASDAQ) — for US Equity Fund, Global, Long/Short =====

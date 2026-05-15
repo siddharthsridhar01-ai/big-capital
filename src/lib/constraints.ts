@@ -159,7 +159,11 @@ function evaluateConstraint(
   ctx: PortfolioContext,
   pricesPostTrade: Map<string, Decimal>
 ): ConstraintViolation | null {
+  // `fmt` is the precise 4dp formatter used for the structured audit fields
+  // (`currentValue`, `limit`). `msg` is the human-facing 2dp formatter used
+  // inside the violation `message` string — cleaner to read in the UI.
   const fmt = (d: Decimal) => d.toFixed(4);
+  const msg = (d: Decimal) => d.toFixed(2);
 
   switch (constraint.constraintType) {
     case "universe_only": {
@@ -217,7 +221,7 @@ function evaluateConstraint(
             constraintId: constraint.id,
             constraintType: "max_position_pct",
             isHard: constraint.isHard,
-            message: `Position in ${ctx.securityMeta.get(secId)?.ticker ?? secId} would be ${fmt(pct.times(100))}%, exceeding the ${fmt(limit.times(100))}% limit`,
+            message: `Position in ${ctx.securityMeta.get(secId)?.ticker ?? secId} would be ${msg(pct.times(100))}%, exceeding the ${msg(limit.times(100))}% limit`,
             currentValue: fmt(pct),
             limit: fmt(limit),
           };
@@ -239,7 +243,7 @@ function evaluateConstraint(
           constraintId: constraint.id,
           constraintType: "min_cash_pct",
           isHard: constraint.isHard,
-          message: `Cash would be ${fmt(cashPct.times(100))}%, below the ${fmt(limit.times(100))}% minimum`,
+          message: `Cash would be ${msg(cashPct.times(100))}%, below the ${msg(limit.times(100))}% minimum`,
           currentValue: fmt(cashPct),
           limit: fmt(limit),
         };
@@ -260,7 +264,7 @@ function evaluateConstraint(
           constraintId: constraint.id,
           constraintType: "max_cash_pct",
           isHard: constraint.isHard,
-          message: `Cash would be ${fmt(cashPct.times(100))}%, above the ${fmt(limit.times(100))}% maximum`,
+          message: `Cash would be ${msg(cashPct.times(100))}%, above the ${msg(limit.times(100))}% maximum`,
           currentValue: fmt(cashPct),
           limit: fmt(limit),
         };
@@ -280,7 +284,7 @@ function evaluateConstraint(
           constraintId: constraint.id,
           constraintType: "max_gross_exposure",
           isHard: constraint.isHard,
-          message: `Gross exposure would be ${fmt(grossRatio)}x, above the ${fmt(limit)}x limit`,
+          message: `Gross exposure would be ${msg(grossRatio)}x, above the ${msg(limit)}x limit`,
           currentValue: fmt(grossRatio),
           limit: fmt(limit),
         };
@@ -300,7 +304,7 @@ function evaluateConstraint(
           constraintId: constraint.id,
           constraintType: "max_net_exposure",
           isHard: constraint.isHard,
-          message: `Net exposure would be ${fmt(netRatio.times(100))}%, outside the ±${fmt(limit.times(100))}% band`,
+          message: `Net exposure would be ${msg(netRatio.times(100))}%, outside the ±${msg(limit.times(100))}% band`,
           currentValue: fmt(netRatio),
           limit: fmt(limit),
         };
@@ -324,7 +328,7 @@ function evaluateConstraint(
             constraintId: constraint.id,
             constraintType: "max_single_sector_pct",
             isHard: constraint.isHard,
-            message: `${sector} exposure would be ${fmt(pct.times(100))}%, above the ${fmt(limit.times(100))}% limit`,
+            message: `${sector} exposure would be ${msg(pct.times(100))}%, above the ${msg(limit.times(100))}% limit`,
             currentValue: fmt(pct),
             limit: fmt(limit),
           };

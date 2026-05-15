@@ -4,6 +4,13 @@ import { getOrCreateUser } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { serif, numeric } from "@/lib/typography";
+import {
+  computePortfolioState,
+  loadPreviousClosePrices,
+} from "@/lib/portfolio";
+import { computeDailyChange, computeUnrealisedPnL } from "@/lib/derived";
+import LiveHoldingsTable from "@/components/LiveHoldingsTable";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +53,17 @@ export default async function FundPage({
   const startingNav = Number(fund.startingNav);
   const currentNav = latestNav.length > 0 ? Number(latestNav[0].nav) : startingNav;
   const sinceInceptionPct = ((currentNav - startingNav) / startingNav) * 100;
+
+  // Live portfolio state computed from the transactions ledger
+  const liveState = await computePortfolioState(fund.id);
+  const liveNavBase = liveState.navBase.toNumber();
+  const liveCashBase = liveState.cashBase.toNumber();
+  const liveSinceInceptionPct =
+    ((liveNavBase - startingNav) / startingNav) * 100;
+
+  // Previous close prices for held positions — for daily change display
+  const heldSecurityIds = Array.from(liveState.positions.keys());
+  const previousCloses = await loadPreviousClosePrices(heldSecurityIds);
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-GB", {
@@ -93,7 +111,7 @@ export default async function FundPage({
           </div>
           <h1
             style={{
-              fontFamily: "Georgia, 'Source Serif Pro', serif",
+              ...serif,
               fontWeight: 400,
               fontSize: 30,
               color: "#00183A",
@@ -105,7 +123,7 @@ export default async function FundPage({
           </h1>
           <div
             style={{
-              fontFamily: "Georgia, serif",
+              ...serif,
               fontSize: 14,
               color: "#444",
               marginTop: 10,
@@ -131,63 +149,105 @@ export default async function FundPage({
       >
         <MetricCard
           label="Fund value"
-          value={`${currencySymbol}${fmt(currentNav)}`}
+          value={`${currencySymbol}${fmt(liveNavBase)}`}
           sub={`Started ${currencySymbol}${fmt(startingNav)}`}
         />
         <MetricCard
           label="Since inception"
-          value={`${sinceInceptionPct >= 0 ? "+" : ""}${sinceInceptionPct.toFixed(2)}%`}
+          value={`${liveSinceInceptionPct >= 0 ? "+" : ""}${liveSinceInceptionPct.toFixed(2)}%`}
           sub="vs benchmark TBD"
-          valueColor={sinceInceptionPct >= 0 ? "#1F5C3A" : "#7A1F1F"}
+          valueColor={liveSinceInceptionPct >= 0 ? "#1F5C3A" : "#7A1F1F"}
         />
-        <MetricCard label="Holdings" value="0" sub="No positions yet" />
+        <MetricCard
+          label="Holdings"
+          value={String(liveState.positions.size)}
+          sub={
+            liveState.positions.size === 0
+              ? "No positions yet"
+              : `${liveState.positions.size} open`
+          }
+        />
         <MetricCard
           label="Cash"
-          value={`${currencySymbol}${fmt(currentNav)}`}
-          sub="100% of NAV"
+          value={`${currencySymbol}${fmt(liveCashBase)}`}
+          sub={
+            liveNavBase > 0
+              ? `${((liveCashBase / liveNavBase) * 100).toFixed(1)}% of NAV`
+              : ""
+          }
         />
         <MetricCard
           label="Constraints"
           value={String(constraints.length)}
           sub={`${constraints.filter((c) => c.isHard).length} hard, ${constraints.filter((c) => !c.isHard).length} soft`}
         />
-        <MetricCard label="As of" value="—" sub="No NAV snapshot yet" />
+        <MetricCard
+          label="As of"
+          value={latestNav.length > 0 ? latestNav[0].date : "Today"}
+          sub={latestNav.length > 0 ? "Latest NAV snapshot" : "Computed live"}
+        />
       </div>
 
-      <div
-        style={{
-          background: "white",
-          border: "1px solid #D9D9D2",
-          padding: "24px 28px",
-          textAlign: "center",
-        }}
-      >
+      {liveState.positions.size === 0 ? (
         <div
           style={{
-            fontFamily: "Georgia, serif",
-            fontSize: 18,
-            color: "#00183A",
-            marginBottom: 8,
+            background: "white",
+            border: "1px solid #D9D9D2",
+            padding: "24px 28px",
+            textAlign: "center",
           }}
         >
-          No positions yet
+          <div
+            style={{
+              ...serif,
+              fontSize: 18,
+              color: "#00183A",
+              marginBottom: 8,
+            }}
+          >
+            No positions yet
+          </div>
+          <div
+            style={{
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 13,
+              color: "#6B6B66",
+              maxWidth: 480,
+              margin: "0 auto",
+              lineHeight: 1.55,
+            }}
+          >
+            This fund is freshly created with {currencySymbol}
+            {fmt(startingNav)} of starting capital. Submit a trade from any
+            security page to begin building holdings.
+          </div>
         </div>
-        <div
-          style={{
-            fontFamily: "system-ui, sans-serif",
-            fontSize: 13,
-            color: "#6B6B66",
-            maxWidth: 480,
-            margin: "0 auto",
-            lineHeight: 1.55,
-          }}
-        >
-          This fund is freshly created with {currencySymbol}
-          {fmt(startingNav)} of starting capital. Once the PM submits the first
-          trade, holdings will appear here. The trade ticket is coming in the
-          next phase of development.
-        </div>
-      </div>
+      ) : (
+        <LiveHoldingsTable
+          fundSlug={fund.slug}
+          fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
+          initialNavBase={liveState.navBase.toString()}
+          positions={Array.from(liveState.positions.values()).map((p) => ({
+            securityId: p.securityId,
+            ticker: p.ticker,
+            name: p.name,
+            exchange: p.exchange,
+            currency: p.currency,
+            gicsSector: p.gicsSector,
+            quantity: p.quantity.toString(),
+            avgCostNative: p.avgCostNative.toString(),
+            latestPriceNative: p.latestPriceNative
+              ? p.latestPriceNative.toString()
+              : null,
+            latestFxToBase: p.latestFxToBase.toString(),
+            previousCloseNative: previousCloses.get(p.securityId)?.close ?? null,
+            marketValueBase: p.marketValueBase
+              ? p.marketValueBase.toString()
+              : null,
+          }))}
+        />
+      )}
+
 
       <details style={{ marginTop: 28 }}>
         <summary
@@ -324,11 +384,10 @@ function MetricCard({
       </div>
       <div
         style={{
-          fontFamily: "Georgia, 'Source Serif Pro', serif",
+          ...numeric,
           fontSize: 22,
           color: valueColor,
           marginTop: 4,
-          fontFeatureSettings: '"tnum" 1, "lnum" 1',
         }}
       >
         {value}
