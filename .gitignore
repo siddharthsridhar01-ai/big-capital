@@ -36,3 +36,6 @@ Thumbs.db
 
 # Drizzle
 drizzle/meta/_journal.json.bak
+
+# clerk configuration (can include secrets)
+/.clerk/
