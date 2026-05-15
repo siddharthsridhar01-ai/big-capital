@@ -1,0 +1,277 @@
+/**
+ * Worker: Daily NAV snapshot
+ *
+ * For each active fund:
+ *   1. Replay transactions to get ledger state (positions + cash) as-of date
+ *   2. Look up prices and FX rates for that date
+ *   3. Compute NAV in the fund's base currency
+ *   4. Compute daily return vs previous NAV
+ *   5. Compute benchmark daily return for the same period
+ *   6. Upsert into nav_snapshots
+ *
+ * Schedule: weekdays at 23:00 UTC (after price + FX ingest).
+ * Vercel cron: 0 23 * * 1-5
+ *
+ * Idempotency: ON CONFLICT updates allow re-running for any date.
+ * Backfill: pass a `from` date to recompute a range.
+ */
+
+import { db } from "../db/client";
+import {
+  funds,
+  prices,
+  fxRates,
+  navSnapshots,
+  securities,
+  transactions as transactionsTable,
+} from "../db/schema";
+import {
+  buildLedgerState,
+  computeNav,
+  type Transaction,
+  type Currency,
+} from "../lib/performance";
+import { sql, eq, and, lte, gte } from "drizzle-orm";
+import Decimal from "decimal.js";
+
+export interface NavSnapshotResult {
+  fundsProcessed: number;
+  daysComputed: number;
+  errors: Array<{ fundId: string; date: string; message: string }>;
+}
+
+export async function runNavSnapshot(
+  options: { date?: string; fromDate?: string } = {}
+): Promise<NavSnapshotResult> {
+  const result: NavSnapshotResult = {
+    fundsProcessed: 0,
+    daysComputed: 0,
+    errors: [],
+  };
+
+  // 1. Get all active funds with their benchmark info
+  const activeFunds = await db
+    .select({
+      id: funds.id,
+      slug: funds.slug,
+      baseCurrency: funds.baseCurrency,
+      inceptionDate: funds.inceptionDate,
+      benchmarkSecurityId: funds.benchmarkSecurityId,
+    })
+    .from(funds)
+    .where(eq(funds.isActive, true));
+
+  // 2. Determine date range to compute
+  const targetDate = options.date ?? new Date().toISOString().slice(0, 10);
+  const fromDate = options.fromDate ?? targetDate;
+
+  // Build list of dates we'll iterate
+  const dates: string[] = [];
+  for (
+    let d = new Date(fromDate);
+    d <= new Date(targetDate);
+    d.setUTCDate(d.getUTCDate() + 1)
+  ) {
+    const ds = d.toISOString().slice(0, 10);
+    // Skip weekends (no NAV on Sat/Sun)
+    const dow = d.getUTCDay();
+    if (dow === 0 || dow === 6) continue;
+    dates.push(ds);
+  }
+
+  // 3. Per-fund computation
+  for (const fund of activeFunds) {
+    result.fundsProcessed += 1;
+    // Skip dates before inception
+    const fundDates = dates.filter((d) => d >= fund.inceptionDate);
+    if (fundDates.length === 0) continue;
+
+    // Pull ALL transactions for this fund once (cheap; ledger is small)
+    const fundTransactions = await db
+      .select()
+      .from(transactionsTable)
+      .where(eq(transactionsTable.fundId, fund.id));
+
+    // Coerce DB rows to the performance-engine Transaction type
+    const txns: Transaction[] = fundTransactions.map((t) => ({
+      id: t.id,
+      fundId: t.fundId,
+      securityId: t.securityId,
+      transactionType: t.transactionType as Transaction["transactionType"],
+      quantity: t.quantity,
+      price: t.price,
+      currency: t.currency as Currency,
+      cashImpact: t.cashImpact,
+      fxRateToBase: t.fxRateToBase,
+      executedAt: t.executedAt,
+    }));
+
+    let previousNav: Decimal | null = null;
+
+    for (const date of fundDates) {
+      try {
+        const asOf = new Date(`${date}T23:59:59Z`);
+        const state = buildLedgerState(txns, asOf);
+
+        // Gather prices and FX needed
+        const securityIds = Array.from(state.positions.keys());
+        const allSecIds = fund.benchmarkSecurityId
+          ? [...securityIds, fund.benchmarkSecurityId]
+          : securityIds;
+
+        const priceRows =
+          allSecIds.length > 0
+            ? await db
+                .select()
+                .from(prices)
+                .where(
+                  and(
+                    lte(prices.date, date),
+                    // We want the latest price on-or-before this date
+                  )
+                )
+                .orderBy(sql`${prices.date} DESC`)
+            : [];
+
+        // Build "latest price as-of date" map per security
+        const latestPriceMap = new Map<string, { price: string; date: string; currency: Currency }>();
+        for (const row of priceRows) {
+          if (!allSecIds.includes(row.securityId)) continue;
+          if (!latestPriceMap.has(row.securityId)) {
+            latestPriceMap.set(row.securityId, {
+              price: row.closePrice,
+              date: row.date,
+              currency: row.currency as Currency,
+            });
+          }
+        }
+
+        const priceForCompute = new Map<string, string>();
+        const priceCurrencies = new Map<string, Currency>();
+        let missingPrice = false;
+        for (const secId of securityIds) {
+          const p = latestPriceMap.get(secId);
+          if (!p) {
+            missingPrice = true;
+            break;
+          }
+          priceForCompute.set(secId, p.price);
+          priceCurrencies.set(secId, p.currency);
+        }
+
+        if (missingPrice) {
+          result.errors.push({
+            fundId: fund.id,
+            date,
+            message: "Missing price for one or more positions",
+          });
+          continue;
+        }
+
+        // FX rates: pull all rates for this date
+        const fxRows = await db
+          .select()
+          .from(fxRates)
+          .where(eq(fxRates.date, date));
+        const fxMap = new Map<string, string>();
+        for (const row of fxRows) {
+          fxMap.set(
+            `${row.fromCurrency}/${row.toCurrency}/${row.date}`,
+            row.rate
+          );
+        }
+
+        const snap = computeNav({
+          fundId: fund.id,
+          date,
+          baseCurrency: fund.baseCurrency as Currency,
+          components: state,
+          prices: priceForCompute,
+          priceCurrencies,
+          fxRates: fxMap,
+          previousNav,
+        });
+
+        // Benchmark return for the same period
+        let benchmarkDailyReturn: string | null = null;
+        let benchmarkValue: string | null = null;
+        if (fund.benchmarkSecurityId) {
+          const benchPrice = latestPriceMap.get(fund.benchmarkSecurityId);
+          if (benchPrice) {
+            benchmarkValue = benchPrice.price;
+            // Look up previous day's benchmark price
+            const prevBench = priceRows.find(
+              (r) =>
+                r.securityId === fund.benchmarkSecurityId &&
+                r.date < date
+            );
+            if (prevBench) {
+              const today = new Decimal(benchPrice.price);
+              const yesterday = new Decimal(prevBench.closePrice);
+              if (!yesterday.isZero()) {
+                benchmarkDailyReturn = today
+                  .minus(yesterday)
+                  .dividedBy(yesterday)
+                  .toString();
+              }
+            }
+          }
+        }
+
+        await db
+          .insert(navSnapshots)
+          .values({
+            fundId: fund.id,
+            date,
+            nav: snap.nav.toString(),
+            cashBalance: snap.cashBalance.toString(),
+            positionValue: snap.positionValue.toString(),
+            grossExposure: snap.grossExposure.toString(),
+            netExposure: snap.netExposure.toString(),
+            dailyReturn: snap.dailyReturn?.toString() ?? null,
+            benchmarkValue,
+            benchmarkDailyReturn,
+          })
+          .onConflictDoUpdate({
+            target: [navSnapshots.fundId, navSnapshots.date],
+            set: {
+              nav: sql`excluded.nav`,
+              cashBalance: sql`excluded.cash_balance`,
+              positionValue: sql`excluded.position_value`,
+              grossExposure: sql`excluded.gross_exposure`,
+              netExposure: sql`excluded.net_exposure`,
+              dailyReturn: sql`excluded.daily_return`,
+              benchmarkValue: sql`excluded.benchmark_value`,
+              benchmarkDailyReturn: sql`excluded.benchmark_daily_return`,
+            },
+          });
+
+        previousNav = snap.nav;
+        result.daysComputed += 1;
+      } catch (err) {
+        result.errors.push({
+          fundId: fund.id,
+          date,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const date = process.argv[2];
+  const fromDate = process.argv[3];
+  runNavSnapshot({ date, fromDate })
+    .then((r) => {
+      console.log("NAV snapshot complete:", r);
+      if (r.errors.length > 0) process.exit(1);
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error("NAV snapshot failed:", err);
+      process.exit(1);
+    });
+}

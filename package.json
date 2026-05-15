@@ -1,0 +1,47 @@
+{
+  "name": "big-capital",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BIG Capital — student fund portfolio management and public factsheet platform",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:studio": "drizzle-kit studio",
+    "worker:prices": "tsx src/workers/fetch-prices.ts",
+    "worker:nav": "tsx src/workers/compute-nav.ts",
+    "worker:fx": "tsx src/workers/fetch-fx.ts"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^6.0.0",
+    "decimal.js": "^10.4.3",
+    "drizzle-orm": "^0.36.0",
+    "next": "^15.0.0",
+    "postgres": "^3.4.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.28.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.0.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
