@@ -111,6 +111,11 @@ export const funds = pgTable("funds", {
   strategyDescription: text("strategy_description"),
   inceptionDate: date("inception_date").notNull(),
   startingNav: numeric("starting_nav", { precision: 20, scale: 4 }).notNull(),
+
+  // Per-trade fee modelling, in basis points. 5 bps = 0.05% of notional value
+  // deducted from cash on every trade. Lets us model trading costs realistically.
+  tradingFeesBps: integer("trading_fees_bps").notNull().default(5),
+
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -345,9 +350,16 @@ export const transactions = pgTable(
     fxRateToBase: numeric("fx_rate_to_base", { precision: 20, scale: 8 }).notNull(),
 
     executedAt: timestamp("executed_at").notNull(),
+    // For now equal to executedAt; reserved for a future two-state order model
+    // where orders are submitted and then execute at a later time (e.g. T+1 close).
+    submittedAt: timestamp("submitted_at").notNull(),
     executedByUserId: uuid("executed_by_user_id")
       .notNull()
       .references(() => users.id),
+
+    // Trading fee modelling (in fund's base currency). Default 0, set per-trade
+    // from fund.tradingFeesBps * |notional|. Cash impact already accounts for this.
+    feeAmount: numeric("fee_amount", { precision: 20, scale: 6 }).notNull().default("0"),
 
     rationale: text("rationale").notNull(), // required, min 20 chars enforced in app
     memoId: uuid("memo_id").references(() => investmentMemos.id), // link to investment thesis

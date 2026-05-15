@@ -16,16 +16,24 @@ import postgres from "postgres";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import * as schema from "@/db/schema";
+import { SEED_TICKERS } from "@/db/seed-tickers";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 interface SetupResult {
   migrations: { applied: string[]; alreadyApplied: string[] };
-  seed: { benchmarks: number; funds: number; constraints: number };
-  finalCheck: { funds: number };
+  seed: {
+    benchmarks: number;
+    funds: number;
+    constraints: number;
+    tickers: number;
+    prices: number;
+    universeLinks: number;
+  };
+  finalCheck: { funds: number; tickers: number };
 }
 
 export async function GET(req: NextRequest) {
@@ -61,8 +69,15 @@ export async function GET(req: NextRequest) {
 
   const result: SetupResult = {
     migrations: { applied: [], alreadyApplied: [] },
-    seed: { benchmarks: 0, funds: 0, constraints: 0 },
-    finalCheck: { funds: 0 },
+    seed: {
+      benchmarks: 0,
+      funds: 0,
+      constraints: 0,
+      tickers: 0,
+      prices: 0,
+      universeLinks: 0,
+    },
+    finalCheck: { funds: 0, tickers: 0 },
   };
 
   try {
@@ -251,10 +266,124 @@ export async function GET(req: NextRequest) {
     }
 
     // ------------------------------------------------------------
-    // 3. Final sanity check — count funds
+    // 3. Seed tickers — Phase 2b hand-picked universe
+    // ------------------------------------------------------------
+    // Insert securities (idempotent on ticker+exchange uniqueness)
+    for (const t of SEED_TICKERS) {
+      const existing = await db
+        .select()
+        .from(schema.securities)
+        .where(
+          and(
+            eq(schema.securities.ticker, t.ticker),
+            eq(schema.securities.exchange, t.exchange)
+          )
+        )
+        .limit(1);
+      if (existing.length > 0) continue;
+
+      await db.insert(schema.securities).values({
+        ticker: t.ticker,
+        exchange: t.exchange,
+        name: t.name,
+        currency: t.currency,
+        securityType: "equity",
+        isin: t.isin ?? null,
+        gicsSector: t.gicsSector,
+        gicsIndustry: t.gicsIndustry,
+        isBenchmark: false,
+        isActive: true,
+      });
+      result.seed.tickers++;
+    }
+
+    // Insert recent close prices
+    const today = new Date().toISOString().slice(0, 10);
+    for (const t of SEED_TICKERS) {
+      const sec = await db
+        .select()
+        .from(schema.securities)
+        .where(
+          and(
+            eq(schema.securities.ticker, t.ticker),
+            eq(schema.securities.exchange, t.exchange)
+          )
+        )
+        .limit(1);
+      if (sec.length === 0) continue;
+
+      const existingPrice = await db
+        .select()
+        .from(schema.prices)
+        .where(
+          and(
+            eq(schema.prices.securityId, sec[0].id),
+            eq(schema.prices.date, today)
+          )
+        )
+        .limit(1);
+      if (existingPrice.length > 0) continue;
+
+      await db.insert(schema.prices).values({
+        securityId: sec[0].id,
+        date: today,
+        closePrice: t.recentClose,
+        currency: t.currency,
+        source: "seed",
+      });
+      result.seed.prices++;
+    }
+
+    // Link tickers to fund investable universes
+    const fundsBySlug = new Map(allFunds.map((f) => [f.slug, f]));
+    for (const t of SEED_TICKERS) {
+      const sec = await db
+        .select()
+        .from(schema.securities)
+        .where(
+          and(
+            eq(schema.securities.ticker, t.ticker),
+            eq(schema.securities.exchange, t.exchange)
+          )
+        )
+        .limit(1);
+      if (sec.length === 0) continue;
+
+      for (const slug of t.universes) {
+        const fund = fundsBySlug.get(slug);
+        if (!fund) continue;
+
+        const existingLink = await db
+          .select()
+          .from(schema.investableUniverses)
+          .where(
+            and(
+              eq(schema.investableUniverses.fundId, fund.id),
+              eq(schema.investableUniverses.securityId, sec[0].id)
+            )
+          )
+          .limit(1);
+        if (existingLink.length > 0) continue;
+
+        await db.insert(schema.investableUniverses).values({
+          fundId: fund.id,
+          securityId: sec[0].id,
+          addedDate: today,
+        });
+        result.seed.universeLinks++;
+      }
+    }
+
+    // ------------------------------------------------------------
+    // 4. Final sanity check
     // ------------------------------------------------------------
     const finalFunds = await db.select().from(schema.funds);
+    const finalTickers = await db
+      .select()
+      .from(schema.securities)
+      .where(eq(schema.securities.isBenchmark, false));
     result.finalCheck.funds = finalFunds.length;
+    result.finalCheck.tickers = finalTickers.length;
 
     return NextResponse.json({ ok: true, ...result, fundList: finalFunds.map((f) => ({ slug: f.slug, name: f.name, baseCurrency: f.baseCurrency })) });
   } catch (err) {

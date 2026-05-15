@@ -1,12 +1,13 @@
 /**
  * Sync a Clerk user to a row in the BIG Capital `users` table.
  *
- * On first sign-in we create a record. Subsequent sign-ins just look it up.
+ * This function is called from BOTH the dashboard layout and the dashboard
+ * page server components, which Next.js may render in parallel. To handle
+ * the race condition we use INSERT ... ON CONFLICT DO NOTHING, then re-fetch.
  *
  * Special case: if the Clerk user's email matches ADMIN_EMAILS env var
- * (comma-separated list), they get role 'admin'. Everyone else defaults
- * to 'analyst' and an admin can promote them via the database directly
- * for now. (A proper user management UI comes in Phase 2c.)
+ * (comma-separated list), they get role 'admin' on first creation.
+ * Existing users keep their role; ADMIN_EMAILS doesn't retroactively promote.
  */
 
 import { db } from "@/db/client";
@@ -30,7 +31,7 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
   const email = clerkUser.emailAddresses[0]?.emailAddress;
   if (!email) return null;
 
-  // Look up by email
+  // Check if user exists first (the happy path on every page load after first sign-in)
   const existing = await db
     .select()
     .from(users)
@@ -38,17 +39,11 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
     .limit(1);
 
   if (existing.length > 0) {
-    return {
-      id: existing[0].id,
-      email: existing[0].email,
-      fullName: existing[0].fullName,
-      role: existing[0].role,
-      bio: existing[0].bio,
-      headshotUrl: existing[0].headshotUrl,
-    };
+    return toApiShape(existing[0]);
   }
 
-  // Not found — create
+  // User doesn't exist yet — try to create them, but handle the race condition
+  // where another concurrent request created the row first.
   const adminEmails = (process.env.ADMIN_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
@@ -61,7 +56,8 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
     [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
     email.split("@")[0];
 
-  const [created] = await db
+  // Idempotent insert: if email already exists (race condition), do nothing
+  await db
     .insert(users)
     .values({
       email,
@@ -69,14 +65,29 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
       role,
       headshotUrl: clerkUser.imageUrl || null,
     })
-    .returning();
+    .onConflictDoNothing({ target: users.email });
 
+  // Re-fetch — guaranteed to exist now, either we inserted it or the parallel call did
+  const final = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  if (final.length === 0) {
+    return null;
+  }
+
+  return toApiShape(final[0]);
+}
+
+function toApiShape(u: typeof users.$inferSelect): BigCapUser {
   return {
-    id: created.id,
-    email: created.email,
-    fullName: created.fullName,
-    role: created.role,
-    bio: created.bio,
-    headshotUrl: created.headshotUrl,
+    id: u.id,
+    email: u.email,
+    fullName: u.fullName,
+    role: u.role,
+    bio: u.bio,
+    headshotUrl: u.headshotUrl,
   };
 }

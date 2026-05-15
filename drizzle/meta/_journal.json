@@ -8,6 +8,13 @@
       "when": 1778849166908,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778857014035,
+      "tag": "0001_phase2b_fees_and_submitted_at",
+      "breakpoints": true
     }
   ]
 }
