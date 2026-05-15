@@ -4,6 +4,10 @@
  *
  * Vercel functions are short-lived but reused across invocations within a
  * warm container, so we reuse a single postgres client per process.
+ *
+ * IMPORTANT: client creation is lazy. The DATABASE_URL is read only when the
+ * client is first used, not at module load time. This lets the project build
+ * in environments where the env var isn't set (e.g. CI build steps).
  */
 
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -12,23 +16,33 @@ import * as schema from "./schema";
 
 const globalForDb = globalThis as unknown as {
   pgClient?: ReturnType<typeof postgres>;
+  drizzleDb?: ReturnType<typeof drizzle<typeof schema>>;
 };
 
-function makeClient() {
+function getClient() {
+  if (globalForDb.pgClient) return globalForDb.pgClient;
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL not set");
-  return postgres(url, {
+  const client = postgres(url, {
     max: process.env.NODE_ENV === "production" ? 5 : 1,
     idle_timeout: 30,
     connect_timeout: 10,
   });
+  if (process.env.NODE_ENV !== "production") {
+    globalForDb.pgClient = client;
+  }
+  return client;
 }
 
-const client = globalForDb.pgClient ?? makeClient();
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.pgClient = client;
-}
+// Proxy that lazily creates the Drizzle client on first use
+export const db = new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
+  get(_target, prop) {
+    if (!globalForDb.drizzleDb) {
+      globalForDb.drizzleDb = drizzle(getClient(), { schema });
+    }
+    return Reflect.get(globalForDb.drizzleDb, prop);
+  },
+});
 
-export const db = drizzle(client, { schema });
 export { schema };
-export type Db = typeof db;
+export type Db = ReturnType<typeof drizzle<typeof schema>>;
