@@ -14,6 +14,9 @@ interface SearchResult {
   gicsIndustry: string | null;
   latestPrice: string | null;
   latestPriceDate: string | null;
+  livePrice: number | null;
+  changePct: number | null;
+  marketState: string | null;
 }
 
 export default function SearchModal() {
@@ -379,8 +382,49 @@ export default function SearchModal() {
                       {r.gicsSector ?? "—"}
                     </div>
                   </div>
-                  <div style={{ flex: "0 0 90px", textAlign: "right" }}>
-                    {r.latestPrice ? (
+                  <div style={{ flex: "0 0 110px", textAlign: "right" }}>
+                    {r.livePrice != null ? (
+                      <>
+                        <div
+                          style={{
+                            ...numeric,
+                            fontSize: 14,
+                            color: "#00183A",
+                          }}
+                        >
+                          {currencySymbol(r.currency)}
+                          {r.livePrice.toFixed(2)}
+                        </div>
+                        {r.changePct != null ? (
+                          <div
+                            style={{
+                              ...numeric,
+                              fontSize: 10,
+                              marginTop: 1,
+                              color:
+                                r.changePct > 0
+                                  ? "#1F5C3A"
+                                  : r.changePct < 0
+                                    ? "#7A1F1F"
+                                    : "#6B6B66",
+                            }}
+                          >
+                            {r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : "·"}{" "}
+                            {(Math.abs(r.changePct) * 100).toFixed(2)}%
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "#6B6B66",
+                              marginTop: 1,
+                            }}
+                          >
+                            Live
+                          </div>
+                        )}
+                      </>
+                    ) : r.latestPrice ? (
                       <>
                         <div
                           style={{
@@ -399,7 +443,7 @@ export default function SearchModal() {
                             marginTop: 1,
                           }}
                         >
-                          {r.latestPriceDate}
+                          Close · {r.latestPriceDate}
                         </div>
                       </>
                     ) : (

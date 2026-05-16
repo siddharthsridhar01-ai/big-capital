@@ -316,6 +316,39 @@ export async function computePortfolioState(
       gicsSector: r.gicsSector,
     }));
     latestPriceMap = await loadLatestPrices(allSecIds);
+
+    // 3b) Override DB prices with live Yahoo quotes where available.
+    // Only applies when asOfDate is null (i.e. computing "now") — for
+    // historical reconstruction we still want DB prices.
+    // The live overlay makes market values, NAV, and weights everywhere
+    // reflect current market — not just the Holdings table.
+    if (!asOfDate) {
+      try {
+        const { getQuotes } = await import("./intraday/cache");
+        const { activeProvider } = await import("./intraday/provider");
+        const { toYahooSymbol } = await import("./intraday/yahoo");
+        const live = await getQuotes(
+          activeProvider,
+          securityMetaList.map((s) => ({
+            securityId: s.id,
+            symbol: toYahooSymbol(s.ticker, s.exchange),
+          }))
+        );
+        const today = new Date().toISOString().slice(0, 10);
+        for (const r of live) {
+          if (r.quote?.price != null) {
+            latestPriceMap.set(r.securityId, {
+              close: String(r.quote.price),
+              date: today,
+            });
+          }
+        }
+      } catch (err) {
+        // Live overlay failed — fall back to DB prices silently.
+        // (Logged but not surfaced; DB prices are still correct historical data.)
+        console.error("[portfolio] live price overlay failed:", err);
+      }
+    }
   }
 
   // 4) Run pure aggregation

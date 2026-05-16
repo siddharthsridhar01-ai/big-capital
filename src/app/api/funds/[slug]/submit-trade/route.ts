@@ -57,6 +57,9 @@ import {
   FALLBACK_FX_SOURCE,
   type Currency,
 } from "@/lib/portfolio";
+import { getQuotes } from "@/lib/intraday/cache";
+import { activeProvider } from "@/lib/intraday/provider";
+import { toYahooSymbol } from "@/lib/intraday/yahoo";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -66,6 +69,7 @@ interface SubmitTradeBody {
   side: "buy" | "sell" | "short" | "cover";
   shares: number;
   rationale: string;
+  expectedPriceNative?: string | null;
   memo?: { url: string; filename: string; sizeBytes: number };
   softOverrideJustification?: string;
 }
@@ -167,21 +171,77 @@ export async function POST(
   }
   const security = secRows[0];
 
-  const priceRows = await db
-    .select()
-    .from(pricesTable)
-    .where(eq(pricesTable.securityId, security.id))
-    .orderBy(desc(pricesTable.date))
-    .limit(1);
-  if (priceRows.length === 0) {
-    return NextResponse.json(
-      { ok: false, error: "No price available for this security" },
-      { status: 400 }
-    );
-  }
-  const priceRow = priceRows[0];
-  const priceNative = new Decimal(priceRow.closePrice);
+  // ----- Determine execution price -----
+  // Strategy:
+  //   1. Fetch live price from Yahoo (the active intraday provider).
+  //   2. If live is available, use it as the authoritative execution price.
+  //   3. Validate against expectedPriceNative (what the user saw when they
+  //      clicked Review). If divergence > 1%, reject and ask user to re-review.
+  //   4. If live is unavailable, fall back to last DB close price (and let the
+  //      user know via the audit notes).
   const executionDate = new Date();
+  let priceNative: Decimal | null = null;
+  let priceSource: "live" | "db_fallback" = "db_fallback";
+  let priceProviderLabel = "DB";
+
+  try {
+    const yahooSym = toYahooSymbol(security.ticker, security.exchange);
+    const quotes = await getQuotes(activeProvider, [
+      { securityId: security.id, symbol: yahooSym },
+    ]);
+    const liveQuote = quotes[0]?.quote;
+    if (liveQuote?.price != null) {
+      priceNative = new Decimal(liveQuote.price);
+      priceSource = "live";
+      priceProviderLabel = activeProvider.displayLabel;
+    }
+  } catch (err) {
+    console.error("[submit-trade] live price fetch failed:", err);
+    // Fall through to DB
+  }
+
+  if (priceNative == null) {
+    const priceRows = await db
+      .select()
+      .from(pricesTable)
+      .where(eq(pricesTable.securityId, security.id))
+      .orderBy(desc(pricesTable.date))
+      .limit(1);
+    if (priceRows.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "No price available for this security" },
+        { status: 400 }
+      );
+    }
+    priceNative = new Decimal(priceRows[0].closePrice);
+    priceSource = "db_fallback";
+    priceProviderLabel = `DB close ${priceRows[0].date}`;
+  }
+
+  // ----- Price reasonability check vs expected -----
+  if (body.expectedPriceNative) {
+    try {
+      const expected = new Decimal(body.expectedPriceNative);
+      if (!expected.isZero()) {
+        const drift = priceNative.minus(expected).abs().dividedBy(expected);
+        if (drift.gt(0.01)) {
+          // > 1% divergence → market moved while user was deciding
+          return NextResponse.json(
+            {
+              ok: false,
+              error: `Price has moved more than 1% since you reviewed (you saw ${expected.toFixed(2)}, market is now ${priceNative.toFixed(2)}). Please re-review the trade.`,
+              priceMoved: true,
+              expectedPrice: expected.toFixed(4),
+              currentPrice: priceNative.toFixed(4),
+            },
+            { status: 409 } // 409 Conflict — request was valid, but state has changed
+          );
+        }
+      }
+    } catch {
+      // Bad expectedPriceNative — ignore the check rather than fail the trade
+    }
+  }
 
   // ----- Compute fresh portfolio state -----
   const state = await computePortfolioState(fund.id);
@@ -405,10 +465,14 @@ export async function POST(
         feeAmount: feeBase.toString(),
         rationale: body.rationale,
         memoId: null,
-        notes:
-          security.currency === fund.baseCurrency
-            ? null
-            : `FX used: ${fxToBase.toString()} (source: ${FALLBACK_FX_SOURCE})`,
+        notes: (() => {
+          const parts: string[] = [];
+          parts.push(`Price source: ${priceProviderLabel}`);
+          if (security.currency !== fund.baseCurrency) {
+            parts.push(`FX used: ${fxToBase.toString()} (source: ${FALLBACK_FX_SOURCE})`);
+          }
+          return parts.join(" · ");
+        })(),
         overriddenConstraints:
           check.softViolations.length > 0
             ? {

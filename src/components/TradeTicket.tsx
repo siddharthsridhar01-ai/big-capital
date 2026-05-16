@@ -901,6 +901,13 @@ export default function TradeTicket(props: TradeTicketProps) {
             side,
             shares: parseInt(sharesInput, 10),
             rationale,
+            // The price the user saw and locked when clicking "Review trade".
+            // Server uses this as a sanity check vs its own live fetch — if
+            // the market has moved >1% since freeze, the trade is rejected
+            // and the user is prompted to re-review.
+            expectedPriceNative: frozenPriceNative
+              ? frozenPriceNative.toString()
+              : priceNative?.toString() ?? null,
             memo: uploadedMemo ?? undefined,
             softOverrideJustification:
               constraintCheck?.softViolations.length
@@ -1785,6 +1792,7 @@ interface SubmitPayload {
   side: Side;
   shares: number;
   rationale: string;
+  expectedPriceNative: string | null;
   memo?: { url: string; filename: string; sizeBytes: number };
   softOverrideJustification?: string;
 }

@@ -67,8 +67,8 @@ export default async function FundPage({
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-GB", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(n);
 
   return (
