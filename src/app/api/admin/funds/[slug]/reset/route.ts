@@ -3,8 +3,10 @@
  *
  * POST /api/admin/funds/[slug]/reset
  *
- * Wipes all transactions, positions, and trade attachments for a fund —
- * effectively rolling the fund back to its inception state. Admin-only.
+ * Wipes all transactions, positions, trade attachments, AND thesis data
+ * (theses, updates, post-mortems) for a fund — rolling it back to inception.
+ * Admin-only. Fund-scoped: the investable universe and price history are left
+ * intact. PDF blobs in storage are not deleted (harmless orphans).
  *
  * Used for testing and during the initial setup period before the fund goes
  * live. After PMs start trading "for real," this endpoint should not be used
@@ -19,6 +21,7 @@ import {
   positions,
   tradeAttachments,
 } from "@/db/schema";
+import { theses, thesisUpdates, thesisPostMortems } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
 import { eq, inArray } from "drizzle-orm";
 
@@ -67,9 +70,29 @@ export async function POST(
   await db.delete(transactions).where(eq(transactions.fundId, fund.id));
   await db.delete(positions).where(eq(positions.fundId, fund.id));
 
+  // Thesis data for this fund: post-mortems and updates first (children of
+  // theses), then the theses themselves. Explicit deletes so this holds
+  // regardless of DB-level cascade settings.
+  const thesisIdRows = await db
+    .select({ id: theses.id })
+    .from(theses)
+    .where(eq(theses.fundId, fund.id));
+  const thesisIds = thesisIdRows.map((r) => r.id);
+
+  if (thesisIds.length > 0) {
+    await db
+      .delete(thesisPostMortems)
+      .where(inArray(thesisPostMortems.thesisId, thesisIds));
+    await db
+      .delete(thesisUpdates)
+      .where(inArray(thesisUpdates.thesisId, thesisIds));
+    await db.delete(theses).where(eq(theses.fundId, fund.id));
+  }
+
   return NextResponse.json({
     ok: true,
     fund: fund.slug,
     deletedTransactions: txnIds.length,
+    deletedTheses: thesisIds.length,
   });
 }

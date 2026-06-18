@@ -133,6 +133,7 @@ export default function SearchModal() {
       {/* Search-trigger button in header — shows the modal on click */}
       <button
         onClick={() => setOpen(true)}
+        suppressHydrationWarning
         style={{
           background: "white",
           border: "1px solid #D9D9D2",
