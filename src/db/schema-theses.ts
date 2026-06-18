@@ -2,19 +2,18 @@
  * Phase 2c — Theses and post-mortems schema.
  *
  * Kept in a separate file so we don't touch the main src/db/schema.ts.
- * Import these into your schema.ts re-export by adding:
- *
- *   export * from "./schema-theses";
- *
- * at the bottom of src/db/schema.ts.
  *
  * Conceptually:
  *  - A Thesis represents an INVESTMENT IDEA. It owns the PDF memo and the
  *    structured metadata (conviction, target weight, holding period).
  *  - A Trade EXECUTES on a thesis. Multiple trades can share a thesis
  *    (e.g. initial buy + later add-on). transactions.thesis_id links them.
- *  - When the position fully closes, a PostMortem documents what happened.
- *    Each thesis has at most one post-mortem.
+ *  - When the position fully closes, a ThesisPostMortem documents what
+ *    happened. Each thesis has at most one post-mortem.
+ *
+ * Note: this table is named `thesis_post_mortems` rather than `post_mortems`
+ * to avoid colliding with a pre-existing `post_mortems` table from an
+ * earlier phase of the schema.
  */
 
 import {
@@ -102,10 +101,10 @@ export const theses = pgTable("theses", {
 });
 
 // ---------------------------------------------------------------------------
-// post_mortems table
+// thesis_post_mortems table
 // ---------------------------------------------------------------------------
 
-export const postMortems = pgTable("post_mortems", {
+export const thesisPostMortems = pgTable("thesis_post_mortems", {
   id: uuid("id").primaryKey().defaultRandom(),
   thesisId: uuid("thesis_id")
     .notNull()
@@ -141,5 +140,5 @@ export const postMortems = pgTable("post_mortems", {
 
 export type Thesis = typeof theses.$inferSelect;
 export type NewThesis = typeof theses.$inferInsert;
-export type PostMortem = typeof postMortems.$inferSelect;
-export type NewPostMortem = typeof postMortems.$inferInsert;
+export type ThesisPostMortem = typeof thesisPostMortems.$inferSelect;
+export type NewThesisPostMortem = typeof thesisPostMortems.$inferInsert;

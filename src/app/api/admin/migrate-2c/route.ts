@@ -10,12 +10,9 @@
  *   - thesis_status enum
  *   - post_mortem_outcome enum
  *   - theses table
- *   - post_mortems table
+ *   - thesis_post_mortems table (NOT post_mortems — avoids clash with any
+ *     pre-existing post_mortems table from earlier phase 1 stubs)
  *   - transactions.thesis_id column (nullable FK to theses)
- *
- * Once we've gone live with 2c, the migration SQL can also be folded into
- * the main /api/setup endpoint. For now it's standalone to avoid risk of
- * corrupting the setup flow.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -25,7 +22,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
-  // Auth — accepts either ?secret= or Authorization: Bearer
   const url = new URL(req.url);
   const querySecret = url.searchParams.get("secret");
   const auth = req.headers.get("authorization");
@@ -51,8 +47,6 @@ export async function GET(req: NextRequest) {
 
   try {
     // ----- Enums -----
-    // Postgres has no "CREATE TYPE IF NOT EXISTS", so we wrap in a DO block
-    // that checks existence first.
     const enums = [
       {
         name: "conviction",
@@ -110,16 +104,17 @@ export async function GET(req: NextRequest) {
     `;
     result.steps.push("Ensured table: theses");
 
-    // Helpful indexes
     await sql`CREATE INDEX IF NOT EXISTS theses_fund_idx ON theses(fund_id)`;
     await sql`CREATE INDEX IF NOT EXISTS theses_security_idx ON theses(security_id)`;
     await sql`CREATE INDEX IF NOT EXISTS theses_status_idx ON theses(status)`;
     await sql`CREATE INDEX IF NOT EXISTS theses_author_idx ON theses(author_user_id)`;
     result.steps.push("Ensured indexes on theses");
 
-    // ----- post_mortems table -----
+    // ----- thesis_post_mortems table -----
+    // Named with `thesis_` prefix to avoid colliding with any pre-existing
+    // `post_mortems` table from earlier schema stubs.
     await sql`
-      CREATE TABLE IF NOT EXISTS post_mortems (
+      CREATE TABLE IF NOT EXISTS thesis_post_mortems (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         thesis_id UUID NOT NULL REFERENCES theses(id) ON DELETE CASCADE,
         author_user_id UUID NOT NULL REFERENCES users(id),
@@ -134,14 +129,12 @@ export async function GET(req: NextRequest) {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `;
-    result.steps.push("Ensured table: post_mortems");
+    result.steps.push("Ensured table: thesis_post_mortems");
 
-    await sql`CREATE INDEX IF NOT EXISTS post_mortems_thesis_idx ON post_mortems(thesis_id)`;
-    result.steps.push("Ensured indexes on post_mortems");
+    await sql`CREATE INDEX IF NOT EXISTS thesis_post_mortems_thesis_idx ON thesis_post_mortems(thesis_id)`;
+    result.steps.push("Ensured indexes on thesis_post_mortems");
 
     // ----- transactions.thesis_id column -----
-    // Add the column if it doesn't exist yet. Nullable so existing trades
-    // (which predate 2c) stay unaffected.
     const colExists = await sql`
       SELECT 1 FROM information_schema.columns
       WHERE table_name = 'transactions' AND column_name = 'thesis_id'
