@@ -363,6 +363,13 @@ export const transactions = pgTable(
 
     rationale: text("rationale").notNull(), // required, min 20 chars enforced in app
     memoId: uuid("memo_id").references(() => investmentMemos.id), // link to investment thesis
+    // Link to a Phase 2c thesis (theses.id). The DB column + FK
+    // (ON DELETE SET NULL) and index are created by /api/admin/migrate-2c.
+    // Deliberately NOT using .references(() => theses.id) here: theses lives
+    // in schema-theses.ts which imports funds/securities/users from this file,
+    // so a reference back would create a circular import. The FK is already
+    // enforced at the database level by the migration.
+    thesisId: uuid("thesis_id"),
     notes: text("notes"),
 
     // Soft-constraint overrides at trade time, if any
@@ -380,6 +387,7 @@ export const transactions = pgTable(
       t.securityId
     ),
     memoIdx: index("transactions_memo_idx").on(t.memoId),
+    thesisIdx: index("transactions_thesis_idx").on(t.thesisId),
   })
 );
 

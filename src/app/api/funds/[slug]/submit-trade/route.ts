@@ -20,6 +20,7 @@
  *       sizeBytes: number,
  *     },
  *     softOverrideJustification?: string,  // ≥ 20 chars if soft breaches
+ *     thesisId?: string | null,  // Phase 2c — link this trade to a thesis
  *   }
  *
  * Response on success:
@@ -42,6 +43,7 @@ import {
   investableUniverses,
   fundMembers,
 } from "@/db/schema";
+import { theses as thesesTable } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import Decimal from "decimal.js";
@@ -72,6 +74,7 @@ interface SubmitTradeBody {
   expectedPriceNative?: string | null;
   memo?: { url: string; filename: string; sizeBytes: number };
   softOverrideJustification?: string;
+  thesisId?: string | null;
 }
 
 export async function POST(
@@ -170,6 +173,57 @@ export async function POST(
     );
   }
   const security = secRows[0];
+
+  // ----- Resolve + validate linked thesis (Phase 2c) -----
+  // A trade may link to a thesis. If a thesisId is supplied we verify it
+  // exists, belongs to THIS fund, and is for the security being traded.
+  // The link is optional (legacy positions opened before theses existed,
+  // and reductions/closes on such positions, carry thesis_id = NULL).
+  let linkedThesis:
+    | { id: string; direction: string | null; status: string }
+    | null = null;
+  if (body.thesisId != null && body.thesisId !== "") {
+    if (typeof body.thesisId !== "string") {
+      return NextResponse.json(
+        { ok: false, error: "Invalid thesisId" },
+        { status: 400 }
+      );
+    }
+    const thesisRows = await db
+      .select({
+        id: thesesTable.id,
+        fundId: thesesTable.fundId,
+        securityId: thesesTable.securityId,
+        direction: thesesTable.direction,
+        status: thesesTable.status,
+      })
+      .from(thesesTable)
+      .where(eq(thesesTable.id, body.thesisId))
+      .limit(1);
+    if (thesisRows.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "Linked thesis not found" },
+        { status: 404 }
+      );
+    }
+    const t = thesisRows[0];
+    if (t.fundId !== fund.id) {
+      return NextResponse.json(
+        { ok: false, error: "Thesis belongs to a different fund" },
+        { status: 400 }
+      );
+    }
+    if (t.securityId !== security.id) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Thesis is for a different security than this trade",
+        },
+        { status: 400 }
+      );
+    }
+    linkedThesis = { id: t.id, direction: t.direction, status: t.status };
+  }
 
   // ----- Determine execution price -----
   // Strategy:
@@ -465,6 +519,7 @@ export async function POST(
         feeAmount: feeBase.toString(),
         rationale: body.rationale,
         memoId: null,
+        thesisId: linkedThesis ? linkedThesis.id : null,
         notes: (() => {
           const parts: string[] = [];
           parts.push(`Price source: ${priceProviderLabel}`);
@@ -502,6 +557,26 @@ export async function POST(
         sizeBytes: body.memo.sizeBytes,
         uploadedByUserId: user.id,
       });
+    }
+
+    // 2b) If this trade links to a thesis whose direction hasn't been set
+    // yet, stamp it from the opening side. The first BUY makes the thesis
+    // long; the first SHORT makes it short. SELL/COVER never set direction
+    // (you can't open a position by reducing one), so a thesis that somehow
+    // only ever sees a sell/cover stays null — which is the correct signal
+    // that it was never properly opened.
+    if (
+      linkedThesis &&
+      linkedThesis.direction == null &&
+      (body.side === "buy" || body.side === "short")
+    ) {
+      await db
+        .update(thesesTable)
+        .set({
+          direction: body.side === "buy" ? "long" : "short",
+          updatedAt: executionDate,
+        })
+        .where(eq(thesesTable.id, linkedThesis.id));
     }
 
     // 3) Update positions lifecycle table

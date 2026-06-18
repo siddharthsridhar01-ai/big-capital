@@ -72,6 +72,31 @@ interface ConstraintCheck {
 }
 
 // ---------------------------------------------------------------------------
+// Thesis (Phase 2c) types
+// ---------------------------------------------------------------------------
+
+type Conviction = "high" | "medium" | "low";
+type HoldingPeriod = "short" | "medium" | "long" | "indefinite";
+
+const PERIOD_LABELS: Record<HoldingPeriod, string> = {
+  short: "Short (< 3 months)",
+  medium: "Medium (3-12 months)",
+  long: "Long (1-3 years)",
+  indefinite: "Indefinite",
+};
+
+// A thesis as returned by GET /api/funds/[slug]/theses?securityId=...
+interface ThesisOption {
+  id: string;
+  status: string;
+  direction: string | null;
+  conviction: string;
+  holdingPeriod: string;
+  summary: string;
+  openedAt: string;
+}
+
+// ---------------------------------------------------------------------------
 // Size mode logic
 // ---------------------------------------------------------------------------
 
@@ -179,6 +204,41 @@ export default function TradeTicket(props: TradeTicketProps) {
   const [checkingConstraints, setCheckingConstraints] = useState(false);
   const [softOverrideJustification, setSoftOverrideJustification] =
     useState<string>("");
+
+  // ===== Thesis state (Phase 2c) =====
+  // Active theses for THIS security in THIS fund, loaded once on mount.
+  const [activeTheses, setActiveTheses] = useState<ThesisOption[]>([]);
+  const [thesesLoaded, setThesesLoaded] = useState(false);
+
+  // For OPEN: toggle between creating a new thesis or linking an existing one.
+  const [openModeToggle, setOpenModeToggle] = useState<"create" | "link">(
+    "create"
+  );
+  // For ADD onto a legacy position with no active thesis: optionally create one.
+  const [addNoThesisChoice, setAddNoThesisChoice] = useState<"create" | "skip">(
+    "skip"
+  );
+  // The existing thesis the trade links to (auto-defaulted when theses load;
+  // user-selectable via dropdown when more than one is active).
+  const [linkedThesisId, setLinkedThesisId] = useState<string | null>(null);
+
+  // Inline "create thesis" fields (no security picker — it's THIS security).
+  const [thConviction, setThConviction] = useState<Conviction>("medium");
+  const [thHoldingPeriod, setThHoldingPeriod] =
+    useState<HoldingPeriod>("medium");
+  const [thSummary, setThSummary] = useState<string>("");
+  const [thTargetWeightPct, setThTargetWeightPct] = useState<string>(""); // entered as %, e.g. "5"
+  const [thTargetPrice, setThTargetPrice] = useState<string>("");
+  const [thMemoFile, setThMemoFile] = useState<File | null>(null);
+
+  // "Update thesis" note when adding to a position. Persistence as a thesis
+  // comment is deferred to 2c.3; for now it's captured but not sent.
+  const [thUpdateNote, setThUpdateNote] = useState<string>("");
+
+  // Set once the inline thesis has actually been created (at submit time), so
+  // a Back→Confirm retry reuses it rather than creating a duplicate. Cleared
+  // whenever the inline thesis content changes (so edits produce a fresh one).
+  const [createdThesisId, setCreatedThesisId] = useState<string | null>(null);
 
   // ===== Derived constants =====
   const nav = useMemo(
@@ -359,8 +419,11 @@ export default function TradeTicket(props: TradeTicketProps) {
   // ===== Memo requirement logic =====
   const isOpeningPosition =
     currentQty.isZero() && (side === "buy" || side === "short");
-  const targetWeight = size?.weightTarget ?? new Decimal(0);
-  const memoRequired = isOpeningPosition && targetWeight.gte(0.01);
+  // Phase 2c: the *thesis* now owns the deep investment memo (and opening a
+  // position requires a thesis — see thesis section below). The per-trade
+  // memo PDF therefore becomes always-optional supplementary research rather
+  // than a hard gate, to avoid demanding two PDFs on a single open.
+  const memoRequired = false;
 
   // ===== Constraint check (server-side, debounced) =====
   // Fires whenever side or shares changes. Uses the same engine that will
@@ -414,6 +477,168 @@ export default function TradeTicket(props: TradeTicketProps) {
   const hasHardViolations =
     (constraintCheck?.hardViolations?.length ?? 0) > 0;
 
+  // ===== Thesis fetch + resolution (Phase 2c) =====
+  // Load active theses for this security once. The trade ticket is scoped to a
+  // single security, so this is keyed only on fund + security.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/funds/${fund.slug}/theses?securityId=${security.id}`
+        );
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok && data.ok && Array.isArray(data.theses)) {
+          setActiveTheses(
+            (data.theses as ThesisOption[]).filter(
+              (t) => t.status === "active"
+            )
+          );
+        } else {
+          setActiveTheses([]);
+        }
+      } catch {
+        if (!cancelled) setActiveTheses([]);
+      } finally {
+        if (!cancelled) setThesesLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fund.slug, security.id]);
+
+  // Default the linked thesis to the most recent active one (the list is
+  // returned newest-first). Keep the user's pick if it's still valid.
+  useEffect(() => {
+    if (activeTheses.length > 0) {
+      setLinkedThesisId((prev) =>
+        prev && activeTheses.some((t) => t.id === prev)
+          ? prev
+          : activeTheses[0].id
+      );
+    } else {
+      setLinkedThesisId(null);
+    }
+  }, [activeTheses]);
+
+  // What is the PM trying to do to the position?
+  //   open   — no current holding, buying/shorting in
+  //   reduce — selling/covering an existing holding (informational thesis link)
+  //   add    — anything else with a current holding (adding/modifying)
+  const positionIntent: "open" | "add" | "reduce" = isOpeningPosition
+    ? "open"
+    : (side === "sell" || side === "cover") && !currentQty.isZero()
+      ? "reduce"
+      : "add";
+
+  const thSummaryLen = thSummary.trim().length;
+  const inlineThesisValid = thSummaryLen >= 50 && thSummaryLen <= 500;
+
+  // Resolve which thesis mode applies and whether it's complete enough to
+  // proceed. `required` means the trade can't be reviewed until `valid`.
+  const thesisResolution = useMemo((): {
+    mode: "create" | "link" | "none";
+    thesisId: string | null;
+    valid: boolean;
+    required: boolean;
+  } => {
+    if (positionIntent === "open") {
+      // Opening a position requires a thesis: create one, or link an active one.
+      if (activeTheses.length === 0 || openModeToggle === "create") {
+        return {
+          mode: "create",
+          thesisId: null,
+          valid: inlineThesisValid,
+          required: true,
+        };
+      }
+      return {
+        mode: "link",
+        thesisId: linkedThesisId,
+        valid: !!linkedThesisId,
+        required: true,
+      };
+    }
+    if (positionIntent === "add") {
+      if (activeTheses.length > 0) {
+        // Auto-link to the active thesis (selectable if more than one).
+        return {
+          mode: "link",
+          thesisId: linkedThesisId,
+          valid: !!linkedThesisId,
+          required: true,
+        };
+      }
+      // Legacy holding with no thesis — optionally create one, else proceed.
+      if (addNoThesisChoice === "create") {
+        return {
+          mode: "create",
+          thesisId: null,
+          valid: inlineThesisValid,
+          required: false,
+        };
+      }
+      return { mode: "none", thesisId: null, valid: true, required: false };
+    }
+    // reduce / close — informational. Link the active thesis if one exists.
+    return {
+      mode: activeTheses.length > 0 ? "link" : "none",
+      thesisId: activeTheses.length > 0 ? linkedThesisId : null,
+      valid: true,
+      required: false,
+    };
+  }, [
+    positionIntent,
+    activeTheses,
+    openModeToggle,
+    linkedThesisId,
+    inlineThesisValid,
+    addNoThesisChoice,
+  ]);
+
+  // The thesis currently linked (for display in informational modes).
+  const linkedThesis = useMemo(
+    () => activeTheses.find((t) => t.id === linkedThesisId) ?? null,
+    [activeTheses, linkedThesisId]
+  );
+
+  // Resolve the thesisId to submit — creating the inline thesis on demand.
+  // Called at submit time so the thesis is only persisted on a committed
+  // trade. Reuses a previously-created id across Back→Confirm retries.
+  async function resolveThesisId(): Promise<string | null> {
+    const r = thesisResolution;
+    if (r.mode === "link" || r.mode === "none") {
+      return r.thesisId ?? null;
+    }
+    // create
+    if (createdThesisId) return createdThesisId;
+    const form = new FormData();
+    form.append("securityId", security.id);
+    form.append("conviction", thConviction);
+    form.append("holdingPeriod", thHoldingPeriod);
+    form.append("summary", thSummary.trim());
+    if (thTargetWeightPct) {
+      const n = Number(thTargetWeightPct);
+      // User enters "5" for 5% → store 0.05
+      if (Number.isFinite(n)) form.append("targetWeightPct", String(n / 100));
+    }
+    if (thTargetPrice) form.append("targetPriceNative", thTargetPrice);
+    if (thMemoFile) form.append("memo", thMemoFile);
+
+    const res = await fetch(`/api/funds/${fund.slug}/theses`, {
+      method: "POST",
+      body: form,
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error ?? `Failed to create thesis (${res.status})`);
+    }
+    setCreatedThesisId(data.thesisId as string);
+    return data.thesisId as string;
+  }
+
   // ===== Validation =====
   const validation = useMemo(() => {
     const errors: string[] = [];
@@ -461,6 +686,16 @@ export default function TradeTicket(props: TradeTicketProps) {
         `Soft constraint breaches require a written justification of at least 20 characters (${softOverrideJustification.trim().length}/20)`
       );
     }
+    // Thesis requirement (Phase 2c)
+    if (thesisResolution.required && !thesisResolution.valid) {
+      if (thesisResolution.mode === "create") {
+        errors.push(
+          `Thesis summary must be 50-500 characters (${thSummaryLen}/50)`
+        );
+      } else {
+        errors.push("Select an active thesis to link this trade to");
+      }
+    }
     return errors;
   }, [
     priceBase,
@@ -474,6 +709,8 @@ export default function TradeTicket(props: TradeTicketProps) {
     constraintCheck,
     hasSoftViolations,
     softOverrideJustification,
+    thesisResolution,
+    thSummaryLen,
   ]);
 
   const canSubmit = validation.length === 0;
@@ -697,34 +934,61 @@ export default function TradeTicket(props: TradeTicketProps) {
         )}
       </Section>
 
-      {/* MEMO + RATIONALE */}
+      {/* THESIS (Phase 2c) */}
       <Section label="Investment thesis">
+        <ThesisPicker
+          intent={positionIntent}
+          activeTheses={activeTheses}
+          thesesLoaded={thesesLoaded}
+          resolution={thesisResolution}
+          openModeToggle={openModeToggle}
+          setOpenModeToggle={setOpenModeToggle}
+          addNoThesisChoice={addNoThesisChoice}
+          setAddNoThesisChoice={setAddNoThesisChoice}
+          linkedThesisId={linkedThesisId}
+          setLinkedThesisId={setLinkedThesisId}
+          linkedThesis={linkedThesis}
+          fullyClosing={!!projection && projection.newPositionShares.isZero()}
+          security={security}
+          conviction={thConviction}
+          setConviction={(c) => {
+            setThConviction(c);
+            setCreatedThesisId(null);
+          }}
+          holdingPeriod={thHoldingPeriod}
+          setHoldingPeriod={(p) => {
+            setThHoldingPeriod(p);
+            setCreatedThesisId(null);
+          }}
+          summary={thSummary}
+          setSummary={(s) => {
+            setThSummary(s);
+            setCreatedThesisId(null);
+          }}
+          summaryLen={thSummaryLen}
+          targetWeightPct={thTargetWeightPct}
+          setTargetWeightPct={(v) => {
+            setThTargetWeightPct(v);
+            setCreatedThesisId(null);
+          }}
+          targetPrice={thTargetPrice}
+          setTargetPrice={(v) => {
+            setThTargetPrice(v);
+            setCreatedThesisId(null);
+          }}
+          memoFile={thMemoFile}
+          setMemoFile={(f) => {
+            setThMemoFile(f);
+            setCreatedThesisId(null);
+          }}
+          updateNote={thUpdateNote}
+          setUpdateNote={setThUpdateNote}
+        />
+      </Section>
+
+      {/* MEMO + RATIONALE */}
+      <Section label="Trade rationale">
         <div style={{ display: "grid", gap: 14 }}>
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontSize: 11,
-                color: "#6B6B66",
-                marginBottom: 6,
-              }}
-            >
-              Investment memo (PDF){" "}
-              {memoRequired ? (
-                <span style={{ color: "#7A1F1F" }}>— required for this trade size</span>
-              ) : (
-                <span style={{ color: "#9A9A8E" }}>— optional</span>
-              )}
-            </label>
-            <MemoUploader
-              uploaded={uploadedMemo}
-              onChange={setUploadedMemo}
-              uploadError={uploadError}
-              setUploadError={setUploadError}
-              uploading={uploading}
-              setUploading={setUploading}
-            />
-          </div>
           <div>
             <label
               style={{
@@ -736,8 +1000,8 @@ export default function TradeTicket(props: TradeTicketProps) {
             >
               Rationale (required, min 50 chars){" "}
               <span style={{ color: "#9A9A8E", fontWeight: 400 }}>
-                — {rationale.length}/50 — a brief paraphrase of the thesis
-                that will show on the trade record
+                — {rationale.length}/50 — a brief paraphrase of why you&rsquo;re
+                placing this specific trade
               </span>
             </label>
             <textarea
@@ -751,6 +1015,29 @@ export default function TradeTicket(props: TradeTicketProps) {
                 fontFamily: "system-ui, sans-serif",
                 lineHeight: 1.5,
               }}
+            />
+          </div>
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontSize: 11,
+                color: "#6B6B66",
+                marginBottom: 6,
+              }}
+            >
+              Per-trade attachment (PDF){" "}
+              <span style={{ color: "#9A9A8E" }}>
+                — optional, subordinate to the thesis memo above
+              </span>
+            </label>
+            <MemoUploader
+              uploaded={uploadedMemo}
+              onChange={setUploadedMemo}
+              uploadError={uploadError}
+              setUploadError={setUploadError}
+              uploading={uploading}
+              setUploading={setUploading}
             />
           </div>
         </div>
@@ -954,6 +1241,16 @@ export default function TradeTicket(props: TradeTicketProps) {
           uploadedMemo={uploadedMemo}
           softViolations={constraintCheck?.softViolations ?? []}
           softOverrideJustification={softOverrideJustification}
+          resolveThesisId={resolveThesisId}
+          thesisInfo={{
+            mode: thesisResolution.mode,
+            newSummary:
+              thesisResolution.mode === "create" ? thSummary.trim() : null,
+            linkedSummary:
+              thesisResolution.mode === "link"
+                ? (linkedThesis?.summary ?? null)
+                : null,
+          }}
           submitPayload={{
             securityId: security.id,
             side,
@@ -1867,6 +2164,8 @@ function ConfirmModal({
   uploadedMemo,
   softViolations,
   softOverrideJustification,
+  resolveThesisId,
+  thesisInfo,
   submitPayload,
   fundSlug,
 }: {
@@ -1881,6 +2180,12 @@ function ConfirmModal({
   uploadedMemo: UploadedMemo | null;
   softViolations: ConstraintViolationResponse[];
   softOverrideJustification: string;
+  resolveThesisId: () => Promise<string | null>;
+  thesisInfo: {
+    mode: "create" | "link" | "none";
+    newSummary: string | null;
+    linkedSummary: string | null;
+  };
   submitPayload: SubmitPayload;
   fundSlug: string;
 }) {
@@ -1891,10 +2196,21 @@ function ConfirmModal({
     setSubmitError(null);
     setSubmitting(true);
     try {
+      // Resolve the thesis link first. For "create" mode this persists the
+      // inline thesis and returns its id; for "link"/"none" it's a no-op.
+      let thesisId: string | null;
+      try {
+        thesisId = await resolveThesisId();
+      } catch (e) {
+        setSubmitError(
+          e instanceof Error ? e.message : "Failed to prepare the thesis"
+        );
+        return;
+      }
       const res = await fetch(`/api/funds/${fundSlug}/submit-trade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(submitPayload),
+        body: JSON.stringify({ ...submitPayload, thesisId }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -2027,6 +2343,53 @@ function ConfirmModal({
               {rationale}
             </div>
           </div>
+
+          {(thesisInfo.mode === "create" || thesisInfo.mode === "link") && (
+            <div style={{ marginTop: 12 }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#6B6B66",
+                  fontWeight: 500,
+                  marginBottom: 6,
+                }}
+              >
+                Thesis
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "#0A0A0A",
+                  background: "#FAFAF7",
+                  border: "1px solid #E5E5DE",
+                  padding: "10px 14px",
+                  lineHeight: 1.5,
+                  wordBreak: "break-word",
+                  overflowWrap: "break-word",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    color: "#00183A",
+                    fontWeight: 600,
+                    marginRight: 8,
+                  }}
+                >
+                  {thesisInfo.mode === "create"
+                    ? "New thesis"
+                    : "Linked thesis"}
+                </span>
+                {thesisInfo.mode === "create"
+                  ? thesisInfo.newSummary
+                  : thesisInfo.linkedSummary}
+              </div>
+            </div>
+          )}
 
           {uploadedMemo && (
             <div style={{ marginTop: 12 }}>
@@ -2163,6 +2526,594 @@ function ConfirmModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Thesis picker (Phase 2c)
+// ---------------------------------------------------------------------------
+
+interface ThesisPickerProps {
+  intent: "open" | "add" | "reduce";
+  activeTheses: ThesisOption[];
+  thesesLoaded: boolean;
+  resolution: {
+    mode: "create" | "link" | "none";
+    thesisId: string | null;
+    valid: boolean;
+    required: boolean;
+  };
+  openModeToggle: "create" | "link";
+  setOpenModeToggle: (m: "create" | "link") => void;
+  addNoThesisChoice: "create" | "skip";
+  setAddNoThesisChoice: (c: "create" | "skip") => void;
+  linkedThesisId: string | null;
+  setLinkedThesisId: (id: string) => void;
+  linkedThesis: ThesisOption | null;
+  fullyClosing: boolean;
+  security: TradeTicketProps["security"];
+  conviction: Conviction;
+  setConviction: (c: Conviction) => void;
+  holdingPeriod: HoldingPeriod;
+  setHoldingPeriod: (p: HoldingPeriod) => void;
+  summary: string;
+  setSummary: (s: string) => void;
+  summaryLen: number;
+  targetWeightPct: string;
+  setTargetWeightPct: (v: string) => void;
+  targetPrice: string;
+  setTargetPrice: (v: string) => void;
+  memoFile: File | null;
+  setMemoFile: (f: File | null) => void;
+  updateNote: string;
+  setUpdateNote: (s: string) => void;
+}
+
+function ThesisPicker(props: ThesisPickerProps) {
+  const {
+    intent,
+    activeTheses,
+    thesesLoaded,
+    resolution,
+    openModeToggle,
+    setOpenModeToggle,
+    addNoThesisChoice,
+    setAddNoThesisChoice,
+    linkedThesisId,
+    setLinkedThesisId,
+    linkedThesis,
+    fullyClosing,
+    security,
+    conviction,
+    setConviction,
+    holdingPeriod,
+    setHoldingPeriod,
+    summary,
+    setSummary,
+    summaryLen,
+    targetWeightPct,
+    setTargetWeightPct,
+    targetPrice,
+    setTargetPrice,
+    memoFile,
+    setMemoFile,
+    updateNote,
+    setUpdateNote,
+  } = props;
+
+  const currencySymbol =
+    security.currency === "GBP" ? "£" : security.currency === "EUR" ? "€" : "$";
+  const summaryValid = summaryLen >= 50 && summaryLen <= 500;
+
+  const muted: React.CSSProperties = { fontSize: 12, color: "#9A9A8E" };
+  const hint: React.CSSProperties = {
+    fontSize: 12,
+    color: "#6B6B66",
+    marginBottom: 12,
+    lineHeight: 1.5,
+  };
+  const subLabel: React.CSSProperties = {
+    display: "block",
+    fontSize: 11,
+    color: "#6B6B66",
+    marginBottom: 6,
+  };
+
+  // A compact read-only card for an existing thesis.
+  const thesisCard = (t: ThesisOption | null) => {
+    if (!t) return null;
+    return (
+      <div
+        style={{
+          border: "1px solid #E5E5DE",
+          background: "#FAFAF7",
+          padding: "10px 14px",
+          fontSize: 12,
+          color: "#0A0A0A",
+          lineHeight: 1.5,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "baseline",
+            marginBottom: 4,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: "#00183A",
+              fontWeight: 600,
+            }}
+          >
+            {t.conviction} conviction
+          </span>
+          <span style={{ color: "#C8C8C0" }}>·</span>
+          <span style={{ fontSize: 11, color: "#6B6B66" }}>
+            {PERIOD_LABELS[t.holdingPeriod as HoldingPeriod] ?? t.holdingPeriod}
+          </span>
+          {t.direction ? (
+            <>
+              <span style={{ color: "#C8C8C0" }}>·</span>
+              <span style={{ fontSize: 11, color: "#6B6B66" }}>
+                {t.direction}
+              </span>
+            </>
+          ) : null}
+        </div>
+        <div style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
+          {t.summary}
+        </div>
+      </div>
+    );
+  };
+
+  // The inline create-thesis form (shared by open→create and add→create).
+  const createForm = (
+    <div style={{ display: "grid", gap: 18 }}>
+      {/* CONVICTION */}
+      <div>
+        <span style={subLabel}>Conviction</span>
+        <div style={{ display: "flex", gap: 0 }}>
+          {(["high", "medium", "low"] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setConviction(c)}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                border: "1px solid #D9D9D2",
+                marginLeft: "-1px",
+                background: conviction === c ? "#00183A" : "white",
+                color: conviction === c ? "white" : "#6B6B66",
+                fontFamily: "system-ui, sans-serif",
+                fontSize: 11,
+                fontWeight: conviction === c ? 600 : 400,
+                cursor: "pointer",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* HOLDING PERIOD */}
+      <div>
+        <span style={subLabel}>Holding period</span>
+        <div style={{ display: "flex", gap: 0, flexWrap: "wrap" }}>
+          {(["short", "medium", "long", "indefinite"] as HoldingPeriod[]).map(
+            (p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setHoldingPeriod(p)}
+                style={{
+                  flex: 1,
+                  minWidth: 120,
+                  padding: "8px 10px",
+                  border: "1px solid #D9D9D2",
+                  marginLeft: "-1px",
+                  background: holdingPeriod === p ? "#00183A" : "white",
+                  color: holdingPeriod === p ? "white" : "#6B6B66",
+                  fontFamily: "system-ui, sans-serif",
+                  fontSize: 11,
+                  fontWeight: holdingPeriod === p ? 600 : 400,
+                  cursor: "pointer",
+                }}
+              >
+                {PERIOD_LABELS[p]}
+              </button>
+            )
+          )}
+        </div>
+      </div>
+
+      {/* TARGETS (optional) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div>
+          <span style={subLabel}>Target weight (%) — optional</span>
+          <input
+            type="number"
+            value={targetWeightPct}
+            onChange={(e) => setTargetWeightPct(e.target.value)}
+            step="0.1"
+            min="0"
+            max="50"
+            placeholder="e.g. 5"
+            style={{ ...inputStyle, ...numeric }}
+          />
+        </div>
+        <div>
+          <span style={subLabel}>
+            Target price ({currencySymbol}) — optional
+          </span>
+          <input
+            type="number"
+            value={targetPrice}
+            onChange={(e) => setTargetPrice(e.target.value)}
+            step="0.01"
+            min="0"
+            placeholder="e.g. 150.00"
+            style={{ ...inputStyle, ...numeric }}
+          />
+        </div>
+      </div>
+
+      {/* SUMMARY */}
+      <div>
+        <span style={subLabel}>
+          Summary{" "}
+          <span
+            style={{
+              color: summaryValid
+                ? "#1F5C3A"
+                : summaryLen > 0
+                  ? "#7A1F1F"
+                  : "#9A9A8E",
+            }}
+          >
+            ({summaryLen}/50-500)
+          </span>
+        </span>
+        <textarea
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          rows={3}
+          placeholder="What you believe, why now, what could prove it wrong."
+          style={{
+            ...inputStyle,
+            resize: "vertical",
+            lineHeight: 1.5,
+            fontFamily: "system-ui, sans-serif",
+          }}
+        />
+      </div>
+
+      {/* MEMO PDF (optional) */}
+      <div>
+        <span style={subLabel}>Thesis memo PDF — optional</span>
+        <div
+          style={{
+            border: "1px dashed #D9D9D2",
+            padding: "12px",
+            background: "#FAFAF7",
+            textAlign: "center",
+            color: "#6B6B66",
+            fontSize: 12,
+          }}
+        >
+          {memoFile ? (
+            <div>
+              <div
+                style={{ fontSize: 13, color: "#00183A", fontWeight: 500 }}
+              >
+                {memoFile.name}
+              </div>
+              <div style={{ fontSize: 11, color: "#6B6B66", marginTop: 2 }}>
+                {(memoFile.size / 1024).toFixed(0)} KB
+              </div>
+              <button
+                type="button"
+                onClick={() => setMemoFile(null)}
+                style={{
+                  marginTop: 6,
+                  background: "none",
+                  border: "none",
+                  color: "#7A1F1F",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  fontFamily: "system-ui, sans-serif",
+                  textDecoration: "underline",
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <label style={{ cursor: "pointer" }}>
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) setMemoFile(f);
+                }}
+                style={{ display: "none" }}
+              />
+              <div>
+                Drop a PDF here, or{" "}
+                <span
+                  style={{ color: "#00183A", textDecoration: "underline" }}
+                >
+                  browse
+                </span>
+                <div style={{ fontSize: 11, marginTop: 2 }}>
+                  PDF only · max 10 MB
+                </div>
+              </div>
+            </label>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // A selectable list of active theses (used in open→link mode).
+  const linkPicker = (
+    <div
+      style={{
+        border: "1px solid #E5E5DE",
+        background: "#FAFAF7",
+        maxHeight: 240,
+        overflowY: "auto",
+      }}
+    >
+      {activeTheses.map((t) => {
+        const selected = t.id === linkedThesisId;
+        return (
+          <div
+            key={t.id}
+            onClick={() => setLinkedThesisId(t.id)}
+            style={{
+              padding: "10px 14px",
+              borderBottom: "1px solid #F0EFEA",
+              background: selected ? "#E8E4D4" : "transparent",
+              cursor: "pointer",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "baseline",
+                marginBottom: 3,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: "#00183A",
+                  fontWeight: 600,
+                }}
+              >
+                {t.conviction} conviction
+              </span>
+              <span style={{ color: "#C8C8C0" }}>·</span>
+              <span style={{ fontSize: 11, color: "#6B6B66" }}>
+                {PERIOD_LABELS[t.holdingPeriod as HoldingPeriod] ??
+                  t.holdingPeriod}
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: "#0A0A0A",
+                lineHeight: 1.5,
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
+              }}
+            >
+              {t.summary}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // Create/link toggle used in the OPEN flow.
+  const createLinkToggle = (
+    <div style={{ display: "flex", gap: 0, marginBottom: 14 }}>
+      {(
+        [
+          ["create", "Create new"],
+          ["link", "Link existing"],
+        ] as const
+      ).map(([mode, label]) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => setOpenModeToggle(mode)}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            border: "1px solid #D9D9D2",
+            marginLeft: "-1px",
+            background: openModeToggle === mode ? "#00183A" : "white",
+            color: openModeToggle === mode ? "white" : "#6B6B66",
+            fontFamily: "system-ui, sans-serif",
+            fontSize: 12,
+            fontWeight: openModeToggle === mode ? 600 : 400,
+            cursor: "pointer",
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (!thesesLoaded) {
+    return <div style={muted}>Loading theses…</div>;
+  }
+
+  // ----- OPEN -----
+  if (intent === "open") {
+    return (
+      <div>
+        <div style={hint}>
+          Opening a position requires an investment thesis — the &ldquo;why&rdquo;
+          behind the trade. The per-trade rationale below is a short paraphrase;
+          this thesis is the durable idea the position lives under.
+        </div>
+        {activeTheses.length > 0 && createLinkToggle}
+        {resolution.mode === "create" ? (
+          <>
+            {activeTheses.length === 0 && (
+              <div style={{ ...muted, marginBottom: 12 }}>
+                No existing thesis for {security.ticker} — create one.
+              </div>
+            )}
+            {createForm}
+          </>
+        ) : (
+          linkPicker
+        )}
+      </div>
+    );
+  }
+
+  // ----- ADD -----
+  if (intent === "add") {
+    if (activeTheses.length > 0) {
+      return (
+        <div>
+          <div style={hint}>
+            Adding to an existing position — this trade links to the active
+            thesis.
+          </div>
+          {activeTheses.length > 1 && (
+            <div style={{ marginBottom: 10 }}>
+              <span style={subLabel}>Linked thesis</span>
+              <select
+                value={linkedThesisId ?? ""}
+                onChange={(e) => setLinkedThesisId(e.target.value)}
+                style={{ ...inputStyle }}
+              >
+                {activeTheses.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.conviction} · {t.summary.slice(0, 60)}
+                    {t.summary.length > 60 ? "…" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {thesisCard(linkedThesis)}
+          <div style={{ marginTop: 14 }}>
+            <span style={subLabel}>Update note — optional</span>
+            <textarea
+              value={updateNote}
+              onChange={(e) => setUpdateNote(e.target.value)}
+              rows={2}
+              placeholder="What changed since you opened? (Recorded against the thesis in a later release.)"
+              style={{
+                ...inputStyle,
+                resize: "vertical",
+                lineHeight: 1.5,
+                fontFamily: "system-ui, sans-serif",
+              }}
+            />
+            <div style={{ ...muted, marginTop: 4, fontSize: 10 }}>
+              Captured for context. Persisting this as a thesis comment is
+              coming in a later release.
+            </div>
+          </div>
+        </div>
+      );
+    }
+    // No active thesis on this holding (legacy position).
+    return (
+      <div>
+        <div style={hint}>
+          No active thesis exists for this holding — it may have been opened
+          before theses were introduced. You can attach one now, or proceed
+          without.
+        </div>
+        <div style={{ display: "flex", gap: 0, marginBottom: 14 }}>
+          {(
+            [
+              ["skip", "Proceed without"],
+              ["create", "Create a thesis"],
+            ] as const
+          ).map(([choice, label]) => (
+            <button
+              key={choice}
+              type="button"
+              onClick={() => setAddNoThesisChoice(choice)}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                border: "1px solid #D9D9D2",
+                marginLeft: "-1px",
+                background: addNoThesisChoice === choice ? "#00183A" : "white",
+                color: addNoThesisChoice === choice ? "white" : "#6B6B66",
+                fontFamily: "system-ui, sans-serif",
+                fontSize: 12,
+                fontWeight: addNoThesisChoice === choice ? 600 : 400,
+                cursor: "pointer",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {addNoThesisChoice === "create" ? (
+          createForm
+        ) : (
+          <div style={muted}>
+            This trade will be recorded without a thesis link.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ----- REDUCE / CLOSE -----
+  return (
+    <div>
+      {linkedThesis ? (
+        <>
+          <div style={{ ...hint, marginBottom: 8 }}>
+            {fullyClosing
+              ? "This trade fully closes the position. Closing thesis:"
+              : "Reducing the position under thesis:"}
+          </div>
+          {thesisCard(linkedThesis)}
+          {fullyClosing && (
+            <div style={{ ...muted, marginTop: 8, fontSize: 10 }}>
+              A post-mortem prompt for closed theses is coming in a later
+              release.
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={muted}>
+          No active thesis is linked to this position (it may predate theses).
+          The trade will be recorded without a thesis link.
+        </div>
+      )}
     </div>
   );
 }
