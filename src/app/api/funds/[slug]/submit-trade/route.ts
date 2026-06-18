@@ -44,6 +44,7 @@ import {
   fundMembers,
 } from "@/db/schema";
 import { theses as thesesTable } from "@/db/schema-theses";
+import { thesisUpdates } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import Decimal from "decimal.js";
@@ -75,6 +76,7 @@ interface SubmitTradeBody {
   memo?: { url: string; filename: string; sizeBytes: number };
   softOverrideJustification?: string;
   thesisId?: string | null;
+  updateNote?: string;
 }
 
 export async function POST(
@@ -547,6 +549,21 @@ export async function POST(
       .returning({ id: transactionsTable.id });
 
     newTransactionId = txnInsert[0].id;
+
+    // 2a) If an update note accompanied this trade and it links to a thesis,
+    // record it as a thesis update tied to this transaction — these are the
+    // mid-story beats on the thesis timeline.
+    if (linkedThesis && typeof body.updateNote === "string") {
+      const note = body.updateNote.trim();
+      if (note.length > 0) {
+        await db.insert(thesisUpdates).values({
+          thesisId: linkedThesis.id,
+          authorUserId: user.id,
+          transactionId: newTransactionId,
+          note,
+        });
+      }
+    }
 
     // 2) Save PDF attachment if uploaded
     if (body.memo) {

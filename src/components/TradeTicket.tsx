@@ -1268,6 +1268,9 @@ export default function TradeTicket(props: TradeTicketProps) {
               constraintCheck?.softViolations.length
                 ? softOverrideJustification
                 : undefined,
+            // Trade-linked thesis update (persisted by submit-trade when a
+            // thesis is linked). Only meaningful on the "add" flow.
+            updateNote: thUpdateNote.trim() ? thUpdateNote.trim() : undefined,
           }}
           fundSlug={fund.slug}
         />
@@ -2150,6 +2153,7 @@ interface SubmitPayload {
   expectedPriceNative: string | null;
   memo?: { url: string; filename: string; sizeBytes: number };
   softOverrideJustification?: string;
+  updateNote?: string;
 }
 
 function ConfirmModal({
@@ -3036,8 +3040,7 @@ function ThesisPicker(props: ThesisPickerProps) {
               }}
             />
             <div style={{ ...muted, marginTop: 4, fontSize: 10 }}>
-              Captured for context. Persisting this as a thesis comment is
-              coming in a later release.
+              Recorded against the thesis timeline, alongside this trade.
             </div>
           </div>
         </div>

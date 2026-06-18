@@ -185,7 +185,7 @@ export default async function ThesesListPage({
             fontSize: 13,
           }}
         >
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <thead>
               <tr>
                 {[
@@ -309,6 +309,8 @@ export default async function ThesesListPage({
                         lineHeight: 1.45,
                         maxWidth: 480,
                         verticalAlign: "top",
+                        wordBreak: "break-word",
+                        overflowWrap: "anywhere",
                       }}
                     >
                       {r.summary}

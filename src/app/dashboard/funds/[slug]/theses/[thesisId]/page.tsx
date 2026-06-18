@@ -6,13 +6,14 @@ import {
   transactions,
   positions,
 } from "@/db/schema";
-import { theses, thesisPostMortems } from "@/db/schema-theses";
+import { theses, thesisPostMortems, thesisUpdates } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
 import { eq, and, asc, desc, isNotNull } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
 import PostMortemForm from "@/components/PostMortemForm";
+import ThesisUpdateForm from "@/components/ThesisUpdateForm";
 
 export const dynamic = "force-dynamic";
 
@@ -48,18 +49,6 @@ const PERIOD_LABELS: Record<string, string> = {
   indefinite: "Indefinite",
 };
 
-const META_LABEL: React.CSSProperties = {
-  fontSize: 10,
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  color: "#6B6B66",
-  fontWeight: 500,
-  marginBottom: 3,
-};
-const META_VALUE: React.CSSProperties = {
-  fontSize: 13,
-  color: "#0A0A0A",
-};
 const SECTION_HEADER: React.CSSProperties = {
   fontSize: 10,
   letterSpacing: "0.08em",
@@ -82,6 +71,40 @@ function statusStyle(status: string): { label: string; color: string } {
       return { label: "Abandoned", color: "#9A9A8E" };
   }
 }
+
+// Discriminated event union for the timeline.
+type TLEvent =
+  | { kind: "open"; date: Date }
+  | {
+      kind: "trade";
+      date: Date;
+      type: string;
+      quantity: string;
+      price: string;
+      currency: string;
+      cashImpact: string;
+      rationale: string;
+    }
+  | { kind: "update"; date: Date; note: string; fromTrade: boolean; author: string }
+  | { kind: "close"; date: Date }
+  | {
+      kind: "postmortem";
+      date: Date;
+      outcome: string;
+      realisedReturnPct: string | null;
+      whatWorked: string | null;
+      whatDidntWork: string | null;
+      lessonsLearned: string;
+      attachmentFilename: string | null;
+    };
+
+const KIND_ORDER: Record<TLEvent["kind"], number> = {
+  open: 0,
+  trade: 1,
+  update: 2,
+  close: 3,
+  postmortem: 4,
+};
 
 export default async function ThesisDetailPage({
   params,
@@ -114,7 +137,6 @@ export default async function ThesisDetailPage({
       openedAt: theses.openedAt,
       closedAt: theses.closedAt,
       memoBlobUrl: theses.memoBlobUrl,
-      memoBlobFilename: theses.memoBlobFilename,
       securityId: theses.securityId,
       authorName: users.fullName,
       ticker: securities.ticker,
@@ -132,7 +154,6 @@ export default async function ThesisDetailPage({
   const secCur = t.securityCurrency as Cur;
   const st = statusStyle(t.status);
 
-  // Linked trades, oldest first — the execution timeline for this thesis.
   const trades = await db
     .select({
       id: transactions.id,
@@ -141,13 +162,26 @@ export default async function ThesisDetailPage({
       price: transactions.price,
       currency: transactions.currency,
       cashImpact: transactions.cashImpact,
+      rationale: transactions.rationale,
       executedAt: transactions.executedAt,
     })
     .from(transactions)
     .where(eq(transactions.thesisId, thesisId))
     .orderBy(asc(transactions.executedAt));
 
-  // Existing post-mortem, if any.
+  const updates = await db
+    .select({
+      id: thesisUpdates.id,
+      note: thesisUpdates.note,
+      transactionId: thesisUpdates.transactionId,
+      createdAt: thesisUpdates.createdAt,
+      author: users.fullName,
+    })
+    .from(thesisUpdates)
+    .innerJoin(users, eq(thesisUpdates.authorUserId, users.id))
+    .where(eq(thesisUpdates.thesisId, thesisId))
+    .orderBy(asc(thesisUpdates.createdAt));
+
   const pmRows = await db
     .select()
     .from(thesisPostMortems)
@@ -155,11 +189,9 @@ export default async function ThesisDetailPage({
     .limit(1);
   const pm = pmRows[0] ?? null;
 
-  // Most recent realised P&L for this holding — context for the post-mortem
-  // form (and to pre-select the outcome). Best-effort: the latest closed
-  // position on this fund + security.
+  // Realised P&L context (latest closed position for this holding).
   let realisedPnl: number | null = null;
-  if (t.status === "closed") {
+  if (t.status === "closed" || t.status === "post_mortem") {
     const posRows = await db
       .select({ realisedPnlBase: positions.realisedPnlBase })
       .from(positions)
@@ -192,10 +224,53 @@ export default async function ThesisDetailPage({
           maximumFractionDigits: 2,
         }).format(Math.abs(realisedPnl));
 
+  // ---- Build the unified, chronological event list ----
+  const events: TLEvent[] = [];
+  events.push({ kind: "open", date: new Date(t.openedAt) });
+  for (const tr of trades) {
+    events.push({
+      kind: "trade",
+      date: new Date(tr.executedAt),
+      type: tr.type,
+      quantity: tr.quantity,
+      price: tr.price,
+      currency: tr.currency,
+      cashImpact: tr.cashImpact,
+      rationale: tr.rationale,
+    });
+  }
+  for (const u of updates) {
+    events.push({
+      kind: "update",
+      date: new Date(u.createdAt),
+      note: u.note,
+      fromTrade: u.transactionId != null,
+      author: u.author,
+    });
+  }
+  if (t.closedAt) events.push({ kind: "close", date: new Date(t.closedAt) });
+  if (pm) {
+    events.push({
+      kind: "postmortem",
+      date: new Date(pm.writtenAt),
+      outcome: pm.outcome,
+      realisedReturnPct: pm.realisedReturnPct,
+      whatWorked: pm.whatWorked,
+      whatDidntWork: pm.whatDidntWork,
+      lessonsLearned: pm.lessonsLearned,
+      attachmentFilename: pm.attachmentBlobFilename,
+    });
+  }
+  events.sort((a, b) => {
+    const d = a.date.getTime() - b.date.getTime();
+    return d !== 0 ? d : KIND_ORDER[a.kind] - KIND_ORDER[b.kind];
+  });
+
   const memoUrl = `/api/funds/${slug}/theses/${thesisId}/memo`;
+  const pmAttachmentUrl = `/api/funds/${slug}/theses/${thesisId}/post-mortem/attachment`;
 
   return (
-    <main style={{ padding: "28px 32px 64px", maxWidth: 880 }}>
+    <main style={{ padding: "28px 32px 64px", maxWidth: 820 }}>
       <div style={{ marginBottom: 6 }}>
         <Link
           href={`/dashboard/funds/${slug}/theses`}
@@ -250,384 +325,292 @@ export default async function ThesisDetailPage({
           fontWeight: 400,
           fontSize: 26,
           color: "#00183A",
-          margin: "0 0 16px",
+          margin: "0 0 4px",
           letterSpacing: "-0.01em",
         }}
       >
         {t.securityName}
       </h1>
-
-      {/* META GRID */}
       <div
         style={{
-          background: "white",
-          border: "1px solid #D9D9D2",
-          padding: "16px 20px",
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: "16px 20px",
           fontFamily: "system-ui, sans-serif",
+          fontSize: 12,
+          color: "#6B6B66",
           marginBottom: 24,
         }}
       >
-        <div>
-          <div style={META_LABEL}>Conviction</div>
-          <div style={{ ...META_VALUE, textTransform: "capitalize" }}>
-            {t.conviction}
-          </div>
-        </div>
-        <div>
-          <div style={META_LABEL}>Holding period</div>
-          <div style={META_VALUE}>
-            {PERIOD_LABELS[t.holdingPeriod] ?? t.holdingPeriod}
-          </div>
-        </div>
-        <div>
-          <div style={META_LABEL}>Direction</div>
-          <div style={{ ...META_VALUE, textTransform: "capitalize" }}>
-            {t.direction ?? "—"}
-          </div>
-        </div>
-        <div>
-          <div style={META_LABEL}>Author</div>
-          <div style={META_VALUE}>{t.authorName}</div>
-        </div>
-        <div>
-          <div style={META_LABEL}>Target weight</div>
-          <div style={{ ...META_VALUE, ...numeric }}>
-            {t.targetWeightPct
-              ? `${(Number(t.targetWeightPct) * 100).toFixed(2)}%`
-              : "—"}
-          </div>
-        </div>
-        <div>
-          <div style={META_LABEL}>Target price</div>
-          <div style={{ ...META_VALUE, ...numeric }}>
-            {t.targetPriceNative
-              ? money(t.targetPriceNative, secCur)
-              : "—"}
-          </div>
-        </div>
-        <div>
-          <div style={META_LABEL}>Opened</div>
-          <div style={{ ...META_VALUE, ...numeric }}>{dateStr(t.openedAt)}</div>
-        </div>
-        <div>
-          <div style={META_LABEL}>Closed</div>
-          <div style={{ ...META_VALUE, ...numeric }}>{dateStr(t.closedAt)}</div>
-        </div>
+        {t.direction ? `${t.direction} · ` : ""}
+        {t.conviction} conviction · {PERIOD_LABELS[t.holdingPeriod] ?? t.holdingPeriod} ·
+        opened by {t.authorName}
       </div>
 
-      {/* SUMMARY */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={SECTION_HEADER}>Summary</div>
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #D9D9D2",
-            padding: "16px 20px",
-            fontSize: 14,
-            color: "#0A0A0A",
-            lineHeight: 1.6,
-            fontFamily: "system-ui, sans-serif",
-          }}
-        >
-          {t.summary}
-        </div>
+      {/* TIMELINE */}
+      <div style={SECTION_HEADER}>Thesis timeline</div>
+      <div style={{ marginBottom: 28 }}>
+        {events.map((ev, i) => {
+          const last = i === events.length - 1;
+          if (ev.kind === "open") {
+            return (
+              <TimelineItem key={i} color="#00183A" title="Thesis opened" date={dateStr(ev.date)} last={last}>
+                <div style={{ fontSize: 14, color: "#0A0A0A", lineHeight: 1.6, marginBottom: 12 }}>
+                  {t.summary}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: t.memoBlobUrl ? 14 : 0 }}>
+                  {t.targetWeightPct ? (
+                    <Chip label="Target wt." value={`${(Number(t.targetWeightPct) * 100).toFixed(2)}%`} />
+                  ) : null}
+                  {t.targetPriceNative ? (
+                    <Chip label="Target px." value={money(t.targetPriceNative, secCur)} />
+                  ) : null}
+                </div>
+                {t.memoBlobUrl ? (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, color: "#6B6B66" }}>Investment memo</span>
+                      <a href={memoUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#00183A", textDecoration: "none", borderBottom: "1px solid #00183A" }}>
+                        Open in new tab ↗
+                      </a>
+                    </div>
+                    <iframe src={memoUrl} title="Thesis memo" style={{ width: "100%", height: 460, border: "1px solid #E5E5DE", background: "#FAFAF7" }} />
+                  </div>
+                ) : null}
+              </TimelineItem>
+            );
+          }
+          if (ev.kind === "trade") {
+            const inflow = Number(ev.cashImpact) >= 0;
+            const notional = Math.abs(Number(ev.quantity)) * Number(ev.price);
+            return (
+              <TimelineItem
+                key={i}
+                color="#3A4D6B"
+                title={`${ev.type.toUpperCase()} ${sharesFmt(ev.quantity)} @ ${money(ev.price, ev.currency)}`}
+                date={dateStr(ev.date)}
+                last={last}
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: ev.rationale ? 10 : 0 }}>
+                  <Chip label="Notional" value={money(notional, ev.currency)} />
+                  <Chip label="Cash" value={`${inflow ? "+" : "−"}${money(Math.abs(Number(ev.cashImpact)), ev.currency)}`} valueColor={inflow ? "#1F5C3A" : "#7A1F1F"} />
+                </div>
+                {ev.rationale ? (
+                  <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                    {ev.rationale}
+                  </div>
+                ) : null}
+              </TimelineItem>
+            );
+          }
+          if (ev.kind === "update") {
+            return (
+              <TimelineItem key={i} color="#8A6D1F" title="Thesis update" date={dateStr(ev.date)} last={last}>
+                <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                  {ev.note}
+                </div>
+                <div style={{ fontSize: 10, color: "#9A9A8E", marginTop: 6 }}>
+                  {ev.author}
+                  {ev.fromTrade ? " · noted alongside a trade" : ""}
+                </div>
+              </TimelineItem>
+            );
+          }
+          if (ev.kind === "close") {
+            return (
+              <TimelineItem key={i} color="#5A3F08" title="Position closed" date={dateStr(ev.date)} last={last}>
+                <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55 }}>
+                  The position was fully closed.
+                  {realisedPnlDisplay ? (
+                    <>
+                      {" "}Realised P&amp;L:{" "}
+                      <span style={{ ...numeric, color: realisedPnl != null && realisedPnl < 0 ? "#7A1F1F" : "#1F5C3A" }}>
+                        {realisedPnlDisplay}
+                      </span>.
+                    </>
+                  ) : null}
+                </div>
+              </TimelineItem>
+            );
+          }
+          // postmortem
+          const oc =
+            ev.outcome === "win"
+              ? { label: "Win", color: "#1F5C3A" }
+              : ev.outcome === "loss"
+                ? { label: "Loss", color: "#7A1F1F" }
+                : { label: "Break-even", color: "#5A3F08" };
+          return (
+            <TimelineItem key={i} color={oc.color} title={`Post-mortem · ${oc.label}`} date={dateStr(ev.date)} last={last}>
+              {ev.realisedReturnPct != null ? (
+                <div style={{ ...numeric, fontSize: 13, color: "#00183A", marginBottom: 10 }}>
+                  Realised return: {Number(ev.realisedReturnPct) >= 0 ? "+" : ""}
+                  {Number(ev.realisedReturnPct).toFixed(2)}%
+                </div>
+              ) : null}
+              <PMBlock label="What worked" value={ev.whatWorked} />
+              <PMBlock label="What didn't work" value={ev.whatDidntWork} />
+              <PMBlock label="Lessons learned" value={ev.lessonsLearned} />
+              {ev.attachmentFilename ? (
+                <a href={pmAttachmentUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#00183A", textDecoration: "none", borderBottom: "1px solid #00183A" }}>
+                  📄 {ev.attachmentFilename} ↗
+                </a>
+              ) : null}
+            </TimelineItem>
+          );
+        })}
       </div>
 
-      {/* MEMO */}
-      <div style={{ marginBottom: 24 }}>
-        <div
-          style={{
-            ...SECTION_HEADER,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-          }}
-        >
-          <span>Investment memo</span>
-          {t.memoBlobUrl ? (
-            <a
-              href={memoUrl}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                textTransform: "none",
-                letterSpacing: 0,
-                fontSize: 11,
-                color: "#00183A",
-                textDecoration: "none",
-                borderBottom: "1px solid #00183A",
-              }}
-            >
-              Open in new tab ↗
-            </a>
-          ) : null}
-        </div>
-        {t.memoBlobUrl ? (
-          <iframe
-            src={memoUrl}
-            title="Thesis memo"
-            style={{
-              width: "100%",
-              height: 560,
-              border: "1px solid #D9D9D2",
-              background: "#FAFAF7",
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              background: "white",
-              border: "1px solid #D9D9D2",
-              padding: "16px 20px",
-              fontSize: 13,
-              color: "#9A9A8E",
-              fontFamily: "system-ui, sans-serif",
-            }}
-          >
-            No memo attached to this thesis.
-          </div>
-        )}
-      </div>
-
-      {/* TRADE TIMELINE */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={SECTION_HEADER}>Trade timeline</div>
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #D9D9D2",
-            fontFamily: "system-ui, sans-serif",
-            fontSize: 13,
-          }}
-        >
-          {trades.length === 0 ? (
-            <div style={{ padding: "16px 20px", color: "#9A9A8E" }}>
-              No trades linked to this thesis yet.
-            </div>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  {[
-                    ["Date", "left"],
-                    ["Type", "left"],
-                    ["Qty", "right"],
-                    ["Price", "right"],
-                    ["Notional", "right"],
-                    ["Cash impact", "right"],
-                  ].map(([label, align]) => (
-                    <th
-                      key={label}
-                      style={{
-                        fontSize: 10,
-                        letterSpacing: "0.06em",
-                        textTransform: "uppercase",
-                        color: "#6B6B66",
-                        borderBottom: "1px solid #E5E5DE",
-                        padding: "9px 14px",
-                        fontWeight: 500,
-                        textAlign: align as "left" | "right",
-                      }}
-                    >
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {trades.map((tr) => {
-                  const notional = Math.abs(Number(tr.quantity)) * Number(tr.price);
-                  const inflow = Number(tr.cashImpact) >= 0;
-                  return (
-                    <tr key={tr.id}>
-                      <td style={tdStyle}>{dateStr(tr.executedAt)}</td>
-                      <td style={{ ...tdStyle, fontWeight: 600, color: "#00183A" }}>
-                        {tr.type.toUpperCase()}
-                      </td>
-                      <td style={{ ...tdStyle, ...numeric, textAlign: "right" }}>
-                        {sharesFmt(tr.quantity)}
-                      </td>
-                      <td style={{ ...tdStyle, ...numeric, textAlign: "right" }}>
-                        {money(tr.price, tr.currency)}
-                      </td>
-                      <td style={{ ...tdStyle, ...numeric, textAlign: "right" }}>
-                        {money(notional, tr.currency)}
-                      </td>
-                      <td
-                        style={{
-                          ...tdStyle,
-                          ...numeric,
-                          textAlign: "right",
-                          color: inflow ? "#1F5C3A" : "#7A1F1F",
-                        }}
-                      >
-                        {inflow ? "+" : "−"}
-                        {money(tr.cashImpact, tr.currency)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* POST-MORTEM */}
-      <div>
-        <div style={SECTION_HEADER}>Post-mortem</div>
-        {pm ? (
-          <RecordedPostMortem
-            outcome={pm.outcome}
-            realisedReturnPct={pm.realisedReturnPct}
-            whatWorked={pm.whatWorked}
-            whatDidntWork={pm.whatDidntWork}
-            lessonsLearned={pm.lessonsLearned}
-            writtenAt={pm.writtenAt}
-            attachmentFilename={pm.attachmentBlobFilename}
-            attachmentUrl={`/api/funds/${slug}/theses/${thesisId}/post-mortem/attachment`}
-          />
-        ) : t.status === "closed" ? (
+      {/* ACTION: write post-mortem (closed) or add update (active) */}
+      {t.status === "closed" && !pm ? (
+        <div>
+          <div style={SECTION_HEADER}>Write the post-mortem</div>
           <PostMortemForm
             fundSlug={slug}
             thesisId={thesisId}
             defaultOutcome={defaultOutcome}
             realisedPnlDisplay={realisedPnlDisplay}
           />
-        ) : (
-          <div
-            style={{
-              background: "white",
-              border: "1px solid #D9D9D2",
-              padding: "16px 20px",
-              fontSize: 13,
-              color: "#9A9A8E",
-              fontFamily: "system-ui, sans-serif",
-              lineHeight: 1.5,
-            }}
-          >
-            {t.status === "active"
-              ? "This thesis is live. A post-mortem can be written once the position fully closes."
-              : "This thesis was abandoned without a completed position, so there's no post-mortem."}
-          </div>
-        )}
-      </div>
+        </div>
+      ) : t.status === "active" ? (
+        <div>
+          <div style={SECTION_HEADER}>Add an update</div>
+          <ThesisUpdateForm fundSlug={slug} thesisId={thesisId} />
+        </div>
+      ) : null}
     </main>
   );
 }
 
-const tdStyle: React.CSSProperties = {
-  padding: "10px 14px",
-  borderBottom: "1px solid #F0EFEA",
-  color: "#0A0A0A",
-  verticalAlign: "top",
-};
+// --- presentational helpers ---
 
-function RecordedPostMortem({
-  outcome,
-  realisedReturnPct,
-  whatWorked,
-  whatDidntWork,
-  lessonsLearned,
-  writtenAt,
-  attachmentFilename,
-  attachmentUrl,
+function TimelineItem({
+  color,
+  title,
+  date,
+  last,
+  children,
 }: {
-  outcome: string;
-  realisedReturnPct: string | null;
-  whatWorked: string | null;
-  whatDidntWork: string | null;
-  lessonsLearned: string;
-  writtenAt: Date | string;
-  attachmentFilename: string | null;
-  attachmentUrl: string;
+  color: string;
+  title: string;
+  date: string;
+  last: boolean;
+  children: React.ReactNode;
 }) {
-  const outcomeStyle =
-    outcome === "win"
-      ? { label: "Win", color: "#1F5C3A" }
-      : outcome === "loss"
-        ? { label: "Loss", color: "#7A1F1F" }
-        : { label: "Break-even", color: "#5A3F08" };
-  const block = (label: string, value: string | null) =>
-    value ? (
-      <div style={{ marginBottom: 14 }}>
-        <div style={META_LABEL}>{label}</div>
-        <div
-          style={{
-            fontSize: 13,
-            color: "#0A0A0A",
-            lineHeight: 1.55,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {value}
-        </div>
-      </div>
-    ) : null;
-
   return (
     <div
       style={{
-        background: "white",
-        border: "1px solid #D9D9D2",
-        padding: "18px 22px",
-        fontFamily: "system-ui, sans-serif",
+        position: "relative",
+        paddingLeft: 28,
+        paddingBottom: last ? 0 : 22,
+        // Connecting line (omit on the last item).
+        borderLeft: last ? "2px solid transparent" : "2px solid #E5E5DE",
+        marginLeft: 6,
       }}
     >
+      {/* Dot */}
+      <span
+        style={{
+          position: "absolute",
+          left: -7,
+          top: 1,
+          width: 12,
+          height: 12,
+          borderRadius: "50%",
+          background: color,
+          border: "2px solid white",
+          boxShadow: `0 0 0 1.5px ${color}`,
+        }}
+      />
       <div
         style={{
           display: "flex",
           alignItems: "baseline",
-          gap: 14,
-          marginBottom: 16,
-          paddingBottom: 12,
-          borderBottom: "1px solid #F0EFEA",
+          gap: 10,
+          marginBottom: 8,
         }}
       >
         <span
           style={{
-            fontSize: 11,
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-            fontWeight: 700,
-            color: outcomeStyle.color,
+            fontFamily: "system-ui, sans-serif",
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#00183A",
           }}
         >
-          {outcomeStyle.label}
+          {title}
         </span>
-        {realisedReturnPct != null ? (
-          <span style={{ ...numeric, fontSize: 13, color: "#00183A" }}>
-            {Number(realisedReturnPct) >= 0 ? "+" : ""}
-            {Number(realisedReturnPct).toFixed(2)}%
-          </span>
-        ) : null}
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "#9A9A8E" }}>
-          {dateStr(writtenAt)}
+        <span
+          style={{
+            ...numeric,
+            fontSize: 11,
+            color: "#9A9A8E",
+            marginLeft: "auto",
+          }}
+        >
+          {date}
         </span>
       </div>
-      {block("What worked", whatWorked)}
-      {block("What didn't work", whatDidntWork)}
-      {block("Lessons learned", lessonsLearned)}
-      {attachmentFilename ? (
-        <div style={{ marginTop: 6 }}>
-          <a
-            href={attachmentUrl}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              fontSize: 12,
-              color: "#00183A",
-              textDecoration: "none",
-              borderBottom: "1px solid #00183A",
-            }}
-          >
-            📄 {attachmentFilename} ↗
-          </a>
-        </div>
-      ) : null}
+      <div
+        style={{
+          background: "white",
+          border: "1px solid #D9D9D2",
+          padding: "14px 16px",
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Chip({
+  label,
+  value,
+  valueColor,
+}: {
+  label: string;
+  value: string;
+  valueColor?: string;
+}) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "baseline",
+        gap: 6,
+        background: "#FAFAF7",
+        border: "1px solid #E5E5DE",
+        padding: "4px 10px",
+        fontSize: 11,
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      <span style={{ color: "#6B6B66", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 10 }}>
+        {label}
+      </span>
+      <span style={{ ...numeric, color: valueColor ?? "#00183A", fontWeight: 600 }}>{value}</span>
+    </span>
+  );
+}
+
+function PMBlock({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "#6B6B66",
+          fontWeight: 500,
+          marginBottom: 3,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+        {value}
+      </div>
     </div>
   );
 }

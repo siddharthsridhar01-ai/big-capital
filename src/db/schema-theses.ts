@@ -135,6 +135,33 @@ export const thesisPostMortems = pgTable("thesis_post_mortems", {
 });
 
 // ---------------------------------------------------------------------------
+// thesis_updates table
+// ---------------------------------------------------------------------------
+
+/**
+ * A timestamped update on a live thesis — the "story" entries between the
+ * original thesis and its eventual post-mortem. An update may accompany a
+ * trade (transactionId set, written from the trade ticket's "update note")
+ * or stand alone (added from the thesis detail page). Free text by design;
+ * structured field revisions (conviction/target) can layer on later.
+ */
+export const thesisUpdates = pgTable("thesis_updates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  thesisId: uuid("thesis_id")
+    .notNull()
+    .references(() => theses.id, { onDelete: "cascade" }),
+  authorUserId: uuid("author_user_id")
+    .notNull()
+    .references(() => users.id),
+  // Set when the update was written alongside a trade. No .references() to
+  // avoid importing the transactions table here; the FK (ON DELETE SET NULL)
+  // is created by the migration.
+  transactionId: uuid("transaction_id"),
+  note: text("note").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
 // Type exports for use elsewhere
 // ---------------------------------------------------------------------------
 
@@ -142,3 +169,5 @@ export type Thesis = typeof theses.$inferSelect;
 export type NewThesis = typeof theses.$inferInsert;
 export type ThesisPostMortem = typeof thesisPostMortems.$inferSelect;
 export type NewThesisPostMortem = typeof thesisPostMortems.$inferInsert;
+export type ThesisUpdate = typeof thesisUpdates.$inferSelect;
+export type NewThesisUpdate = typeof thesisUpdates.$inferInsert;
