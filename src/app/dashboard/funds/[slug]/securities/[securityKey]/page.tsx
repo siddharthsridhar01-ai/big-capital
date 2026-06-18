@@ -648,6 +648,7 @@ export default async function FundSecurityPage({ params }: PageProps) {
                           </span>
                           <span style={{ ...numeric, fontSize: 11, color: "#9A9A8E" }}>
                             {new Date(th.openedAt).toLocaleDateString("en-GB", {
+                              day: "2-digit",
                               month: "short",
                               year: "numeric",
                             })}

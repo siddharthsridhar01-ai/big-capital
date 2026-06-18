@@ -6,6 +6,7 @@ import { eq, desc } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
+import PdfMemoCard from "@/components/PdfMemoCard";
 
 export const dynamic = "force-dynamic";
 
@@ -315,20 +316,11 @@ export default async function ThesesListPage({
                     >
                       {r.summary}
                       {r.memoBlobUrl ? (
-                        <div style={{ marginTop: 4 }}>
-                          <a
+                        <div style={{ marginTop: 8 }}>
+                          <PdfMemoCard
                             href={`/api/funds/${slug}/theses/${r.id}/memo`}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              fontSize: 11,
-                              color: "#00183A",
-                              textDecoration: "none",
-                              borderBottom: "1px solid #00183A",
-                            }}
-                          >
-                            View memo PDF →
-                          </a>
+                            filename={r.memoBlobFilename ?? "memo.pdf"}
+                          />
                         </div>
                       ) : null}
                     </td>
