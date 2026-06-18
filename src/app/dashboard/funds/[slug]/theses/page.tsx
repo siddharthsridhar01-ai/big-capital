@@ -306,7 +306,7 @@ export default async function ThesesListPage({
                       {r.memoBlobUrl ? (
                         <div style={{ marginTop: 4 }}>
                           <a
-                            href={r.memoBlobUrl}
+                            href={`/api/funds/${slug}/theses/${r.id}/memo`}
                             target="_blank"
                             rel="noreferrer"
                             style={{

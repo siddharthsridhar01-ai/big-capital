@@ -145,7 +145,10 @@ export async function POST(req: NextRequest) {
   // Upload to Blob
   try {
     const blob = await put(storagePath, buffer, {
-      access: "public",
+      // Store is configured private; "public" is rejected by the store.
+      // Retrieval is gated through GET /api/admin/attachments/[attachmentId]
+      // (uses get({access:"private"})).
+      access: "private",
       contentType: "application/pdf",
       addRandomSuffix: false, // we already prefix with UUID
     });

@@ -277,7 +277,10 @@ export async function POST(
     const blobPath = `theses/${fund.slug}/${Date.now()}_${safeFilename}`;
     try {
       const blob = await put(blobPath, memoFile, {
-        access: "public",
+        // Store is configured private; "public" is rejected by the store.
+        // Retrieval is gated through the authenticated streaming route
+        // GET /api/funds/[slug]/theses/[thesisId]/memo (uses get({access:"private"})).
+        access: "private",
         contentType: "application/pdf",
         addRandomSuffix: false,
       });

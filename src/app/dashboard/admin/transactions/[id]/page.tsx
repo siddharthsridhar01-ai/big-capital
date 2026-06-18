@@ -206,7 +206,7 @@ export default async function AdminTransactionDetailPage({
             {attachments.map((a) => (
               <a
                 key={a.id}
-                href={a.storageUrl}
+                href={`/api/admin/attachments/${a.id}`}
                 target="_blank"
                 rel="noreferrer"
                 style={{
