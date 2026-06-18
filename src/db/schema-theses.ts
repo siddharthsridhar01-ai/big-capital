@@ -85,6 +85,12 @@ export const theses = pgTable("theses", {
     precision: 24,
     scale: 6,
   }),
+  // Security price at the moment the thesis was formed — the reference for the
+  // opening target's upside (a fixed snapshot, not a live figure).
+  referencePriceNative: numeric("reference_price_native", {
+    precision: 24,
+    scale: 6,
+  }),
   holdingPeriod: holdingPeriodEnum("holding_period").notNull(),
 
   // Short text summary — required, surfaced in lists and thesis review panels
@@ -168,6 +174,12 @@ export const thesisUpdates = pgTable("thesis_updates", {
     scale: 4,
   }),
   newTargetPriceNative: numeric("new_target_price_native", {
+    precision: 24,
+    scale: 6,
+  }),
+  // Security price at the moment of this update — reference for the revised
+  // target's upside.
+  referencePriceNative: numeric("reference_price_native", {
     precision: 24,
     scale: 6,
   }),

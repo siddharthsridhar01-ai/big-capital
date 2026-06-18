@@ -17,9 +17,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
-import { funds as fundsTable } from "@/db/schema";
+import { funds as fundsTable, securities, prices } from "@/db/schema";
 import { theses, thesisUpdates } from "@/db/schema-theses";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { getOrCreateUser } from "@/lib/auth";
 import { put } from "@vercel/blob";
 
@@ -54,7 +54,7 @@ export async function POST(
   const fund = fundRows[0];
 
   const thesisRows = await db
-    .select({ id: theses.id, status: theses.status })
+    .select({ id: theses.id, status: theses.status, securityId: theses.securityId })
     .from(theses)
     .where(and(eq(theses.id, thesisId), eq(theses.fundId, fund.id)))
     .limit(1);
@@ -152,6 +152,16 @@ export async function POST(
     }
   }
 
+  // Capture reference price (latest stored close) at the moment of this update.
+  let referencePriceNative: string | null = null;
+  const refRows = await db
+    .select({ closePrice: prices.closePrice })
+    .from(prices)
+    .where(eq(prices.securityId, thesisRows[0].securityId))
+    .orderBy(desc(prices.date))
+    .limit(1);
+  if (refRows.length > 0) referencePriceNative = refRows[0].closePrice;
+
   try {
     await db.insert(thesisUpdates).values({
       thesisId,
@@ -162,6 +172,7 @@ export async function POST(
       newHoldingPeriod,
       newTargetWeightPct,
       newTargetPriceNative,
+      referencePriceNative,
       attachmentBlobUrl,
       attachmentBlobFilename,
     });

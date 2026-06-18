@@ -19,7 +19,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
-import { funds as fundsTable, securities } from "@/db/schema";
+import { funds as fundsTable, securities, prices } from "@/db/schema";
 import { theses } from "@/db/schema-theses";
 import { eq, desc, and } from "drizzle-orm";
 import { getOrCreateUser } from "@/lib/auth";
@@ -298,6 +298,17 @@ export async function POST(
     }
   }
 
+  // Capture the reference price (latest stored close) at formation — the
+  // basis for the opening target's upside. Null if no price on record yet.
+  let referencePriceNative: string | null = null;
+  const refRows = await db
+    .select({ closePrice: prices.closePrice })
+    .from(prices)
+    .where(eq(prices.securityId, securityId))
+    .orderBy(desc(prices.date))
+    .limit(1);
+  if (refRows.length > 0) referencePriceNative = refRows[0].closePrice;
+
   // Insert thesis
   const [inserted] = await db
     .insert(theses)
@@ -310,6 +321,7 @@ export async function POST(
       summary: summaryTrimmed,
       targetWeightPct,
       targetPriceNative,
+      referencePriceNative,
       memoBlobUrl,
       memoBlobFilename,
       memoSizeBytes,

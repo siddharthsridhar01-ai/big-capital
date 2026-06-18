@@ -51,6 +51,14 @@ const PERIOD_LABELS: Record<string, string> = {
   indefinite: "Indefinite",
 };
 
+// Compact, duration-first labels for the headline Horizon tile.
+const HORIZON_LABELS: Record<string, string> = {
+  short: "< 3 months",
+  medium: "3–12 months",
+  long: "1–3 years",
+  indefinite: "Indefinite",
+};
+
 const SECTION_HEADER: React.CSSProperties = {
   fontSize: 10,
   letterSpacing: "0.08em",
@@ -149,6 +157,7 @@ export default async function ThesisDetailPage({
       holdingPeriod: theses.holdingPeriod,
       targetWeightPct: theses.targetWeightPct,
       targetPriceNative: theses.targetPriceNative,
+      referencePriceNative: theses.referencePriceNative,
       summary: theses.summary,
       openedAt: theses.openedAt,
       closedAt: theses.closedAt,
@@ -214,6 +223,7 @@ export default async function ThesisDetailPage({
       newHoldingPeriod: thesisUpdates.newHoldingPeriod,
       newTargetWeightPct: thesisUpdates.newTargetWeightPct,
       newTargetPriceNative: thesisUpdates.newTargetPriceNative,
+      referencePriceNative: thesisUpdates.referencePriceNative,
       attachmentFilename: thesisUpdates.attachmentBlobFilename,
       author: users.fullName,
     })
@@ -317,6 +327,67 @@ export default async function ThesisDetailPage({
   const memoUrl = `/api/funds/${slug}/theses/${thesisId}/memo`;
   const pmAttachmentUrl = `/api/funds/${slug}/theses/${thesisId}/post-mortem/attachment`;
 
+  // ---- Derive current headline values (latest revision, else opening) ----
+  let curConviction = t.conviction as string | null;
+  let curHolding = t.holdingPeriod as string | null;
+  let curTW = t.targetWeightPct as string | null;
+  let curTP = t.targetPriceNative as string | null;
+  let curTPRef = t.referencePriceNative as string | null;
+  let convRevised = false;
+  let holdRevised = false;
+  let twRevised = false;
+  let tpRevised = false;
+  for (const u of updates) {
+    if (u.newConviction) {
+      curConviction = u.newConviction;
+      convRevised = true;
+    }
+    if (u.newHoldingPeriod) {
+      curHolding = u.newHoldingPeriod;
+      holdRevised = true;
+    }
+    if (u.newTargetWeightPct) {
+      curTW = u.newTargetWeightPct;
+      twRevised = true;
+    }
+    if (u.newTargetPriceNative) {
+      curTP = u.newTargetPriceNative;
+      curTPRef = u.referencePriceNative;
+      tpRevised = true;
+    }
+  }
+
+  const convRank: Record<string, number> = { low: 1, medium: 2, high: 3 };
+  const arrowFor = (cur: number, base: number) =>
+    cur > base ? " ↑" : cur < base ? " ↓" : "";
+  const convArrow = convRevised
+    ? arrowFor(convRank[curConviction ?? ""] ?? 0, convRank[t.conviction ?? ""] ?? 0)
+    : "";
+  const twArrow = twRevised
+    ? arrowFor(Number(curTW), Number(t.targetWeightPct))
+    : "";
+  const tpArrow = tpRevised
+    ? arrowFor(Number(curTP), Number(t.targetPriceNative))
+    : "";
+
+  // Upside = snapshot vs the price when the (current) target was set.
+  // For a short thesis, profit is to the downside, so invert.
+  let upsidePct: number | null = null;
+  if (curTP != null && curTPRef != null && Number(curTPRef) > 0) {
+    const raw = (Number(curTP) - Number(curTPRef)) / Number(curTPRef);
+    upsidePct = (t.direction === "short" ? -raw : raw) * 100;
+  }
+
+  const rating =
+    t.direction === "long" ? "Buy" : t.direction === "short" ? "Short" : "—";
+  const ratingColor =
+    t.direction === "long" ? "#1F5C3A" : t.direction === "short" ? "#7A1F1F" : "#00183A";
+
+  const AMBER = "#8A6D1F";
+  const MUTED = "#9A9A8E";
+  const capFirst = (s: string | null) =>
+    s ? s.charAt(0).toUpperCase() + s.slice(1) : "—";
+
   return (
     <main style={{ padding: "28px 32px 64px", maxWidth: 820 }}>
       <div style={{ marginBottom: 6 }}>
@@ -384,12 +455,63 @@ export default async function ThesisDetailPage({
           fontFamily: "system-ui, sans-serif",
           fontSize: 12,
           color: "#6B6B66",
-          marginBottom: 24,
+          marginBottom: 16,
         }}
       >
-        {t.direction ? `${t.direction} · ` : ""}
-        {t.conviction} conviction · {PERIOD_LABELS[t.holdingPeriod] ?? t.holdingPeriod} ·
-        opened by {t.authorName}
+        opened by {t.authorName} · {dateStr(t.openedAt)}
+      </div>
+
+      {/* HEADLINE STATS */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+          gap: 8,
+          marginBottom: 26,
+        }}
+      >
+        <StatTile
+          label="Conviction"
+          value={capFirst(curConviction)}
+          sub={convRevised ? `revised${convArrow}` : "\u00A0"}
+          subColor={convRevised ? AMBER : MUTED}
+        />
+        <StatTile
+          label="Rating"
+          value={rating}
+          valueColor={ratingColor}
+          sub={t.direction ?? "\u00A0"}
+        />
+        <StatTile
+          label="Horizon"
+          value={HORIZON_LABELS[curHolding ?? ""] ?? curHolding ?? "—"}
+          sub={holdRevised ? "revised" : "\u00A0"}
+          subColor={holdRevised ? AMBER : MUTED}
+        />
+        <StatTile
+          label="Target wt."
+          value={curTW != null ? `${(Number(curTW) * 100).toFixed(1)}%` : "—"}
+          sub={twRevised ? `revised${twArrow}` : "of NAV"}
+          subColor={twRevised ? AMBER : MUTED}
+        />
+        <StatTile
+          label="Target px."
+          value={curTP != null ? money(curTP, secCur) : "—"}
+          sub={tpRevised ? `revised${tpArrow}` : "\u00A0"}
+          subColor={tpRevised ? AMBER : MUTED}
+        />
+        <StatTile
+          label="Upside"
+          value={
+            upsidePct != null
+              ? `${upsidePct >= 0 ? "+" : ""}${upsidePct.toFixed(1)}%`
+              : "—"
+          }
+          valueColor={
+            upsidePct == null ? "#00183A" : upsidePct >= 0 ? "#1F5C3A" : "#7A1F1F"
+          }
+          sub={curTPRef != null ? `vs ${money(curTPRef, secCur)}` : "\u00A0"}
+        />
       </div>
 
       {/* TIMELINE */}
@@ -703,6 +825,62 @@ function TimelineItem({
         }}
       >
         {children}
+      </div>
+    </div>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  sub,
+  valueColor = "#00183A",
+  subColor = "#9A9A8E",
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  valueColor?: string;
+  subColor?: string;
+}) {
+  return (
+    <div
+      style={{
+        background: "white",
+        border: "1px solid #E5E5DE",
+        borderRadius: 8,
+        padding: "10px 11px",
+        fontFamily: "system-ui, sans-serif",
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          letterSpacing: "0.03em",
+          textTransform: "uppercase",
+          color: "#6B6B66",
+          marginBottom: 5,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 18,
+          color: valueColor,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {value}
+      </div>
+      <div style={{ fontSize: 11, color: subColor, marginTop: 3, whiteSpace: "nowrap" }}>
+        {sub ?? "\u00A0"}
       </div>
     </div>
   );
