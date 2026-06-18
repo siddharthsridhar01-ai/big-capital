@@ -483,6 +483,49 @@ export default function TradeTicket(props: TradeTicketProps) {
     ? ["buy", "sell", "short", "cover"]
     : ["buy", "sell"];
 
+  // ===== Per-side disable logic based on current position =====
+  // Trade intent guard. A side is disabled when it doesn't logically apply
+  // given the current holding state:
+  //   - SELL: only valid when long (qty > 0). With no position, "sell" would
+  //     functionally be a short; the user should click SHORT explicitly to
+  //     express that intent.
+  //   - COVER: only valid when short (qty < 0). With no position, "cover"
+  //     is nonsensical (nothing to cover).
+  //   - BUY: always valid (opens or adds to a long; if currently short,
+  //     would partially or fully cover — but the user should use COVER for
+  //     clarity. We allow BUY anyway because adding-to-long is the most
+  //     common intent.)
+  //   - SHORT: always valid (opens or adds to a short).
+  const isCurrentlyLong = currentQty.gt(0);
+  const isCurrentlyShort = currentQty.lt(0);
+  const sideDisabled: Record<Side, boolean> = {
+    buy: false,
+    sell: !isCurrentlyLong,
+    short: false,
+    cover: !isCurrentlyShort,
+  };
+  const sideDisabledReason: Record<Side, string | null> = {
+    buy: null,
+    sell: !isCurrentlyLong
+      ? "You don't own this position — use SHORT to bet against it"
+      : null,
+    short: null,
+    cover: !isCurrentlyShort
+      ? "No short position to cover"
+      : null,
+  };
+
+  // If the user navigated here and the default "buy" side stays, that's fine.
+  // But if they had selected "sell" or "cover" on a previous render and the
+  // position changed (e.g. fully closed), reset to "buy" to avoid a stuck
+  // disabled-but-active state.
+  useEffect(() => {
+    if (sideDisabled[side]) {
+      setSide("buy");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCurrentlyLong, isCurrentlyShort]);
+
   // ===== Render =====
   return (
     <div
@@ -525,20 +568,35 @@ export default function TradeTicket(props: TradeTicketProps) {
       {/* SIDE SELECTOR */}
       <Section label="Side">
         <div style={{ display: "flex", gap: 0 }}>
-          {sides.map((s) => (
-            <button
-              key={s}
-              onClick={() => setSide(s)}
-              style={{
-                ...sideButtonStyle,
-                background: s === side ? "#00183A" : "white",
-                color: s === side ? "white" : "#6B6B66",
-                fontWeight: s === side ? 600 : 400,
-              }}
-            >
-              {s.toUpperCase()}
-            </button>
-          ))}
+          {sides.map((s) => {
+            const isDisabled = sideDisabled[s];
+            const isActive = s === side;
+            return (
+              <button
+                key={s}
+                onClick={() => !isDisabled && setSide(s)}
+                disabled={isDisabled}
+                title={sideDisabledReason[s] ?? undefined}
+                style={{
+                  ...sideButtonStyle,
+                  background: isActive
+                    ? "#00183A"
+                    : isDisabled
+                      ? "#F5F4EE"
+                      : "white",
+                  color: isActive
+                    ? "white"
+                    : isDisabled
+                      ? "#C8C8C0"
+                      : "#6B6B66",
+                  fontWeight: isActive ? 600 : 400,
+                  cursor: isDisabled ? "not-allowed" : "pointer",
+                }}
+              >
+                {s.toUpperCase()}
+              </button>
+            );
+          })}
         </div>
       </Section>
 
@@ -1962,6 +2020,8 @@ function ConfirmModal({
                 border: "1px solid #E5E5DE",
                 padding: "10px 14px",
                 lineHeight: 1.5,
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
               }}
             >
               {rationale}
@@ -2121,6 +2181,9 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "system-ui, sans-serif",
   color: "#0A0A0A",
   background: "white",
+  boxSizing: "border-box",
+  wordBreak: "break-word",
+  overflowWrap: "break-word",
 };
 
 const sideButtonStyle: React.CSSProperties = {

@@ -1,5 +1,10 @@
 import { db } from "@/db/client";
-import { funds as fundsTable, fundConstraints, navSnapshots } from "@/db/schema";
+import {
+  funds as fundsTable,
+  fundConstraints,
+  navSnapshots,
+  transactions,
+} from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
@@ -11,6 +16,8 @@ import {
 } from "@/lib/portfolio";
 import { computeDailyChange, computeUnrealisedPnL } from "@/lib/derived";
 import LiveHoldingsTable from "@/components/LiveHoldingsTable";
+import NavChart from "@/components/NavChart";
+import ExposuresPanel from "@/components/ExposuresPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +47,25 @@ export default async function FundPage({
     .from(fundConstraints)
     .where(eq(fundConstraints.fundId, fund.id));
 
+  // Dedupe by constraintType — repeat setup runs accidentally insert
+  // duplicate rows. The constraint engine ignores duplicates; the display
+  // also shows only one per type. If a hard and soft version exist for the
+  // same type, prefer the hard (more restrictive).
+  const dedupedConstraints = (() => {
+    const map = new Map<string, typeof constraints[number]>();
+    for (const c of constraints) {
+      const existing = map.get(c.constraintType);
+      if (!existing || (c.isHard && !existing.isHard)) {
+        map.set(c.constraintType, c);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      // Hard ones first, then alpha within each group
+      if (a.isHard !== b.isHard) return a.isHard ? -1 : 1;
+      return a.constraintType.localeCompare(b.constraintType);
+    });
+  })();
+
   const latestNav = await db
     .select()
     .from(navSnapshots)
@@ -64,6 +90,41 @@ export default async function FundPage({
   // Previous close prices for held positions — for daily change display
   const heldSecurityIds = Array.from(liveState.positions.keys());
   const previousCloses = await loadPreviousClosePrices(heldSecurityIds);
+
+  // === NAV chart data points ===
+  // Combine:
+  //  1. The inception point (£100k at fund.inceptionDate)
+  //  2. Daily NAV snapshots from the cron job (when accumulated)
+  //  3. NAV at each transaction date (computed from transactions ledger)
+  //  4. The live NAV (added by the chart component itself)
+  // We don't have rich daily snapshots yet — over time the cron will populate
+  // them and this chart will get richer organically.
+  const navPoints: { date: string; nav: number; event?: string }[] = [];
+  const inceptionStr = String(fund.inceptionDate).slice(0, 10);
+  navPoints.push({
+    date: inceptionStr,
+    nav: startingNav,
+    event: "Inception",
+  });
+
+  // Pull NAV snapshots (when daily cron has accumulated them)
+  const snapshots = await db
+    .select({ date: navSnapshots.date, nav: navSnapshots.nav })
+    .from(navSnapshots)
+    .where(eq(navSnapshots.fundId, fund.id))
+    .orderBy(navSnapshots.date);
+  for (const s of snapshots) {
+    const dateStr = String(s.date).slice(0, 10);
+    if (dateStr !== inceptionStr) {
+      navPoints.push({ date: dateStr, nav: Number(s.nav) });
+    }
+  }
+
+  // For dates between inception and today where we have transactions but no
+  // NAV snapshot, the NAV at the transaction moment is unchanged by the
+  // transaction itself (cash flows into/out of position value at execution
+  // price). So we don't need to interpolate trade dates — they're already on
+  // the curve. Once daily snapshots fill in, the line gets smoother.
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-GB", {
@@ -134,6 +195,21 @@ export default async function FundPage({
             {fund.strategyDescription}
           </div>
         </div>
+        <Link
+          href={`/dashboard/funds/${fund.slug}/universe`}
+          style={{
+            fontFamily: "system-ui, sans-serif",
+            fontSize: 12,
+            color: "#00183A",
+            textDecoration: "none",
+            border: "1px solid #00183A",
+            padding: "8px 14px",
+            background: "white",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Browse universe →
+        </Link>
       </div>
 
       <div
@@ -178,8 +254,8 @@ export default async function FundPage({
         />
         <MetricCard
           label="Constraints"
-          value={String(constraints.length)}
-          sub={`${constraints.filter((c) => c.isHard).length} hard, ${constraints.filter((c) => !c.isHard).length} soft`}
+          value={String(dedupedConstraints.length)}
+          sub={`${dedupedConstraints.filter((c) => c.isHard).length} hard, ${dedupedConstraints.filter((c) => !c.isHard).length} soft`}
         />
         <MetricCard
           label="As of"
@@ -187,6 +263,55 @@ export default async function FundPage({
           sub={latestNav.length > 0 ? "Latest NAV snapshot" : "Computed live"}
         />
       </div>
+
+      {/* NAV chart since inception */}
+      <div style={{ marginBottom: 28 }}>
+        <NavChart
+          fundName={fund.name}
+          fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
+          startingNav={startingNav}
+          inceptionDate={inceptionStr}
+          points={navPoints}
+          liveNav={liveNavBase}
+        />
+      </div>
+
+      <ExposuresPanel
+        baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
+        navBase={liveState.navBase.toNumber()}
+        positions={Array.from(liveState.positions.values()).map((p) => ({
+          securityId: p.securityId,
+          ticker: p.ticker,
+          name: p.name,
+          exchange: p.exchange,
+          currency: p.currency,
+          gicsSector: p.gicsSector,
+          quantity: p.quantity.toNumber(),
+          marketValueBase: p.marketValueBase
+            ? p.marketValueBase.toNumber()
+            : null,
+        }))}
+        cashByCurrency={
+          new Map(
+            Array.from(liveState.cashByCurrency.entries()).map(([k, v]) => [
+              k,
+              v.toNumber(),
+            ])
+          )
+        }
+        sectorExposures={
+          new Map(
+            Array.from(liveState.sectorExposures.entries()).map(([k, v]) => [
+              k,
+              v.toNumber(),
+            ])
+          )
+        }
+        longExposure={liveState.longExposure.toNumber()}
+        shortExposure={liveState.shortExposure.toNumber()}
+        grossExposure={liveState.grossExposure.toNumber()}
+        netExposure={liveState.netExposure.toNumber()}
+      />
 
       {liveState.positions.size === 0 ? (
         <div
@@ -261,7 +386,7 @@ export default async function FundPage({
             fontWeight: 500,
           }}
         >
-          Fund constraints ({constraints.length})
+          Fund constraints ({dedupedConstraints.length})
         </summary>
         <table
           style={{
@@ -300,7 +425,7 @@ export default async function FundPage({
                   fontWeight: 500,
                 }}
               >
-                Value
+                Limit
               </th>
               <th
                 style={{
@@ -319,24 +444,27 @@ export default async function FundPage({
             </tr>
           </thead>
           <tbody>
-            {constraints.map((c) => (
+            {dedupedConstraints.map((c) => (
               <tr key={c.id}>
                 <td
                   style={{
                     padding: "9px 0",
                     borderBottom: "1px solid rgba(217,217,210,0.4)",
+                    color: "#0A0A0A",
                   }}
                 >
-                  {c.constraintType}
+                  {prettyConstraintLabel(c.constraintType)}
                 </td>
                 <td
                   style={{
                     padding: "9px 0",
                     borderBottom: "1px solid rgba(217,217,210,0.4)",
                     textAlign: "right",
+                    ...numeric,
+                    color: "#0A0A0A",
                   }}
                 >
-                  {JSON.stringify(c.value)}
+                  {prettyConstraintValue(c.constraintType, c.value)}
                 </td>
                 <td
                   style={{
@@ -344,9 +472,13 @@ export default async function FundPage({
                     borderBottom: "1px solid rgba(217,217,210,0.4)",
                     textAlign: "right",
                     color: c.isHard ? "#7A1F1F" : "#5A3F08",
+                    fontSize: 11,
+                    letterSpacing: "0.05em",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
                   }}
                 >
-                  {c.isHard ? "Hard (blocks)" : "Soft (warns)"}
+                  {c.isHard ? "Blocked" : "Warning"}
                 </td>
               </tr>
             ))}
@@ -355,6 +487,46 @@ export default async function FundPage({
       </details>
     </main>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Constraint display helpers
+// ---------------------------------------------------------------------------
+
+function prettyConstraintLabel(type: string): string {
+  const labels: Record<string, string> = {
+    universe_only: "Investable universe",
+    long_only: "Long-only",
+    max_position_pct: "Max position size",
+    min_cash_pct: "Min cash holding",
+    max_cash_pct: "Max cash holding",
+    max_single_sector_pct: "Max single sector",
+    max_position_count: "Max position count",
+    max_gross_exposure: "Max gross exposure",
+    max_net_exposure: "Max net exposure",
+  };
+  return labels[type] ?? type;
+}
+
+function prettyConstraintValue(type: string, value: unknown): string {
+  // Boolean toggles → "Enabled"
+  if (typeof value === "boolean") return value ? "Enabled" : "Disabled";
+  // Position count is an integer (not a ratio)
+  if (type === "max_position_count" && typeof value === "number") {
+    return `${value} positions`;
+  }
+  // Gross/net exposure are multiples (1.5x, 0.2x band)
+  if (
+    (type === "max_gross_exposure" || type === "max_net_exposure") &&
+    typeof value === "number"
+  ) {
+    return `${value.toFixed(2)}×`;
+  }
+  // All other numeric constraints are percentages (0.08 → 8%)
+  if (typeof value === "number") {
+    return `${(value * 100).toFixed(2)}%`;
+  }
+  return String(value);
 }
 
 function MetricCard({
