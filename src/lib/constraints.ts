@@ -18,6 +18,14 @@
 import Decimal from "decimal.js";
 import type { Currency, Position } from "./performance";
 
+/**
+ * A fund holding more than this fraction of NAV in cash is treated as still
+ * being deployed (building its book). While near-empty, a cash-reducing trade
+ * (buy/cover) does not trigger the max_cash_pct soft breach — the "cash too
+ * high" nudge would just be noise during initial build-out. Tunable.
+ */
+const NEAR_EMPTY_CASH_THRESHOLD = new Decimal(0.5);
+
 export type ConstraintType =
   | "universe_only"
   | "max_position_pct"
@@ -260,6 +268,22 @@ function evaluateConstraint(
       if (ctx.navBase.isZero()) return null;
       const cashPct = cashBase.dividedBy(ctx.navBase);
       if (cashPct.greaterThan(limit)) {
+        // Suppress during initial deployment: a cash-reducing trade (buy or
+        // cover) in a fund that's still majority cash is just building the
+        // book, so a "cash too high" nudge is noise. Once the fund is
+        // majority-invested the constraint applies normally — including on
+        // buys — so a mature fund that lets cash drift up still gets flagged.
+        const isDeploying = trade.side === "buy" || trade.side === "cover";
+        let preCashBase = new Decimal(0);
+        for (const [ccy, amt] of ctx.cashByCurrency) {
+          preCashBase = preCashBase.plus(
+            convertToBase(amt, ccy, ctx.baseCurrency, ctx.date, ctx.fxRates)
+          );
+        }
+        const preCashPct = preCashBase.dividedBy(ctx.navBase);
+        if (isDeploying && preCashPct.greaterThan(NEAR_EMPTY_CASH_THRESHOLD)) {
+          return null;
+        }
         return {
           constraintId: constraint.id,
           constraintType: "max_cash_pct",

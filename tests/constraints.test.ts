@@ -228,15 +228,42 @@ describe("min_cash_pct", () => {
 });
 
 describe("max_cash_pct", () => {
-  it("flags when cash exceeds the ceiling", () => {
-    // Fund with cash = NAV (no positions), starting at 100% cash > 20% limit
+  it("suppresses the breach on a deploying buy while the fund is still majority cash", () => {
+    // Near-empty fund (100% cash). A buy is building the book, so the
+    // cash-max nudge is suppressed during deployment.
     const result = checkTrade(
       [constraint("max_cash_pct", 0.2, false)],
       makeTrade({ quantity: new Decimal(10) }), // tiny buy — cash still > 20%
       makeCtx(),
       PRICES
     );
+    expect(
+      result.softViolations.filter((v) => v.constraintType === "max_cash_pct")
+    ).toHaveLength(0);
+  });
+
+  it("still flags cash-max once the fund is majority invested", () => {
+    // Fund is mostly deployed (cash = 15% of NAV); a small buy leaves cash
+    // above the 10% ceiling, so the breach fires normally.
+    const result = checkTrade(
+      [constraint("max_cash_pct", 0.1, false)],
+      makeTrade({ quantity: new Decimal(10) }),
+      makeCtx({ cashByCurrency: new Map([["GBP", new Decimal(15000)]]) }),
+      PRICES
+    );
     expect(result.softViolations).toHaveLength(1);
+    expect(result.softViolations[0].constraintType).toBe("max_cash_pct");
+  });
+
+  it("still flags when a sell raises cash above the ceiling in a near-empty fund", () => {
+    // A sell/short raises cash rather than deploying it, so suppression does
+    // not apply even when the fund is majority cash.
+    const result = checkTrade(
+      [constraint("max_cash_pct", 0.2, false)],
+      makeTrade({ side: "short", quantity: new Decimal(10) }),
+      makeCtx(),
+      PRICES
+    );
     expect(result.softViolations[0].constraintType).toBe("max_cash_pct");
   });
 });
