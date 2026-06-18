@@ -280,7 +280,16 @@ export default async function ThesesListPage({
                           color: "#00183A",
                         }}
                       >
-                        {r.ticker}
+                        <Link
+                          href={`/dashboard/funds/${fund.slug}/theses/${r.id}`}
+                          style={{
+                            color: "#00183A",
+                            textDecoration: "none",
+                            borderBottom: "1px solid #C8C8C0",
+                          }}
+                        >
+                          {r.ticker}
+                        </Link>
                       </div>
                       <div
                         style={{

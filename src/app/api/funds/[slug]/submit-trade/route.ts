@@ -500,6 +500,7 @@ export async function POST(
   // (Phase 4 hardening territory.)
 
   let newTransactionId: string;
+  let closedThesisId: string | null = null;
   try {
     // 1) Insert the transaction row
     const txnInsert = await db
@@ -630,6 +631,21 @@ export async function POST(
           })
           .where(eq(positionsTable.id, openPos[0].id));
       }
+
+      // Phase 2c.3: a full close retires the linked thesis. Move an active
+      // thesis to "closed" (awaiting post-mortem) and capture its id so we
+      // can redirect the PM straight to the post-mortem prompt.
+      if (linkedThesis && linkedThesis.status === "active") {
+        await db
+          .update(thesesTable)
+          .set({
+            status: "closed",
+            closedAt: executionDate,
+            updatedAt: executionDate,
+          })
+          .where(eq(thesesTable.id, linkedThesis.id));
+        closedThesisId = linkedThesis.id;
+      }
     }
   } catch (err) {
     console.error("[submit-trade] write failed:", err);
@@ -645,6 +661,8 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     transactionId: newTransactionId,
-    redirectTo: `/dashboard/funds/${slug}`,
+    redirectTo: closedThesisId
+      ? `/dashboard/funds/${slug}/theses/${closedThesisId}?prompt=postmortem`
+      : `/dashboard/funds/${slug}`,
   });
 }
