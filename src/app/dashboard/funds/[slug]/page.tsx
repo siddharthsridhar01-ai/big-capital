@@ -91,13 +91,6 @@ export default async function FundPage({
   const previousCloses = await loadPreviousClosePrices(heldSecurityIds);
 
   // === NAV chart data points ===
-  // Combine:
-  //  1. The inception point (£100k at fund.inceptionDate)
-  //  2. Daily NAV snapshots from the cron job (when accumulated)
-  //  3. NAV at each transaction date (computed from transactions ledger)
-  //  4. The live NAV (added by the chart component itself)
-  // We don't have rich daily snapshots yet — over time the cron will populate
-  // them and this chart will get richer organically.
   const navPoints: { date: string; nav: number; event?: string }[] = [];
   const inceptionStr = String(fund.inceptionDate).slice(0, 10);
   navPoints.push({
@@ -106,7 +99,6 @@ export default async function FundPage({
     event: "Inception",
   });
 
-  // Pull NAV snapshots (when daily cron has accumulated them)
   const snapshots = await db
     .select({ date: navSnapshots.date, nav: navSnapshots.nav })
     .from(navSnapshots)
@@ -118,12 +110,6 @@ export default async function FundPage({
       navPoints.push({ date: dateStr, nav: Number(s.nav) });
     }
   }
-
-  // For dates between inception and today where we have transactions but no
-  // NAV snapshot, the NAV at the transaction moment is unchanged by the
-  // transaction itself (cash flows into/out of position value at execution
-  // price). So we don't need to interpolate trade dates — they're already on
-  // the curve. Once daily snapshots fill in, the line gets smoother.
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-GB", {
@@ -194,21 +180,38 @@ export default async function FundPage({
             {fund.strategyDescription}
           </div>
         </div>
-        <Link
-          href={`/dashboard/funds/${fund.slug}/universe`}
-          style={{
-            fontFamily: "system-ui, sans-serif",
-            fontSize: 12,
-            color: "#00183A",
-            textDecoration: "none",
-            border: "1px solid #00183A",
-            padding: "8px 14px",
-            background: "white",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Browse universe →
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link
+            href={`/dashboard/funds/${fund.slug}/theses`}
+            style={{
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 12,
+              color: "#00183A",
+              textDecoration: "none",
+              border: "1px solid #00183A",
+              padding: "8px 14px",
+              background: "white",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Theses →
+          </Link>
+          <Link
+            href={`/dashboard/funds/${fund.slug}/universe`}
+            style={{
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 12,
+              color: "#00183A",
+              textDecoration: "none",
+              border: "1px solid #00183A",
+              padding: "8px 14px",
+              background: "white",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Browse universe →
+          </Link>
+        </div>
       </div>
 
       <div
@@ -508,20 +511,16 @@ function prettyConstraintLabel(type: string): string {
 }
 
 function prettyConstraintValue(type: string, value: unknown): string {
-  // Boolean toggles → "Enabled"
   if (typeof value === "boolean") return value ? "Enabled" : "Disabled";
-  // Position count is an integer (not a ratio)
   if (type === "max_position_count" && typeof value === "number") {
     return `${value} positions`;
   }
-  // Gross/net exposure are multiples (1.5x, 0.2x band)
   if (
     (type === "max_gross_exposure" || type === "max_net_exposure") &&
     typeof value === "number"
   ) {
     return `${value.toFixed(2)}×`;
   }
-  // All other numeric constraints are percentages (0.08 → 8%)
   if (typeof value === "number") {
     return `${(value * 100).toFixed(2)}%`;
   }
