@@ -7,7 +7,9 @@ import {
   positions,
   transactions,
   fxRates,
+  users,
 } from "@/db/schema";
+import { theses, thesisPostMortems } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import Link from "next/link";
@@ -97,6 +99,27 @@ export default async function FundSecurityPage({ params }: PageProps) {
     .orderBy(desc(positions.openedAt))
     .limit(1);
   const currentPosition = positionRows[0];
+
+  // Theses written on this ticker in this fund (institutional memory).
+  // Newest first; left-join the post-mortem so we can show the outcome.
+  const thesisHistory = await db
+    .select({
+      id: theses.id,
+      status: theses.status,
+      conviction: theses.conviction,
+      direction: theses.direction,
+      summary: theses.summary,
+      openedAt: theses.openedAt,
+      closedAt: theses.closedAt,
+      authorName: users.fullName,
+      outcome: thesisPostMortems.outcome,
+    })
+    .from(theses)
+    .innerJoin(users, eq(theses.authorUserId, users.id))
+    .leftJoin(thesisPostMortems, eq(thesisPostMortems.thesisId, theses.id))
+    .where(and(eq(theses.fundId, fund.id), eq(theses.securityId, security.id)))
+    .orderBy(desc(theses.openedAt))
+    .limit(12);
 
   // Recent transactions in this fund × security
   const txnHistory = await db
@@ -571,10 +594,160 @@ export default async function FundSecurityPage({ params }: PageProps) {
               </div>
             )}
           </div>
+
+          <div style={{ marginTop: 24 }}>
+            <SectionLabel>Theses on this ticker</SectionLabel>
+            {thesisHistory.length > 0 ? (
+              <div
+                style={{
+                  background: "white",
+                  border: "1px solid #D9D9D2",
+                  fontFamily: "system-ui, sans-serif",
+                }}
+              >
+                {thesisHistory.map((th, idx) => {
+                  const stt = thStatusStyle(th.status);
+                  const oc = th.outcome ? outcomeStyle(th.outcome) : null;
+                  const excerpt =
+                    th.summary.length > 130
+                      ? th.summary.slice(0, 130).trimEnd() + "…"
+                      : th.summary;
+                  return (
+                    <Link
+                      key={th.id}
+                      href={`/dashboard/funds/${slug}/theses/${th.id}`}
+                      style={{ textDecoration: "none", display: "block" }}
+                    >
+                      <div
+                        style={{
+                          padding: "11px 14px",
+                          borderBottom:
+                            idx < thesisHistory.length - 1
+                              ? "1px solid rgba(217,217,210,0.4)"
+                              : "none",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "baseline",
+                            marginBottom: 4,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 10,
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              fontWeight: 600,
+                              color: stt.color,
+                            }}
+                          >
+                            {stt.label}
+                          </span>
+                          <span style={{ ...numeric, fontSize: 11, color: "#9A9A8E" }}>
+                            {new Date(th.openedAt).toLocaleDateString("en-GB", {
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "#0A0A0A",
+                            lineHeight: 1.45,
+                            wordBreak: "break-word",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {excerpt}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "#9A9A8E",
+                            marginTop: 5,
+                            display: "flex",
+                            gap: 6,
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span style={{ textTransform: "capitalize" }}>
+                            {th.conviction} conviction
+                          </span>
+                          {th.direction ? (
+                            <>
+                              <span>·</span>
+                              <span style={{ textTransform: "capitalize" }}>
+                                {th.direction}
+                              </span>
+                            </>
+                          ) : null}
+                          {oc ? (
+                            <span
+                              style={{
+                                marginLeft: "auto",
+                                color: oc.color,
+                                fontWeight: 600,
+                                textTransform: "uppercase",
+                                letterSpacing: "0.04em",
+                              }}
+                            >
+                              {oc.label}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "white",
+                  border: "1px solid #D9D9D2",
+                  padding: "14px 18px",
+                  fontFamily: "system-ui, sans-serif",
+                  fontSize: 12,
+                  color: "#6B6B66",
+                }}
+              >
+                No theses recorded for {security.ticker} in {fund.name} yet.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </main>
   );
+}
+
+function thStatusStyle(status: string): { label: string; color: string } {
+  switch (status) {
+    case "active":
+      return { label: "Active", color: "#1F5C3A" };
+    case "closed":
+      return { label: "Closed", color: "#5A3F08" };
+    case "post_mortem":
+      return { label: "Reviewed", color: "#00183A" };
+    default:
+      return { label: "Abandoned", color: "#9A9A8E" };
+  }
+}
+
+function outcomeStyle(outcome: string): { label: string; color: string } {
+  switch (outcome) {
+    case "win":
+      return { label: "Win", color: "#1F5C3A" };
+    case "loss":
+      return { label: "Loss", color: "#7A1F1F" };
+    default:
+      return { label: "Break-even", color: "#5A3F08" };
+  }
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
