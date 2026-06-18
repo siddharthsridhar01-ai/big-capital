@@ -14,6 +14,7 @@ import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
 import PostMortemForm from "@/components/PostMortemForm";
 import ThesisUpdateForm from "@/components/ThesisUpdateForm";
+import AbandonThesisButton from "@/components/AbandonThesisButton";
 
 export const dynamic = "force-dynamic";
 
@@ -414,18 +415,31 @@ export default async function ThesisDetailPage({
             );
           }
           if (ev.kind === "close") {
+            const abandoned = t.status === "abandoned";
             return (
-              <TimelineItem key={i} color="#5A3F08" title="Position closed" date={dateStr(ev.date)} last={last}>
+              <TimelineItem
+                key={i}
+                color={abandoned ? "#9A9A8E" : "#5A3F08"}
+                title={abandoned ? "Thesis abandoned" : "Position closed"}
+                date={dateStr(ev.date)}
+                last={last}
+              >
                 <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55 }}>
-                  The position was fully closed.
-                  {realisedPnlDisplay ? (
+                  {abandoned ? (
+                    "This idea was retired without a position being taken."
+                  ) : (
                     <>
-                      {" "}Realised P&amp;L:{" "}
-                      <span style={{ ...numeric, color: realisedPnl != null && realisedPnl < 0 ? "#7A1F1F" : "#1F5C3A" }}>
-                        {realisedPnlDisplay}
-                      </span>.
+                      The position was fully closed.
+                      {realisedPnlDisplay ? (
+                        <>
+                          {" "}Realised P&amp;L:{" "}
+                          <span style={{ ...numeric, color: realisedPnl != null && realisedPnl < 0 ? "#7A1F1F" : "#1F5C3A" }}>
+                            {realisedPnlDisplay}
+                          </span>.
+                        </>
+                      ) : null}
                     </>
-                  ) : null}
+                  )}
                 </div>
               </TimelineItem>
             );
@@ -473,6 +487,17 @@ export default async function ThesisDetailPage({
         <div>
           <div style={SECTION_HEADER}>Add an update</div>
           <ThesisUpdateForm fundSlug={slug} thesisId={thesisId} />
+          {trades.length === 0 ? (
+            <div
+              style={{
+                marginTop: 22,
+                paddingTop: 16,
+                borderTop: "1px solid #E5E5DE",
+              }}
+            >
+              <AbandonThesisButton fundSlug={slug} thesisId={thesisId} />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </main>
@@ -554,6 +579,8 @@ function TimelineItem({
           border: "1px solid #D9D9D2",
           padding: "14px 16px",
           fontFamily: "system-ui, sans-serif",
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
         }}
       >
         {children}
