@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import Decimal from "decimal.js";
 import { serif, numeric } from "@/lib/typography";
+import PdfMemoCard from "@/components/PdfMemoCard";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 
 // Simplified short-borrow-fee model: every fund assumes a flat annual borrow
@@ -94,6 +95,8 @@ interface ThesisOption {
   holdingPeriod: string;
   summary: string;
   openedAt: string;
+  memoBlobUrl: string | null;
+  memoBlobFilename: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -938,6 +941,7 @@ export default function TradeTicket(props: TradeTicketProps) {
       <Section label="Investment thesis">
         <ThesisPicker
           intent={positionIntent}
+          fundSlug={fund.slug}
           activeTheses={activeTheses}
           thesesLoaded={thesesLoaded}
           resolution={thesisResolution}
@@ -2540,6 +2544,7 @@ function ConfirmModal({
 
 interface ThesisPickerProps {
   intent: "open" | "add" | "reduce";
+  fundSlug: string;
   activeTheses: ThesisOption[];
   thesesLoaded: boolean;
   resolution: {
@@ -2577,6 +2582,7 @@ interface ThesisPickerProps {
 function ThesisPicker(props: ThesisPickerProps) {
   const {
     intent,
+    fundSlug,
     activeTheses,
     thesesLoaded,
     resolution,
@@ -2673,6 +2679,14 @@ function ThesisPicker(props: ThesisPickerProps) {
         <div style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
           {t.summary}
         </div>
+        {t.memoBlobUrl ? (
+          <div style={{ marginTop: 10 }}>
+            <PdfMemoCard
+              href={`/api/funds/${fundSlug}/theses/${t.id}/memo`}
+              filename={t.memoBlobFilename ?? "memo.pdf"}
+            />
+          </div>
+        ) : null}
       </div>
     );
   };
