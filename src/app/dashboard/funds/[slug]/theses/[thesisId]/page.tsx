@@ -5,16 +5,18 @@ import {
   users,
   transactions,
   positions,
+  tradeAttachments,
 } from "@/db/schema";
 import { theses, thesisPostMortems, thesisUpdates } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
-import { eq, and, asc, desc, isNotNull } from "drizzle-orm";
+import { eq, and, asc, desc, isNotNull, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
 import PostMortemForm from "@/components/PostMortemForm";
 import ThesisUpdateForm from "@/components/ThesisUpdateForm";
 import AbandonThesisButton from "@/components/AbandonThesisButton";
+import PdfMemoCard from "@/components/PdfMemoCard";
 
 export const dynamic = "force-dynamic";
 
@@ -79,12 +81,14 @@ type TLEvent =
   | {
       kind: "trade";
       date: Date;
+      txnId: string;
       type: string;
       quantity: string;
       price: string;
       currency: string;
       cashImpact: string;
       rationale: string;
+      attachmentFilename: string | null;
     }
   | { kind: "update"; date: Date; note: string; fromTrade: boolean; author: string }
   | { kind: "close"; date: Date }
@@ -170,6 +174,25 @@ export default async function ThesisDetailPage({
     .where(eq(transactions.thesisId, thesisId))
     .orderBy(asc(transactions.executedAt));
 
+  // Per-trade PDF attachments (one shown per trade if present).
+  const txnIds = trades.map((tr) => tr.id);
+  const attachmentRows =
+    txnIds.length > 0
+      ? await db
+          .select({
+            transactionId: tradeAttachments.transactionId,
+            filename: tradeAttachments.filename,
+          })
+          .from(tradeAttachments)
+          .where(inArray(tradeAttachments.transactionId, txnIds))
+      : [];
+  const attachmentByTxn = new Map<string, string>();
+  for (const a of attachmentRows) {
+    if (!attachmentByTxn.has(a.transactionId)) {
+      attachmentByTxn.set(a.transactionId, a.filename);
+    }
+  }
+
   const updates = await db
     .select({
       id: thesisUpdates.id,
@@ -232,12 +255,14 @@ export default async function ThesisDetailPage({
     events.push({
       kind: "trade",
       date: new Date(tr.executedAt),
+      txnId: tr.id,
       type: tr.type,
       quantity: tr.quantity,
       price: tr.price,
       currency: tr.currency,
       cashImpact: tr.cashImpact,
       rationale: tr.rationale,
+      attachmentFilename: attachmentByTxn.get(tr.id) ?? null,
     });
   }
   for (const u of updates) {
@@ -396,6 +421,15 @@ export default async function ThesisDetailPage({
                 {ev.rationale ? (
                   <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
                     {ev.rationale}
+                  </div>
+                ) : null}
+                {ev.attachmentFilename ? (
+                  <div style={{ marginTop: 10 }}>
+                    <PdfMemoCard
+                      href={`/api/funds/${slug}/transactions/${ev.txnId}/attachment`}
+                      filename={ev.attachmentFilename}
+                      subtitle="Trade attachment"
+                    />
                   </div>
                 ) : null}
               </TimelineItem>
