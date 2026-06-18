@@ -6,7 +6,7 @@ import {
   transactions,
 } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
@@ -66,19 +66,18 @@ export default async function FundPage({
     });
   })();
 
+  // Latest NAV snapshot — orderBy desc so we get today's, not inception's
   const latestNav = await db
     .select()
     .from(navSnapshots)
     .where(eq(navSnapshots.fundId, fund.id))
-    .orderBy(navSnapshots.date)
+    .orderBy(desc(navSnapshots.date))
     .limit(1);
 
   const currencySymbol =
     fund.baseCurrency === "GBP" ? "£" : fund.baseCurrency === "EUR" ? "€" : "$";
 
   const startingNav = Number(fund.startingNav);
-  const currentNav = latestNav.length > 0 ? Number(latestNav[0].nav) : startingNav;
-  const sinceInceptionPct = ((currentNav - startingNav) / startingNav) * 100;
 
   // Live portfolio state computed from the transactions ledger
   const liveState = await computePortfolioState(fund.id);
