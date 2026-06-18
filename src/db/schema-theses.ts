@@ -158,6 +158,22 @@ export const thesisUpdates = pgTable("thesis_updates", {
   // is created by the migration.
   transactionId: uuid("transaction_id"),
   note: text("note").notNull(),
+  // Optional revisions captured by this update (null = field not revised).
+  // Stored as the NEW value; the theses row stays the original opening
+  // snapshot, so the timeline reads as a progression rather than overwriting.
+  newConviction: text("new_conviction"),
+  newHoldingPeriod: text("new_holding_period"),
+  newTargetWeightPct: numeric("new_target_weight_pct", {
+    precision: 6,
+    scale: 4,
+  }),
+  newTargetPriceNative: numeric("new_target_price_native", {
+    precision: 24,
+    scale: 6,
+  }),
+  // Optional PDF attached to the update.
+  attachmentBlobUrl: text("attachment_blob_url"),
+  attachmentBlobFilename: text("attachment_blob_filename"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

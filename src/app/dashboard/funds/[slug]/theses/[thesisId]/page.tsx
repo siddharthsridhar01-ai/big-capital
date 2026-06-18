@@ -89,7 +89,19 @@ type TLEvent =
       rationale: string;
       attachmentFilename: string | null;
     }
-  | { kind: "update"; date: Date; note: string; fromTrade: boolean; author: string }
+  | {
+      kind: "update";
+      date: Date;
+      updateId: string;
+      note: string;
+      fromTrade: boolean;
+      author: string;
+      newConviction: string | null;
+      newHoldingPeriod: string | null;
+      newTargetWeightPct: string | null;
+      newTargetPriceNative: string | null;
+      attachmentFilename: string | null;
+    }
   | { kind: "close"; date: Date }
   | {
       kind: "postmortem";
@@ -198,6 +210,11 @@ export default async function ThesisDetailPage({
       note: thesisUpdates.note,
       transactionId: thesisUpdates.transactionId,
       createdAt: thesisUpdates.createdAt,
+      newConviction: thesisUpdates.newConviction,
+      newHoldingPeriod: thesisUpdates.newHoldingPeriod,
+      newTargetWeightPct: thesisUpdates.newTargetWeightPct,
+      newTargetPriceNative: thesisUpdates.newTargetPriceNative,
+      attachmentFilename: thesisUpdates.attachmentBlobFilename,
       author: users.fullName,
     })
     .from(thesisUpdates)
@@ -268,9 +285,15 @@ export default async function ThesisDetailPage({
     events.push({
       kind: "update",
       date: new Date(u.createdAt),
+      updateId: u.id,
       note: u.note,
       fromTrade: u.transactionId != null,
       author: u.author,
+      newConviction: u.newConviction,
+      newHoldingPeriod: u.newHoldingPeriod,
+      newTargetWeightPct: u.newTargetWeightPct,
+      newTargetPriceNative: u.newTargetPriceNative,
+      attachmentFilename: u.attachmentFilename,
     });
   }
   if (t.closedAt) events.push({ kind: "close", date: new Date(t.closedAt) });
@@ -453,7 +476,57 @@ export default async function ThesisDetailPage({
                 <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
                   {ev.note}
                 </div>
-                <div style={{ fontSize: 10, color: "#9A9A8E", marginTop: 6 }}>
+                {(ev.newConviction ||
+                  ev.newHoldingPeriod ||
+                  ev.newTargetWeightPct ||
+                  ev.newTargetPriceNative) ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                    {ev.newConviction ? (
+                      <Chip label="Conviction →" value={ev.newConviction} />
+                    ) : null}
+                    {ev.newHoldingPeriod ? (
+                      <Chip
+                        label="Holding →"
+                        value={PERIOD_LABELS[ev.newHoldingPeriod] ?? ev.newHoldingPeriod}
+                      />
+                    ) : null}
+                    {ev.newTargetWeightPct ? (
+                      <Chip
+                        label="Target wt. →"
+                        value={`${(Number(ev.newTargetWeightPct) * 100).toFixed(2)}%`}
+                      />
+                    ) : null}
+                    {ev.newTargetPriceNative ? (
+                      <Chip
+                        label="Target px. →"
+                        value={money(ev.newTargetPriceNative, secCur)}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+                {ev.attachmentFilename ? (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, color: "#6B6B66" }}>
+                        Attachment · {ev.attachmentFilename}
+                      </span>
+                      <a
+                        href={`/api/funds/${slug}/theses/${thesisId}/updates/${ev.updateId}/attachment`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: 11, color: "#00183A", textDecoration: "none", borderBottom: "1px solid #00183A" }}
+                      >
+                        Open in new tab ↗
+                      </a>
+                    </div>
+                    <iframe
+                      src={`/api/funds/${slug}/theses/${thesisId}/updates/${ev.updateId}/attachment`}
+                      title="Update attachment"
+                      style={{ width: "100%", height: 460, border: "1px solid #E5E5DE", background: "#FAFAF7" }}
+                    />
+                  </div>
+                ) : null}
+                <div style={{ fontSize: 10, color: "#9A9A8E", marginTop: 8 }}>
                   {ev.author}
                   {ev.fromTrade ? " · noted alongside a trade" : ""}
                 </div>
@@ -532,7 +605,7 @@ export default async function ThesisDetailPage({
       ) : t.status === "active" ? (
         <div>
           <div style={SECTION_HEADER}>Add an update</div>
-          <ThesisUpdateForm fundSlug={slug} thesisId={thesisId} />
+          <ThesisUpdateForm fundSlug={slug} thesisId={thesisId} currency={secCur} />
           {trades.length === 0 ? (
             <div
               style={{
