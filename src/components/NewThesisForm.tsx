@@ -105,7 +105,7 @@ export default function NewThesisForm({
         : "$";
 
   const summaryLen = summary.trim().length;
-  const summaryValid = summaryLen >= 50 && summaryLen <= 500;
+  const summaryValid = summaryLen > 0 && summaryLen <= 500;
 
   const canSubmit =
     !!securityId &&
@@ -385,7 +385,7 @@ export default function NewThesisForm({
               marginLeft: 4,
             }}
           >
-            ({summaryLen}/50-500)
+            ({summaryLen}/500)
           </span>
         </div>
         <textarea

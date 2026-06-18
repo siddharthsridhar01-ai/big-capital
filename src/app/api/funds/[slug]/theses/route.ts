@@ -10,7 +10,7 @@
  *        - securityId: UUID (required)
  *        - conviction: "high" | "medium" | "low" (required)
  *        - holdingPeriod: "short" | "medium" | "long" | "indefinite" (required)
- *        - summary: string, 50-500 chars (required)
+ *        - summary: string, required, max 500 chars
  *        - targetWeightPct: number 0-0.20 (optional)
  *        - targetPriceNative: number > 0 (optional)
  *        - memo: File (optional, PDF only, <10MB)
@@ -184,11 +184,11 @@ export async function POST(
     );
   }
   const summaryTrimmed = summary.trim();
-  if (summaryTrimmed.length < 50 || summaryTrimmed.length > 500) {
+  if (summaryTrimmed.length === 0 || summaryTrimmed.length > 500) {
     return NextResponse.json(
       {
         ok: false,
-        error: `Summary must be 50-500 characters (got ${summaryTrimmed.length})`,
+        error: `Summary is required (max 500 characters; got ${summaryTrimmed.length})`,
       },
       { status: 400 }
     );

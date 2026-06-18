@@ -5,7 +5,7 @@
  *   Content-Type: multipart/form-data
  *   Fields:
  *     - outcome: "win" | "loss" | "break_even"   (required)
- *     - lessonsLearned: string                    (required, >= 20 chars)
+ *     - lessonsLearned: string                    (required, non-empty)
  *     - whatWorked: string                        (optional)
  *     - whatDidntWork: string                     (optional)
  *     - realisedReturnPct: number                 (optional, stored as a
@@ -116,11 +116,11 @@ export async function POST(
     );
   }
   const lessonsTrimmed = lessonsLearned.trim();
-  if (lessonsTrimmed.length < 20) {
+  if (lessonsTrimmed.length === 0) {
     return NextResponse.json(
       {
         ok: false,
-        error: `Lessons learned must be at least 20 characters (got ${lessonsTrimmed.length})`,
+        error: `Lessons learned is required`,
       },
       { status: 400 }
     );

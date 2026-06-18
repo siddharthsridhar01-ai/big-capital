@@ -67,7 +67,7 @@ export default function PostMortemForm({
   const [error, setError] = useState<string | null>(null);
 
   const lessonsLen = lessons.trim().length;
-  const lessonsValid = lessonsLen >= 20;
+  const lessonsValid = lessonsLen > 0;
   const canSubmit = !!outcome && lessonsValid && !submitting;
 
   async function handleSubmit() {
@@ -200,19 +200,7 @@ export default function PostMortemForm({
 
       {/* LESSONS */}
       <div style={{ marginBottom: 22 }}>
-        <div style={SECTION_HEADER}>
-          Lessons learned{" "}
-          <span
-            style={{
-              textTransform: "none",
-              letterSpacing: 0,
-              fontWeight: 400,
-              color: lessonsValid ? "#1F5C3A" : lessonsLen > 0 ? "#7A1F1F" : "#9A9A8E",
-            }}
-          >
-            ({lessonsLen}/20 min)
-          </span>
-        </div>
+        <div style={SECTION_HEADER}>Lessons learned</div>
         <textarea
           value={lessons}
           onChange={(e) => setLessons(e.target.value)}

@@ -537,7 +537,7 @@ export default function TradeTicket(props: TradeTicketProps) {
       : "add";
 
   const thSummaryLen = thSummary.trim().length;
-  const inlineThesisValid = thSummaryLen >= 50 && thSummaryLen <= 500;
+  const inlineThesisValid = thSummaryLen > 0 && thSummaryLen <= 500;
 
   // Resolve which thesis mode applies and whether it's complete enough to
   // proceed. `required` means the trade can't be reviewed until `valid`.
@@ -693,7 +693,7 @@ export default function TradeTicket(props: TradeTicketProps) {
     if (thesisResolution.required && !thesisResolution.valid) {
       if (thesisResolution.mode === "create") {
         errors.push(
-          `Thesis summary must be 50-500 characters (${thSummaryLen}/50)`
+          `Thesis summary is required (max 500 characters)`
         );
       } else {
         errors.push("Select an active thesis to link this trade to");
@@ -2614,7 +2614,7 @@ function ThesisPicker(props: ThesisPickerProps) {
 
   const currencySymbol =
     security.currency === "GBP" ? "£" : security.currency === "EUR" ? "€" : "$";
-  const summaryValid = summaryLen >= 50 && summaryLen <= 500;
+  const summaryValid = summaryLen > 0 && summaryLen <= 500;
 
   const muted: React.CSSProperties = { fontSize: 12, color: "#9A9A8E" };
   const hint: React.CSSProperties = {
@@ -2799,7 +2799,7 @@ function ThesisPicker(props: ThesisPickerProps) {
                   : "#9A9A8E",
             }}
           >
-            ({summaryLen}/50-500)
+            ({summaryLen}/500)
           </span>
         </span>
         <textarea

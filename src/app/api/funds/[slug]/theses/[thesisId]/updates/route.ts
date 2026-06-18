@@ -2,7 +2,7 @@
  * Thesis updates API (standalone).
  *
  * POST /api/funds/[slug]/theses/[thesisId]/updates
- *   Body: { note: string }   (>= 5 chars)
+ *   Body: { note: string }   (required, non-empty)
  *
  * Appends a free-text update to a thesis's timeline, not tied to any trade.
  * Trade-linked updates are written by the submit-trade endpoint instead.
@@ -40,9 +40,9 @@ export async function POST(
       { status: 400 }
     );
   }
-  if (typeof body.note !== "string" || body.note.trim().length < 5) {
+  if (typeof body.note !== "string" || body.note.trim().length === 0) {
     return NextResponse.json(
-      { ok: false, error: "Update note must be at least 5 characters" },
+      { ok: false, error: "Update note is required" },
       { status: 400 }
     );
   }

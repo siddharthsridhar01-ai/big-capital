@@ -15,7 +15,7 @@ export default function ThesisUpdateForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = note.trim().length >= 5 && !submitting;
+  const canSubmit = note.trim().length > 0 && !submitting;
 
   async function handleSubmit() {
     if (!canSubmit) return;
