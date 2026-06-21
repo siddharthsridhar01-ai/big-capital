@@ -120,7 +120,8 @@ export default async function DashboardHome() {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-          gridAutoRows: "1fr",
+          gridAutoRows: "auto",
+          alignItems: "stretch",
           gap: 16,
         }}
       >
