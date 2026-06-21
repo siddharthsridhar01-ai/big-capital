@@ -1,7 +1,8 @@
 import { db } from "@/db/client";
-import { funds as fundsTable, securities, navSnapshots } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { funds as fundsTable, securities, navSnapshots, monthlyBriefings } from "@/db/schema";
+import { eq, asc, and, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
 import {
   computeFundPerformance,
@@ -70,6 +71,29 @@ export default async function PublicFundPage({ params }: PageProps) {
   }));
   const perf = computeFundPerformance(snaps, fund.inceptionDate);
   const asOf = snaps.length > 0 ? snaps[snaps.length - 1].date : null;
+
+  // Latest published monthly letter (public). Drafts are never read here.
+  const letterRows = await db
+    .select({
+      period: monthlyBriefings.period,
+      title: monthlyBriefings.title,
+      macroSection: monthlyBriefings.macroSection,
+    })
+    .from(monthlyBriefings)
+    .where(
+      and(
+        eq(monthlyBriefings.fundId, fund.id),
+        eq(monthlyBriefings.status, "published")
+      )
+    )
+    .orderBy(desc(monthlyBriefings.period))
+    .limit(1);
+  const latestLetter = letterRows[0] ?? null;
+  const letterTeaser = latestLetter
+    ? latestLetter.macroSection.length > 160
+      ? latestLetter.macroSection.slice(0, 160).trimEnd() + "…"
+      : latestLetter.macroSection
+    : null;
 
   const returnValue = perf.isAnnualised ? perf.annualisedReturn : perf.cumulativeReturn;
   const returnColor =
@@ -165,9 +189,26 @@ export default async function PublicFundPage({ params }: PageProps) {
           <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9A9A8E", marginBottom: 10 }}>
             Latest letter
           </div>
-          <div style={{ fontSize: 13, color: "#6B6B66", lineHeight: 1.6, fontFamily: "system-ui, sans-serif" }}>
-            No monthly commentary has been published yet.
-          </div>
+          {latestLetter ? (
+            <Link
+              href={`/funds/${fund.slug}/letters/${latestLetter.period}`}
+              style={{ textDecoration: "none", display: "block" }}
+            >
+              <div style={{ ...serif, fontSize: 15, color: "#00183A", marginBottom: 6 }}>
+                {latestLetter.title}
+              </div>
+              <div style={{ fontSize: 12.5, color: "#444", lineHeight: 1.6, fontFamily: "system-ui, sans-serif" }}>
+                {letterTeaser}
+              </div>
+              <div style={{ fontSize: 12, color: "#00183A", marginTop: 8, borderBottom: "1px solid #00183A", display: "inline-block" }}>
+                Read the letter →
+              </div>
+            </Link>
+          ) : (
+            <div style={{ fontSize: 13, color: "#6B6B66", lineHeight: 1.6, fontFamily: "system-ui, sans-serif" }}>
+              No monthly commentary has been published yet.
+            </div>
+          )}
         </div>
       </div>
     </main>
