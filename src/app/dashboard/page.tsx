@@ -149,7 +149,6 @@ export default async function DashboardHome() {
                 color: "#0A0A0A",
                 display: "flex",
                 flexDirection: "column",
-                height: "100%",
                 transition: "border-color 0.15s ease",
               }}
             >
