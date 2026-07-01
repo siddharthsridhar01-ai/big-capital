@@ -28,6 +28,7 @@ import {
   beta,
   type Transaction,
 } from "../src/lib/performance";
+import { seedOpeningCash } from "../src/lib/holdings-reconstruction";
 
 const D = (s: string | number) => new Decimal(s);
 
@@ -384,5 +385,34 @@ describe("beta", () => {
     const b = beta(port, bench);
     // Designed so covariance ≈ 0; tolerance loose for finite sample
     expect(b.abs().lessThan(D("0.5"))).toBe(true);
+  });
+});
+
+describe("opening capital seeding (NAV foundation)", () => {
+  it("a fund with opening capital and no trades has NAV equal to starting capital", () => {
+    // No transactions at all — ledger cash is empty until we seed opening capital.
+    const state = buildLedgerState([], new Date("2026-07-20T23:59:59Z"));
+    seedOpeningCash(state, "GBP", "100000", false);
+
+    const snap = computeNav({
+      fundId: "f1",
+      date: "2026-07-20",
+      baseCurrency: "GBP",
+      components: state,
+      prices: new Map(),
+      priceCurrencies: new Map(),
+      fxRates: new Map(),
+      previousNav: null,
+    });
+    expect(snap.nav.toString()).toBe("100000");
+    expect(snap.cashBalance.toString()).toBe("100000");
+  });
+
+  it("does not double-count when opening capital is already a ledger cash_deposit", () => {
+    const state = buildLedgerState([], new Date("2026-07-20T23:59:59Z"));
+    // Simulate the ledger already holding the deposit.
+    state.cashByCurrency.set("GBP", new Decimal("100000"));
+    seedOpeningCash(state, "GBP", "100000", true); // hasLedgerDeposit = true -> no-op
+    expect(state.cashByCurrency.get("GBP")?.toString()).toBe("100000");
   });
 });

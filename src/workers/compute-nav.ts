@@ -31,6 +31,7 @@ import {
   type Transaction,
   type Currency,
 } from "../lib/performance";
+import { seedOpeningCash } from "../lib/holdings-reconstruction";
 import { sql, eq, and, lte, gte } from "drizzle-orm";
 import Decimal from "decimal.js";
 
@@ -56,6 +57,7 @@ export async function runNavSnapshot(
       slug: funds.slug,
       baseCurrency: funds.baseCurrency,
       inceptionDate: funds.inceptionDate,
+      startingNav: funds.startingNav,
       benchmarkSecurityId: funds.benchmarkSecurityId,
     })
     .from(funds)
@@ -108,10 +110,16 @@ export async function runNavSnapshot(
 
     let previousNav: Decimal | null = null;
 
+    // Opening capital (funds.startingNav) is the fund's initial cash, not a
+    // ledger transaction — seed it into base-currency cash unless the ledger
+    // already models it as an explicit cash_deposit (then trust the ledger).
+    const hasLedgerDeposit = fundTransactions.some((t) => t.transactionType === "cash_deposit");
+
     for (const date of fundDates) {
       try {
         const asOf = new Date(`${date}T23:59:59Z`);
         const state = buildLedgerState(txns, asOf);
+        seedOpeningCash(state, fund.baseCurrency as Currency, fund.startingNav, hasLedgerDeposit);
 
         // Gather prices and FX needed
         const securityIds = Array.from(state.positions.keys());
