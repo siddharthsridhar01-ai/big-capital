@@ -63,6 +63,7 @@ import {
 import { getQuotes } from "@/lib/intraday/cache";
 import { activeProvider } from "@/lib/intraday/provider";
 import { toYahooSymbol } from "@/lib/intraday/yahoo";
+import { checkPriceSanity } from "@/lib/price-guardrail";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -296,6 +297,37 @@ export async function POST(
       }
     } catch {
       // Bad expectedPriceNative — ignore the check rather than fail the trade
+    }
+  }
+
+  // ----- Independent price-sanity guardrail (protects the immutable ledger) -----
+  // Compare the execution price to the last stored EOD close — a reference from
+  // a separate feed than the live quote. A pence/unit error, wrong-symbol quote,
+  // or garbage value shows up as an implausible ratio and is blocked here,
+  // before it can be written as an un-editable trade. This is orthogonal to the
+  // "vs expected" check above (which only compares to what the user saw, and so
+  // can't catch an error that's in the feed itself).
+  {
+    const refRows = await db
+      .select({ close: pricesTable.closePrice, date: pricesTable.date })
+      .from(pricesTable)
+      .where(eq(pricesTable.securityId, security.id))
+      .orderBy(desc(pricesTable.date))
+      .limit(1);
+    const reference =
+      refRows.length > 0 && priceSource === "live" ? new Decimal(refRows[0].close) : null;
+    const sanity = checkPriceSanity(priceNative, reference);
+    if (!sanity.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `Price safety check failed: ${priceNative.toFixed(4)} ${security.currency} is implausible versus the last close${
+            refRows.length > 0 ? ` (${new Decimal(refRows[0].close).toFixed(4)} on ${refRows[0].date})` : ""
+          }. ${sanity.reason ?? ""} Trade blocked — verify the price and symbol before retrying.`,
+          priceSanity: sanity,
+        },
+        { status: 422 }
+      );
     }
   }
 
