@@ -281,7 +281,8 @@ export function aggregatePortfolioFromTransactions(
  */
 export async function computePortfolioState(
   fundId: string,
-  asOfDate?: Date
+  asOfDate?: Date,
+  opts?: { skipLivePrices?: boolean }
 ): Promise<PortfolioState> {
   // 1) Load fund record
   const fundRows = await db
@@ -320,9 +321,10 @@ export async function computePortfolioState(
     // 3b) Override DB prices with live Yahoo quotes where available.
     // Only applies when asOfDate is null (i.e. computing "now") — for
     // historical reconstruction we still want DB prices.
-    // The live overlay makes market values, NAV, and weights everywhere
-    // reflect current market — not just the Holdings table.
-    if (!asOfDate) {
+    // Skipped when skipLivePrices is set: callers running inside a DB
+    // transaction/lock use this to avoid a network call while holding the lock
+    // (the trade is valued at a live price fetched before the lock instead).
+    if (!asOfDate && !opts?.skipLivePrices) {
       try {
         const { getQuotes } = await import("./intraday/cache");
         const { activeProvider } = await import("./intraday/provider");
