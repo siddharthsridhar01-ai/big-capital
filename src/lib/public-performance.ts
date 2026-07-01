@@ -12,6 +12,7 @@ import {
   annualiseReturn,
   annualisedVolatility,
   sharpeRatio,
+  maxDrawdown,
 } from "@/lib/performance";
 
 export interface SnapshotRow {
@@ -116,4 +117,59 @@ export function pctLabel(v: number | null, withSign = true): string {
   const pct = v * 100;
   const sign = withSign && pct > 0 ? "+" : "";
   return `${sign}${pct.toFixed(1)}%`;
+}
+
+// ---------------------------------------------------------------------------
+// Period returns + drawdown (public factsheet)
+// ---------------------------------------------------------------------------
+
+export interface PeriodReturns {
+  oneMonth: number | null;
+  threeMonth: number | null;
+  sixMonth: number | null;
+  ytd: number | null;
+  sinceInception: number | null;
+}
+
+function subMonths(ymd: string, months: number): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() - months);
+  return d.toISOString().slice(0, 10);
+}
+
+/** TWR over the window (startExclusive, asOf], or null if no returns fall in it. */
+function periodReturn(snaps: SnapshotRow[], startExclusive: string, asOf: string): number | null {
+  const rets = snaps
+    .filter((s) => s.date > startExclusive && s.date <= asOf)
+    .map((s) => (s.dailyReturn != null ? new Decimal(s.dailyReturn) : null));
+  if (rets.length === 0) return null;
+  return timeWeightedReturn(rets).toNumber();
+}
+
+/** Trailing-period and YTD/since-inception cumulative returns from the NAV series. */
+export function computePeriodReturns(snaps: SnapshotRow[]): PeriodReturns {
+  if (snaps.length === 0) {
+    return { oneMonth: null, threeMonth: null, sixMonth: null, ytd: null, sinceInception: null };
+  }
+  const asOf = snaps[snaps.length - 1].date;
+  const prevYearEnd = `${Number(asOf.slice(0, 4)) - 1}-12-31`;
+  return {
+    oneMonth: periodReturn(snaps, subMonths(asOf, 1), asOf),
+    threeMonth: periodReturn(snaps, subMonths(asOf, 3), asOf),
+    sixMonth: periodReturn(snaps, subMonths(asOf, 6), asOf),
+    ytd: periodReturn(snaps, prevYearEnd, asOf),
+    sinceInception: periodReturn(snaps, "0000-01-01", asOf),
+  };
+}
+
+/** Maximum peak-to-trough drawdown (positive fraction, e.g. 0.021 = 2.1%). */
+export function computeMaxDrawdownPct(snaps: SnapshotRow[]): number | null {
+  if (snaps.length === 0) return null;
+  let level = new Decimal(1);
+  const series: Decimal[] = [level];
+  for (const s of snaps) {
+    if (s.dailyReturn != null) level = level.times(new Decimal(1).plus(s.dailyReturn));
+    series.push(level);
+  }
+  return maxDrawdown(series).toNumber();
 }

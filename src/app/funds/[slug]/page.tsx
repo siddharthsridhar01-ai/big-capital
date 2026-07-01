@@ -7,6 +7,8 @@ import { serif, numeric } from "@/lib/typography";
 import type { HoldingsSnapshotPayload } from "@/lib/holdings-reconstruction";
 import {
   computeFundPerformance,
+  computePeriodReturns,
+  computeMaxDrawdownPct,
   pctLabel,
   SnapshotRow,
 } from "@/lib/public-performance";
@@ -78,6 +80,8 @@ export default async function PublicFundPage({ params }: PageProps) {
     benchmarkDailyReturn: s.benchmarkDailyReturn,
   }));
   const perf = computeFundPerformance(snaps, fund.inceptionDate);
+  const periodReturns = computePeriodReturns(snaps);
+  const maxDd = computeMaxDrawdownPct(snaps);
   const asOf = snaps.length > 0 ? snaps[snaps.length - 1].date : null;
 
   // Latest published monthly letter (public). Drafts are never read here.
@@ -394,6 +398,66 @@ export default async function PublicFundPage({ params }: PageProps) {
                 Published alongside holdings disclosure.
               </div>
             )}
+          </div>
+        </div>
+      ) : null}
+      {perf.hasData ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 1, background: "#E5E5DE", border: "1px solid #E5E5DE", marginTop: 1 }}>
+          {/* Returns */}
+          <div style={{ background: "white", padding: "18px 22px" }}>
+            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9A9A8E", marginBottom: 12 }}>
+              Returns
+            </div>
+            <div style={{ fontSize: 13, fontFamily: "system-ui, sans-serif" }}>
+              {([
+                ["1 month", periodReturns.oneMonth],
+                ["3 months", periodReturns.threeMonth],
+                ["6 months", periodReturns.sixMonth],
+                ["Year to date", periodReturns.ytd],
+                ["Since inception", periodReturns.sinceInception],
+              ] as const).map(([label, val], i, arr) => (
+                <div
+                  key={label}
+                  style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < arr.length - 1 ? "1px solid #ECEBE4" : "none" }}
+                >
+                  <span style={{ color: "#6B6B66" }}>{label}</span>
+                  <span style={{ ...numeric, color: val == null ? "#9A9A8E" : val >= 0 ? "#1F5C3A" : "#7A1F1F" }}>
+                    {pctLabel(val)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 10, color: "#9A9A8E", marginTop: 8, lineHeight: 1.5 }}>
+              Time-weighted returns on paper NAV. Periods shorter than the fund&rsquo;s life show since inception.
+            </div>
+          </div>
+
+          {/* Risk */}
+          <div style={{ background: "white", padding: "18px 22px" }}>
+            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9A9A8E", marginBottom: 12 }}>
+              Risk
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#9A9A8E" }}>Volatility (ann.)</div>
+                <div style={{ fontSize: 18, color: "#00183A", ...numeric, marginTop: 3 }}>
+                  {perf.annualisedVol == null ? "—" : pctLabel(perf.annualisedVol, false)}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#9A9A8E" }}>Max drawdown</div>
+                <div style={{ fontSize: 18, color: maxDd && maxDd > 0 ? "#7A1F1F" : "#00183A", ...numeric, marginTop: 3 }}>
+                  {maxDd == null ? "—" : `−${(maxDd * 100).toFixed(1)}%`}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#9A9A8E" }}>Sharpe</div>
+                <div style={{ fontSize: 18, color: "#9A9A8E", ...numeric, marginTop: 3 }}>
+                  {perf.sharpe == null ? "—" : perf.sharpe.toFixed(2)}
+                  {perf.sharpe == null ? <span style={{ fontSize: 11 }}> needs 1 yr</span> : null}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
