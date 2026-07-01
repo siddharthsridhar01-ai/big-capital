@@ -1,6 +1,6 @@
 import { db } from "@/db/client";
-import { funds as fundsTable, securities, navSnapshots, monthlyBriefings, publicHoldingsSnapshots } from "@/db/schema";
-import { eq, asc, and, desc } from "drizzle-orm";
+import { funds as fundsTable, securities, navSnapshots, monthlyBriefings, publicHoldingsSnapshots, users, fundMembers } from "@/db/schema";
+import { eq, asc, and, desc, isNull } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
@@ -17,6 +17,17 @@ export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+}
+
+const TEAM_ROLE_LABEL: Record<string, string> = {
+  pm: "Portfolio Manager",
+  senior_analyst: "Senior Analyst",
+  analyst: "Analyst",
+};
+const TEAM_ROLE_ORDER: Record<string, number> = { pm: 0, senior_analyst: 1, analyst: 2 };
+
+function teamInitials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("");
 }
 
 function fmtDate(d: string | null): string {
@@ -83,6 +94,24 @@ export default async function PublicFundPage({ params }: PageProps) {
   const periodReturns = computePeriodReturns(snaps);
   const maxDd = computeMaxDrawdownPct(snaps);
   const asOf = snaps.length > 0 ? snaps[snaps.length - 1].date : null;
+
+  // Investment team — active fund members. Public-safe fields only (no email).
+  const teamRaw = await db
+    .select({
+      userId: users.id,
+      fullName: users.fullName,
+      roleInFund: fundMembers.roleInFund,
+      bio: users.bio,
+      linkedinUrl: users.linkedinUrl,
+      graduationYear: users.graduationYear,
+      headshotUrl: users.headshotUrl,
+    })
+    .from(fundMembers)
+    .innerJoin(users, eq(fundMembers.userId, users.id))
+    .where(and(eq(fundMembers.fundId, fund.id), isNull(fundMembers.endDate)));
+  const team = teamRaw.sort(
+    (a, b) => (TEAM_ROLE_ORDER[a.roleInFund] ?? 9) - (TEAM_ROLE_ORDER[b.roleInFund] ?? 9) || a.fullName.localeCompare(b.fullName)
+  );
 
   // Latest published monthly letter (public). Drafts are never read here.
   const letterRows = await db
@@ -458,6 +487,46 @@ export default async function PublicFundPage({ params }: PageProps) {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {team.length > 0 ? (
+        <div style={{ background: "#00183A", padding: "30px 28px", marginTop: 26 }}>
+          <div style={{ ...serif, fontSize: 24, color: "#FFFFFF", marginBottom: 4 }}>Investment team</div>
+          <div style={{ fontSize: 12, color: "#9FB0C8", marginBottom: 22, fontFamily: "system-ui, sans-serif" }}>{fund.name}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
+            {team.map((m) => (
+              <div key={m.userId} style={{ background: "#FFFFFF", borderRadius: 6, padding: 18 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                  <div style={{ width: 46, height: 46, borderRadius: "50%", background: "#E7ECF3", color: "#00183A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 600, overflow: "hidden", flexShrink: 0 }}>
+                    {m.headshotUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={`/api/team/${m.userId}/headshot`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      teamInitials(m.fullName)
+                    )}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ ...serif, fontSize: 16, color: "#00183A" }}>{m.fullName}</div>
+                    <div style={{ fontSize: 11, color: "#6B6B66", textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "system-ui, sans-serif" }}>
+                      {TEAM_ROLE_LABEL[m.roleInFund] ?? m.roleInFund}
+                    </div>
+                  </div>
+                </div>
+                {m.bio ? (
+                  <div style={{ fontSize: 12.5, color: "#444", lineHeight: 1.55, marginBottom: 10, fontFamily: "system-ui, sans-serif" }}>{m.bio}</div>
+                ) : null}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: "#9A9A8E", fontFamily: "system-ui, sans-serif" }}>
+                  <span>{m.graduationYear ? `Class of ${m.graduationYear}` : ""}</span>
+                  {m.linkedinUrl ? (
+                    <a href={m.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#00183A", textDecoration: "none" }}>
+                      LinkedIn ↗
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       ) : null}
