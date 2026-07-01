@@ -203,6 +203,29 @@ export function resolvePositionPrice(
 }
 
 /**
+ * Seed a fund's opening capital into the reconstructed cash balance.
+ *
+ * A fund's initial capital is held in `funds.startingNav` (base currency) and,
+ * in the current data model, is NOT booked as a ledger transaction — so
+ * buildLedgerState only accumulates subsequent trade/deposit cash impacts.
+ * Without this, cash (and therefore NAV) is understated by the opening balance.
+ *
+ * Guarded: if the ledger already contains an explicit cash_deposit (i.e. the
+ * opening capital IS modelled as a transaction), we trust the ledger and skip
+ * seeding to avoid double-counting.
+ */
+export function seedOpeningCash(
+  components: NavComponents,
+  baseCurrency: Currency,
+  startingNav: string,
+  hasLedgerDeposit: boolean
+): void {
+  if (hasLedgerDeposit) return;
+  const current = components.cashByCurrency.get(baseCurrency) ?? new Decimal(0);
+  components.cashByCurrency.set(baseCurrency, current.plus(startingNav));
+}
+
+/**
  * Select the rows to disclose for a top-10 snapshot.
  *
  * Long-only books: the 10 largest by weight.

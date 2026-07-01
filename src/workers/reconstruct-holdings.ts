@@ -25,6 +25,7 @@ import {
   buildHoldings,
   packageSnapshot,
   resolvePositionPrice,
+  seedOpeningCash,
   mostRecentEligibleMonthEnd,
   mostRecentEligibleQuarterEnd,
   firstDayOfMonthOf,
@@ -66,6 +67,7 @@ export async function runHoldingsReconstruction(options: RunOptions = {}): Promi
       slug: funds.slug,
       baseCurrency: funds.baseCurrency,
       inceptionDate: funds.inceptionDate,
+      startingNav: funds.startingNav,
     })
     .from(funds)
     .where(
@@ -116,7 +118,7 @@ export async function runHoldingsReconstruction(options: RunOptions = {}): Promi
 }
 
 async function reconstructAndUpsert(
-  fund: { id: string; slug: string; baseCurrency: string; inceptionDate: string },
+  fund: { id: string; slug: string; baseCurrency: string; inceptionDate: string; startingNav: string },
   txns: Transaction[],
   asOfMonthEnd: string,
   disclosureType: "top10" | "full",
@@ -146,6 +148,10 @@ async function reconstructAndUpsert(
   }
 
   const state = buildLedgerState(txns, new Date(`${effectiveDate}T23:59:59Z`));
+  // Seed opening capital (startingNav) into cash — it is not booked as a ledger
+  // transaction in the current data model, so the replay omits it otherwise.
+  const hasLedgerDeposit = txns.some((t) => t.transactionType === "cash_deposit");
+  seedOpeningCash(state, fund.baseCurrency as Currency, fund.startingNav, hasLedgerDeposit);
   const securityIds = Array.from(state.positions.keys());
 
   const priceForCompute = new Map<string, string>();

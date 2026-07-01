@@ -6,6 +6,7 @@ import {
   firstDayOfMonthOf,
   buildHoldings,
   resolvePositionPrice,
+  seedOpeningCash,
   selectTop10,
   packageSnapshot,
   type HoldingRow,
@@ -97,6 +98,32 @@ describe("buildHoldings", () => {
       securityMeta: new Map(),
     });
     expect(holdings.map((h) => h.securityId)).toEqual(["big", "small"]);
+  });
+});
+
+describe("seedOpeningCash", () => {
+  it("adds startingNav to base-currency cash when the ledger has no deposit", () => {
+    const components: NavComponents = {
+      cashByCurrency: new Map([["GBP", new Decimal("-752.08")]]), // just trade impacts
+      positions: new Map(),
+    };
+    seedOpeningCash(components, "GBP", "100000", false);
+    expect(components.cashByCurrency.get("GBP")!.toString()).toBe("99247.92");
+  });
+
+  it("seeds into base currency even when it wasn't present", () => {
+    const components: NavComponents = { cashByCurrency: new Map(), positions: new Map() };
+    seedOpeningCash(components, "USD", "100000", false);
+    expect(components.cashByCurrency.get("USD")!.toString()).toBe("100000");
+  });
+
+  it("does nothing when the ledger already books an opening deposit", () => {
+    const components: NavComponents = {
+      cashByCurrency: new Map([["GBP", new Decimal("100000")]]),
+      positions: new Map(),
+    };
+    seedOpeningCash(components, "GBP", "100000", true);
+    expect(components.cashByCurrency.get("GBP")!.toString()).toBe("100000");
   });
 });
 
