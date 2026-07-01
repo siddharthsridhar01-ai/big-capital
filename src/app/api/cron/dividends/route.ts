@@ -6,7 +6,7 @@
  *   { "path": "/api/cron/dividends", "schedule": "0 23 * * 1-5" }
  */
 import { NextRequest, NextResponse } from "next/server";
-import { runDividendIngest } from "@/workers/ingest-dividends";
+import { runYahooDividendIngest } from "@/workers/ingest-dividends-yahoo";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
   try {
-    const result = await runDividendIngest();
+    const result = await runYahooDividendIngest();
     const status = result.errors.length > 0 ? 207 : 200;
     return NextResponse.json({ ok: result.errors.length === 0, ...result }, { status });
   } catch (err) {
