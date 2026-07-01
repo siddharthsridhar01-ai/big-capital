@@ -38,6 +38,7 @@ export interface HoldingRow {
   name: string;
   weight: number; // signed fraction of NAV (negative = short)
   sector: string | null;
+  valuedAtCost?: boolean; // true when no market price existed and cost basis was used
 }
 
 /**
@@ -138,8 +139,9 @@ export function buildHoldings(args: {
   baseCurrency: Currency;
   date: string;
   securityMeta: Map<string, SecurityMeta>;
+  valuedAtCost?: Set<string>; // securityIds valued at cost basis (no market price)
 }): { nav: Decimal; cashWeight: number; holdings: HoldingRow[] } {
-  const { components, prices, priceCurrencies, fxRates, baseCurrency, date, securityMeta } = args;
+  const { components, prices, priceCurrencies, fxRates, baseCurrency, date, securityMeta, valuedAtCost } = args;
 
   const navSnap = computeNav({
     fundId: "",
@@ -168,6 +170,7 @@ export function buildHoldings(args: {
         name: meta?.name ?? "Unknown",
         weight: round6(valueBase.dividedBy(nav)),
         sector: meta?.sector ?? null,
+        ...(valuedAtCost?.has(securityId) ? { valuedAtCost: true } : {}),
       });
     }
   }
@@ -175,6 +178,28 @@ export function buildHoldings(args: {
 
   const cashWeight = nav.isZero() ? 0 : round6(navSnap.cashBalance.dividedBy(nav));
   return { nav, cashWeight, holdings };
+}
+
+/**
+ * Resolve the price to value a position at, given the best available market
+ * price on-or-before the valuation date (or null when none exists).
+ *
+ * Falls back to the position's cost basis (avgCostNative) so a held security
+ * with no in-period price history is still valued rather than crashing the
+ * whole snapshot. The `valuedAtCost` flag lets callers disclose the fallback.
+ */
+export function resolvePositionPrice(
+  marketPrice: { price: string; currency: Currency } | null,
+  position: { avgCostNative: Decimal; currency: Currency }
+): { price: string; currency: Currency; valuedAtCost: boolean } {
+  if (marketPrice) {
+    return { price: marketPrice.price, currency: marketPrice.currency, valuedAtCost: false };
+  }
+  return {
+    price: position.avgCostNative.toString(),
+    currency: position.currency,
+    valuedAtCost: true,
+  };
 }
 
 /**

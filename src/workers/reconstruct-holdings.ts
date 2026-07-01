@@ -24,6 +24,7 @@ import { buildLedgerState, type Transaction, type Currency } from "../lib/perfor
 import {
   buildHoldings,
   packageSnapshot,
+  resolvePositionPrice,
   mostRecentEligibleMonthEnd,
   mostRecentEligibleQuarterEnd,
   firstDayOfMonthOf,
@@ -41,6 +42,7 @@ interface RunResult {
   fundsProcessed: number;
   snapshotsWritten: number;
   skipped: { fund: string; type: string; asOf: string; reason: string }[];
+  valuedAtCost: { fund: string; type: string; asOf: string; ticker: string }[];
   errors: { fund: string; type: string; message: string }[];
 }
 
@@ -54,6 +56,7 @@ export async function runHoldingsReconstruction(options: RunOptions = {}): Promi
     fundsProcessed: 0,
     snapshotsWritten: 0,
     skipped: [],
+    valuedAtCost: [],
     errors: [],
   };
 
@@ -148,9 +151,11 @@ async function reconstructAndUpsert(
   const priceForCompute = new Map<string, string>();
   const priceCurrencies = new Map<string, Currency>();
   const securityMeta = new Map<string, SecurityMeta>();
+  const valuedAtCost = new Set<string>();
 
   if (securityIds.length > 0) {
-    // Latest price on or before the effective date, per held security.
+    // Best market price on or before the effective date, per held security.
+    const marketPrice = new Map<string, { price: string; currency: Currency }>();
     const priceRows = await db
       .select()
       .from(prices)
@@ -158,14 +163,8 @@ async function reconstructAndUpsert(
       .orderBy(sql`${prices.date} DESC`);
     for (const row of priceRows) {
       if (!securityIds.includes(row.securityId)) continue;
-      if (!priceForCompute.has(row.securityId)) {
-        priceForCompute.set(row.securityId, row.closePrice);
-        priceCurrencies.set(row.securityId, row.currency as Currency);
-      }
-    }
-    for (const secId of securityIds) {
-      if (!priceForCompute.has(secId)) {
-        throw new Error(`Missing price for security ${secId} on or before ${effectiveDate}`);
+      if (!marketPrice.has(row.securityId)) {
+        marketPrice.set(row.securityId, { price: row.closePrice, currency: row.currency as Currency });
       }
     }
 
@@ -180,6 +179,25 @@ async function reconstructAndUpsert(
     for (const s of secRows) {
       if (securityIds.includes(s.id)) {
         securityMeta.set(s.id, { ticker: s.ticker, name: s.name, sector: s.gicsSector ?? null });
+      }
+    }
+
+    // Resolve a price for every position — market price where available, else
+    // the position's cost basis, so a name with no in-period price history is
+    // still valued rather than failing the whole snapshot.
+    for (const secId of securityIds) {
+      const pos = state.positions.get(secId)!;
+      const resolved = resolvePositionPrice(marketPrice.get(secId) ?? null, pos);
+      priceForCompute.set(secId, resolved.price);
+      priceCurrencies.set(secId, resolved.currency);
+      if (resolved.valuedAtCost) {
+        valuedAtCost.add(secId);
+        result.valuedAtCost.push({
+          fund: fund.slug,
+          type: disclosureType,
+          asOf: asOfMonthEnd,
+          ticker: securityMeta.get(secId)?.ticker ?? secId,
+        });
       }
     }
   }
@@ -199,6 +217,7 @@ async function reconstructAndUpsert(
     baseCurrency: fund.baseCurrency as Currency,
     date: effectiveDate,
     securityMeta,
+    valuedAtCost,
   });
 
   const payload = packageSnapshot(holdings, cashWeight, disclosureType);

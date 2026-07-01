@@ -5,6 +5,7 @@ import {
   mostRecentEligibleQuarterEnd,
   firstDayOfMonthOf,
   buildHoldings,
+  resolvePositionPrice,
   selectTop10,
   packageSnapshot,
   type HoldingRow,
@@ -96,6 +97,42 @@ describe("buildHoldings", () => {
       securityMeta: new Map(),
     });
     expect(holdings.map((h) => h.securityId)).toEqual(["big", "small"]);
+  });
+});
+
+describe("resolvePositionPrice (resilient valuation)", () => {
+  const position = { avgCostNative: new Decimal("42.5"), currency: "USD" as Currency };
+
+  it("uses the market price when one is available", () => {
+    const r = resolvePositionPrice({ price: "50", currency: "USD" }, position);
+    expect(r.price).toBe("50");
+    expect(r.currency).toBe("USD");
+    expect(r.valuedAtCost).toBe(false);
+  });
+
+  it("falls back to cost basis when no market price exists", () => {
+    const r = resolvePositionPrice(null, position);
+    expect(r.price).toBe("42.5");
+    expect(r.currency).toBe("USD");
+    expect(r.valuedAtCost).toBe(true);
+  });
+
+  it("buildHoldings flags cost-valued holdings", () => {
+    const components: NavComponents = {
+      cashByCurrency: new Map([["GBP", new Decimal(0)]]),
+      positions: new Map([["s1", pos("s1", 100)]]), // 100 @ cost 10 = 1000
+    };
+    const { holdings } = buildHoldings({
+      components,
+      prices: new Map([["s1", "10"]]), // resolved to cost upstream
+      priceCurrencies: new Map([["s1", "GBP"]]),
+      fxRates: new Map(),
+      baseCurrency: "GBP",
+      date: "2026-05-31",
+      securityMeta: new Map([["s1", { ticker: "AAA", name: "Alpha", sector: "X" }]]),
+      valuedAtCost: new Set(["s1"]),
+    });
+    expect(holdings[0].valuedAtCost).toBe(true);
   });
 });
 
