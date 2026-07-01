@@ -671,3 +671,25 @@ export const investmentMemosRelations = relations(
     transactions: many(transactions),
   })
 );
+
+// ---------------------------------------------------------------------------
+// Job runs — telemetry for scheduled/manual jobs (crons, ingests).
+// Recorded so failures surface on the admin health page instead of silently.
+// ---------------------------------------------------------------------------
+export const jobRuns = pgTable(
+  "job_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobName: text("job_name").notNull(), // e.g. "nightly", "prices", "fx"
+    status: text("status").notNull(), // "ok" | "partial" | "error"
+    startedAt: timestamp("started_at").notNull(),
+    finishedAt: timestamp("finished_at").notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    summary: jsonb("summary"), // per-job result counts
+    error: text("error"), // populated on partial/error
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    jobStartedIdx: index("job_runs_job_started_idx").on(t.jobName, t.startedAt),
+  })
+);

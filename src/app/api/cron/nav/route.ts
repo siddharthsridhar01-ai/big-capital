@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runNavSnapshot } from "@/workers/compute-nav";
 import { runYahooDividendIngest } from "@/workers/ingest-dividends-yahoo";
 import { runHoldingsReconstruction } from "@/workers/reconstruct-holdings";
+import { recordJobRun } from "@/lib/job-runs";
 
 export const maxDuration = 60;
 
@@ -29,6 +30,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
+  const startedAt = new Date();
   const out: {
     dividends?: unknown;
     nav?: unknown;
@@ -58,5 +60,12 @@ export async function GET(req: NextRequest) {
   }
 
   const status = out.errors.length > 0 ? 207 : 200;
+  await recordJobRun({
+    jobName: "nightly",
+    status: out.errors.length > 0 ? "partial" : "ok",
+    startedAt,
+    summary: { dividends: out.dividends, nav: out.nav, holdings: out.holdings },
+    error: out.errors.length > 0 ? JSON.stringify(out.errors) : null,
+  });
   return NextResponse.json({ ok: out.errors.length === 0, ...out }, { status });
 }

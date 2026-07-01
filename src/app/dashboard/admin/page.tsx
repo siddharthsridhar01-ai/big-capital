@@ -124,6 +124,32 @@ export default async function AdminPage() {
         </section>
 
         <section>
+          <SectionLabel>System health</SectionLabel>
+          <Link
+            href="/dashboard/admin/health"
+            style={{
+              display: "block",
+              background: "white",
+              border: "1px solid #D9D9D2",
+              padding: "16px 20px",
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 13,
+              color: "#0A0A0A",
+              textDecoration: "none",
+            }}
+          >
+            <div style={{ ...serif, fontSize: 15, color: "#00183A", marginBottom: 4 }}>
+              System health →
+            </div>
+            <div style={{ color: "#6B6B66" }}>
+              Status of the scheduled jobs (prices, FX, and the nightly
+              dividends/NAV/holdings run). Check here if the data looks stale — a
+              red status means a run failed.
+            </div>
+          </Link>
+        </section>
+
+        <section>
           <SectionLabel>Fund management</SectionLabel>
           <AdminFundsPanel funds={allFunds} />
         </section>
