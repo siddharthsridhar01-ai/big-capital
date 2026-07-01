@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runNavSnapshot } from "@/workers/compute-nav";
 import { runYahooDividendIngest } from "@/workers/ingest-dividends-yahoo";
 import { runHoldingsReconstruction } from "@/workers/reconstruct-holdings";
+import { runReconciliation } from "@/workers/reconcile";
 import { recordJobRun } from "@/lib/job-runs";
 
 export const maxDuration = 60;
@@ -67,5 +68,22 @@ export async function GET(req: NextRequest) {
     summary: { dividends: out.dividends, nav: out.nav, holdings: out.holdings },
     error: out.errors.length > 0 ? JSON.stringify(out.errors) : null,
   });
+
+  // 4. Reconciliation — sanity-check the data the steps above produced. Its own
+  // job_runs row so a "partial" (anomalies found) shows distinctly on health.
+  const reconStart = new Date();
+  try {
+    const recon = await runReconciliation();
+    await recordJobRun({
+      jobName: "reconcile",
+      status: recon.fails > 0 ? "error" : recon.warns > 0 ? "partial" : "ok",
+      startedAt: reconStart,
+      summary: { fundsChecked: recon.fundsChecked, securitiesChecked: recon.securitiesChecked, fails: recon.fails, warns: recon.warns },
+      error: recon.anomalies.length > 0 ? recon.anomalies.map((a) => `[${a.severity}] ${a.message}`).join(" | ") : null,
+    });
+  } catch (err) {
+    await recordJobRun({ jobName: "reconcile", status: "error", startedAt: reconStart, error: err instanceof Error ? err.message : String(err) });
+  }
+
   return NextResponse.json({ ok: out.errors.length === 0, ...out }, { status });
 }

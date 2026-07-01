@@ -18,6 +18,7 @@ const JOB_LABEL: Record<string, string> = {
   nightly: "Nightly (dividends → NAV → holdings)",
   prices: "Prices (Yahoo EOD)",
   fx: "FX (ECB)",
+  reconcile: "Reconciliation (data sanity)",
 };
 
 function ago(d: Date): string {
@@ -51,7 +52,7 @@ export default async function SystemHealthPage() {
   for (const r of runs) {
     if (!latestByJob.has(r.jobName)) latestByJob.set(r.jobName, r);
   }
-  const boardJobs = ["nightly", "prices", "fx"];
+  const boardJobs = ["nightly", "prices", "fx", "reconcile"];
 
   return (
     <main style={{ padding: "28px 32px 64px", maxWidth: 900 }}>
