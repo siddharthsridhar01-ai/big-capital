@@ -6,7 +6,7 @@
  */
 import { db } from "../db/client";
 import { funds as fundsTable, navSnapshots, prices, securities, transactions } from "../db/schema";
-import { and, eq, desc, isNotNull, inArray } from "drizzle-orm";
+import { and, eq, desc, isNotNull, inArray, gte } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { reconcileSnapshot, reconcilePriceJumps, type Anomaly, type PricePair } from "../lib/reconciliation";
 
@@ -61,15 +61,28 @@ export async function runReconciliation(): Promise<ReconciliationResult> {
       .from(securities)
       .where(inArray(securities.id, heldIds));
 
+    // Batched: one query for recent prices across all held securities, then take
+    // the latest two per security in memory (prices are daily, so a 45-day
+    // window comfortably contains today + previous close). Same comparison as
+    // before — just without a query per security.
+    const cutoff = new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 10);
+    const priceRows = await db
+      .select({ securityId: prices.securityId, close: prices.closePrice, date: prices.date })
+      .from(prices)
+      .where(and(inArray(prices.securityId, heldIds), gte(prices.date, cutoff)))
+      .orderBy(desc(prices.date));
+
+    const latestTwo = new Map<string, Array<{ close: string; date: string }>>();
+    for (const r of priceRows) {
+      const arr = latestTwo.get(r.securityId) ?? [];
+      if (arr.length < 2) arr.push({ close: r.close, date: r.date });
+      latestTwo.set(r.securityId, arr);
+    }
+
     const pairs: PricePair[] = [];
     for (const s of secRows) {
-      const p = await db
-        .select({ close: prices.closePrice })
-        .from(prices)
-        .where(eq(prices.securityId, s.id))
-        .orderBy(desc(prices.date))
-        .limit(2);
-      if (p.length === 2) {
+      const p = latestTwo.get(s.id);
+      if (p && p.length === 2) {
         securitiesChecked += 1;
         pairs.push({ ticker: s.ticker, exchange: s.exchange, today: new Decimal(p[0].close), prev: new Decimal(p[1].close) });
       }

@@ -10,6 +10,12 @@
  * Yahoo dividend `amount` is the actual per-share cash (not split-adjusted in
  * the windows we care about); no splits have occurred over the funds' life.
  *
+ * SCALING: each distinct security's dividend history is fetched from Yahoo
+ * exactly ONCE per run (not once per holding fund) and cached, and securities
+ * are loaded once. The per-fund booking logic below is unchanged — same ledger
+ * replay, same dedupe, same inserts — so the data booked is identical; only the
+ * number of network/DB round-trips drops.
+ *
  * Triggers: cron /api/cron/dividends, admin /api/admin/ingest-dividends.
  */
 import { db } from "../db/client";
@@ -20,7 +26,7 @@ import {
   fxRates,
   users,
 } from "../db/schema";
-import { and, eq, isNotNull, lte, desc } from "drizzle-orm";
+import { and, eq, isNotNull, lte, desc, inArray } from "drizzle-orm";
 import Decimal from "decimal.js";
 import YahooFinance from "yahoo-finance2";
 import { buildLedgerState, type Transaction, type Currency } from "../lib/performance";
@@ -62,33 +68,55 @@ async function getSystemUserId(): Promise<string> {
   return again[0].id;
 }
 
-async function resolveFxToBase(from: Currency, to: Currency, onOrBefore: string): Promise<string | null> {
-  if (from === to) return "1";
-  const direct = await db
-    .select({ rate: fxRates.rate })
-    .from(fxRates)
-    .where(and(eq(fxRates.fromCurrency, from), eq(fxRates.toCurrency, to), lte(fxRates.date, onOrBefore)))
-    .orderBy(desc(fxRates.date))
-    .limit(1);
-  if (direct.length > 0) return direct[0].rate;
-  const inverse = await db
-    .select({ rate: fxRates.rate })
-    .from(fxRates)
-    .where(and(eq(fxRates.fromCurrency, to), eq(fxRates.toCurrency, from), lte(fxRates.date, onOrBefore)))
-    .orderBy(desc(fxRates.date))
-    .limit(1);
-  if (inverse.length > 0) {
-    const r = new Decimal(inverse[0].rate);
-    if (r.isZero()) return null;
-    return new Decimal(1).dividedBy(r).toString();
-  }
-  return null;
+// FX lookups are read-only within a run and depend only on (from,to,date), so
+// memoising them across funds/dividends is safe and avoids repeat queries.
+function makeFxResolver() {
+  const cache = new Map<string, string | null>();
+  return async function resolveFxToBase(from: Currency, to: Currency, onOrBefore: string): Promise<string | null> {
+    if (from === to) return "1";
+    const key = `${from}|${to}|${onOrBefore}`;
+    const hit = cache.get(key);
+    if (hit !== undefined) return hit;
+
+    let out: string | null = null;
+    const direct = await db
+      .select({ rate: fxRates.rate })
+      .from(fxRates)
+      .where(and(eq(fxRates.fromCurrency, from), eq(fxRates.toCurrency, to), lte(fxRates.date, onOrBefore)))
+      .orderBy(desc(fxRates.date))
+      .limit(1);
+    if (direct.length > 0) {
+      out = direct[0].rate;
+    } else {
+      const inverse = await db
+        .select({ rate: fxRates.rate })
+        .from(fxRates)
+        .where(and(eq(fxRates.fromCurrency, to), eq(fxRates.toCurrency, from), lte(fxRates.date, onOrBefore)))
+        .orderBy(desc(fxRates.date))
+        .limit(1);
+      if (inverse.length > 0) {
+        const r = new Decimal(inverse[0].rate);
+        out = r.isZero() ? null : new Decimal(1).dividedBy(r).toString();
+      }
+    }
+    cache.set(key, out);
+    return out;
+  };
 }
 
 export interface DividendIngestOptions {
   fundSlug?: string;
   from?: string;
   to?: string;
+}
+
+interface FundCtx {
+  fund: typeof fundsTable.$inferSelect;
+  txns: Transaction[];
+  booked: Set<string>;
+  heldSecIds: string[];
+  from: string;
+  to: string;
 }
 
 export async function runYahooDividendIngest(opts: DividendIngestOptions = {}): Promise<DividendIngestResult> {
@@ -102,15 +130,17 @@ export async function runYahooDividendIngest(opts: DividendIngestOptions = {}): 
 
   const systemUserId = await getSystemUserId();
   const today = new Date().toISOString().slice(0, 10);
+  const resolveFxToBase = makeFxResolver();
 
   const fundRows = await db
     .select()
     .from(fundsTable)
     .where(opts.fundSlug ? eq(fundsTable.slug, opts.fundSlug) : eq(fundsTable.isActive, true));
 
+  // ----- Pass 1: load each fund's ledger + held securities (no network) -----
+  const fundCtxs: FundCtx[] = [];
+  const heldUnion = new Set<string>();
   for (const fund of fundRows) {
-    result.fundsProcessed += 1;
-    const baseCurrency = fund.baseCurrency as Currency;
     const from = opts.from ?? fund.inceptionDate;
     const to = opts.to ?? today;
 
@@ -136,33 +166,62 @@ export async function runYahooDividendIngest(opts: DividendIngestOptions = {}): 
     }
 
     const heldSecIds = Array.from(new Set(rawTxns.filter((t) => t.securityId).map((t) => t.securityId as string)));
-    if (heldSecIds.length === 0) continue;
-    const secRows = await db.select().from(securitiesTable).where(isNotNull(securitiesTable.id));
-    const secById = new Map(secRows.map((s) => [s.id, s]));
+    heldSecIds.forEach((id) => heldUnion.add(id));
+
+    fundCtxs.push({ fund, txns, booked, heldSecIds, from, to });
+  }
+
+  const allHeldIds = Array.from(heldUnion);
+  if (allHeldIds.length === 0) {
+    result.fundsProcessed = fundCtxs.length;
+    return result;
+  }
+
+  // Securities loaded ONCE (only those actually held).
+  const secRows = await db.select().from(securitiesTable).where(inArray(securitiesTable.id, allHeldIds));
+  const secById = new Map(secRows.map((s) => [s.id, s]));
+
+  // ----- Fetch each distinct security's dividends from Yahoo ONCE -----
+  // Widest window across funds; per-fund [from,to] filtering still happens in
+  // the booking loop below, so a superset fetch changes nothing that is booked.
+  const fetchFrom = opts.from ?? fundCtxs.reduce((min, c) => (c.from < min ? c.from : min), today);
+  const fetchTo = opts.to ?? today;
+  const divCache = new Map<string, { metaCurrency: string; dividends: Array<{ amount: number; date: Date }> }>();
+  for (const secId of allHeldIds) {
+    const sec = secById.get(secId);
+    if (!sec) continue;
+    const yahooSym = toYahooSymbol(sec.ticker, sec.exchange);
+    try {
+      const chart = await yf.chart(yahooSym, {
+        period1: fetchFrom,
+        period2: fetchTo,
+        interval: "1mo", // events (dividends) are returned regardless of bar interval; keep payload small
+        events: "div",
+      });
+      divCache.set(secId, {
+        metaCurrency: chart.meta?.currency ?? "",
+        dividends: (chart.events?.dividends ?? []) as Array<{ amount: number; date: Date }>,
+      });
+    } catch (err) {
+      result.errors.push({ scope: yahooSym, message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  // ----- Pass 2: book per fund (logic identical to the original) -----
+  for (const ctx of fundCtxs) {
+    result.fundsProcessed += 1;
+    const { fund, txns, booked, heldSecIds, from, to } = ctx;
+    const baseCurrency = fund.baseCurrency as Currency;
 
     for (const secId of heldSecIds) {
       const sec = secById.get(secId);
       if (!sec) continue;
+      const cached = divCache.get(secId);
+      if (!cached) continue; // fetch failed for this security; error already recorded
       result.securitiesChecked += 1;
-      const yahooSym = toYahooSymbol(sec.ticker, sec.exchange);
+      const metaCurrency = cached.metaCurrency;
 
-      let metaCurrency: string;
-      let dividends: Array<{ amount: number; date: Date }>;
-      try {
-        const chart = await yf.chart(yahooSym, {
-          period1: from,
-          period2: to,
-          interval: "1mo", // events (dividends) are returned regardless of bar interval; keep payload small
-          events: "div",
-        });
-        metaCurrency = chart.meta?.currency ?? "";
-        dividends = (chart.events?.dividends ?? []) as Array<{ amount: number; date: Date }>;
-      } catch (err) {
-        result.errors.push({ scope: yahooSym, message: err instanceof Error ? err.message : String(err) });
-        continue;
-      }
-
-      for (const d of dividends) {
+      for (const d of cached.dividends) {
         const exDate = new Date(d.date).toISOString().slice(0, 10);
         if (exDate < from || exDate > to) continue;
 
