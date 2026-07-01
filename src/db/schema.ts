@@ -31,7 +31,7 @@ import { relations } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "pm", "analyst"]);
 
-export const fundMemberRoleEnum = pgEnum("fund_member_role", ["pm", "analyst"]);
+export const fundMemberRoleEnum = pgEnum("fund_member_role", ["pm", "senior_analyst", "analyst"]);
 
 export const currencyEnum = pgEnum("currency", ["GBP", "USD", "EUR"]);
 

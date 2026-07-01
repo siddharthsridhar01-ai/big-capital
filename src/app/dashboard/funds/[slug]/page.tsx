@@ -226,6 +226,21 @@ export default async function FundPage({
           >
             Briefings →
           </Link>
+          <Link
+            href={`/dashboard/funds/${fund.slug}/team`}
+            style={{
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 12,
+              color: "#00183A",
+              textDecoration: "none",
+              border: "1px solid #00183A",
+              padding: "8px 14px",
+              background: "white",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Team →
+          </Link>
         </div>
       </div>
 
