@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runPriceIngest } from "@/workers/fetch-prices";
+import { runYahooEodIngest } from "@/workers/fetch-prices-yahoo";
 
 export const maxDuration = 120;
 
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
   try {
-    const result = await runPriceIngest();
+    const result = await runYahooEodIngest();
     const status = result.errors.length > 0 ? 207 : 200;
     return NextResponse.json({ ok: result.errors.length === 0, ...result }, { status });
   } catch (err) {

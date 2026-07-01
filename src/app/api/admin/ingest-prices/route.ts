@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { prices, securities, transactions } from "@/db/schema";
 import { eq, isNotNull, inArray, desc } from "drizzle-orm";
-import { runPriceIngest } from "@/workers/fetch-prices";
+import { runYahooEodIngest } from "@/workers/fetch-prices-yahoo";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   const date = url.searchParams.get("date") ?? undefined;
 
   try {
-    const ingest = await runPriceIngest(date);
+    const ingest = await runYahooEodIngest(date);
 
     // Read back: latest price per traded security, so the result is legible.
     const tradedRows = await db
