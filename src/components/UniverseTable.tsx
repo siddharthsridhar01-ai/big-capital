@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import { numeric } from "@/lib/typography";
@@ -55,6 +55,15 @@ export default function UniverseTable({
   const { quotes, lastUpdated } = useIntradayPrices(securityIds, {
     intervalMs: 30_000,
   });
+
+  // Tick once a second so "updated Ns ago" counts up between the 30s polls,
+  // rather than freezing at the value captured on the last poll. Prices refresh
+  // on the poll; this only keeps the age label live.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const h = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(h);
+  }, []);
 
   // Pre-process rows with live data attached
   const enriched = useMemo(() => {
