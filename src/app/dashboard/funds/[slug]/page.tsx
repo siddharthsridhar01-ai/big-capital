@@ -4,6 +4,7 @@ import {
   fundConstraints,
   navSnapshots,
   transactions,
+  securities as securitiesTable,
 } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
 import { eq, desc } from "drizzle-orm";
@@ -89,6 +90,25 @@ export default async function FundPage({
   // Previous close prices for held positions — for daily change display
   const heldSecurityIds = Array.from(liveState.positions.keys());
   const previousCloses = await loadPreviousClosePrices(heldSecurityIds);
+
+  // Recent portfolio activity — buys, sells, shorts, covers, and dividends.
+  const activityRows = await db
+    .select({
+      id: transactions.id,
+      type: transactions.transactionType,
+      quantity: transactions.quantity,
+      price: transactions.price,
+      currency: transactions.currency,
+      cashImpact: transactions.cashImpact,
+      executedAt: transactions.executedAt,
+      ticker: securitiesTable.ticker,
+      name: securitiesTable.name,
+    })
+    .from(transactions)
+    .leftJoin(securitiesTable, eq(transactions.securityId, securitiesTable.id))
+    .where(eq(transactions.fundId, fund.id))
+    .orderBy(desc(transactions.executedAt))
+    .limit(25);
 
   // === NAV chart data points ===
   const navPoints: { date: string; nav: number; event?: string }[] = [];
@@ -405,6 +425,58 @@ export default async function FundPage({
         />
       )}
 
+      {activityRows.length > 0 && (() => {
+        const ccySym = (c: string) => (c === "GBP" ? "£" : c === "EUR" ? "€" : "$");
+        const money = (v: number) =>
+          new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(v));
+        const ACTIVITY: Record<string, { label: string; color: string }> = {
+          buy: { label: "Long", color: "#1F5C3A" },
+          sell: { label: "Sold", color: "#7A1F1F" },
+          short: { label: "Short", color: "#7A1F1F" },
+          cover: { label: "Covered", color: "#1F5C3A" },
+          dividend: { label: "Dividend", color: "#8A6D1F" },
+          cash_deposit: { label: "Cash deposit", color: "#00183A" },
+          fx_adjustment: { label: "FX adjustment", color: "#6B6B66" },
+          corporate_action: { label: "Corporate action", color: "#6B6B66" },
+        };
+        return (
+          <section style={{ marginTop: 28 }}>
+            <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B6B66", fontWeight: 500, marginBottom: 10 }}>
+              Portfolio activity
+            </div>
+            <div style={{ border: "1px solid #E5E5DE", background: "white" }}>
+              {activityRows.map((a, i) => {
+                const meta = ACTIVITY[a.type] ?? { label: a.type, color: "#6B6B66" };
+                const cash = Number(a.cashImpact);
+                const qty = Number(a.quantity);
+                const price = Number(a.price);
+                const dateStr = new Date(a.executedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                const isDividend = a.type === "dividend";
+                return (
+                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", borderBottom: i < activityRows.length - 1 ? "1px solid #F0F0EC" : "none" }}>
+                    <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: "#9A9A8E", width: 82, flexShrink: 0 }}>{dateStr}</span>
+                    <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, fontWeight: 600, color: meta.color, width: 96, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.03em" }}>{meta.label}</span>
+                    <span style={{ ...serif, fontSize: 14, color: "#00183A", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {a.ticker ? a.ticker : "—"}{a.name ? <span style={{ color: "#9A9A8E", fontFamily: "system-ui, sans-serif", fontSize: 12 }}> · {a.name}</span> : null}
+                    </span>
+                    <span style={{ ...numeric, fontSize: 12, color: "#6B6B66", textAlign: "right", flexShrink: 0 }}>
+                      {isDividend
+                        ? `${ccySym(a.currency)}${price.toFixed(4)}/sh`
+                        : `${Math.abs(qty).toLocaleString()} @ ${ccySym(a.currency)}${money(price)}`}
+                    </span>
+                    <span style={{ ...numeric, fontSize: 13, fontWeight: 500, width: 104, textAlign: "right", flexShrink: 0, color: cash >= 0 ? "#1F5C3A" : "#7A1F1F" }}>
+                      {cash >= 0 ? "+" : "−"}{ccySym(a.currency)}{money(cash)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: "#9A9A8E", marginTop: 8 }}>
+              Cash impact shown in each trade&rsquo;s native currency. Dividends are credited automatically on the ex-date.
+            </div>
+          </section>
+        );
+      })()}
 
       <details style={{ marginTop: 28 }}>
         <summary
