@@ -137,6 +137,37 @@ export class EodhdError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Exchange code mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Translate a human-friendly / listing exchange code into the code EODHD's API
+ * expects in `TICKER.EXCHANGE` symbols. We store readable codes on securities
+ * (e.g. "NASDAQ", "NYSE") but EODHD groups all US venues under a single "US"
+ * feed, so those must be translated or the API 404s ("Symbol not found").
+ *
+ * Codes EODHD already accepts (LSE, XETRA, PA, ...) pass through unchanged.
+ * Unknown codes also pass through — a genuinely wrong code then surfaces as a
+ * visible 404 from the endpoint rather than being silently swallowed here.
+ */
+const EODHD_EXCHANGE_ALIASES: Record<string, string> = {
+  NASDAQ: "US",
+  NYSE: "US",
+  "NYSE ARCA": "US",
+  NYSEARCA: "US",
+  ARCA: "US",
+  AMEX: "US",
+  "NYSE AMERICAN": "US",
+  BATS: "US",
+  "NYSE MKT": "US",
+};
+
+export function toEodhdExchange(raw: string): string {
+  const key = raw.trim().toUpperCase();
+  return EODHD_EXCHANGE_ALIASES[key] ?? raw.trim();
+}
+
+// ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
 
@@ -256,7 +287,7 @@ export class EodhdClient {
     from?: string,
     to?: string
   ): Promise<EodPrice[]> {
-    const symbol = `${ticker}.${exchange}`;
+    const symbol = `${ticker}.${toEodhdExchange(exchange)}`;
     const params: Record<string, string> = { period: "d" };
     if (from) params.from = from;
     if (to) params.to = to;
@@ -274,7 +305,7 @@ export class EodhdClient {
     ticker: string,
     exchange: string
   ): Promise<RealTimeQuote> {
-    const symbol = `${ticker}.${exchange}`;
+    const symbol = `${ticker}.${toEodhdExchange(exchange)}`;
     return this.request(
       `/real-time/${symbol}`,
       {},
@@ -301,7 +332,7 @@ export class EodhdClient {
       params.symbols = symbols.join(",");
     }
     return this.request(
-      `/eod-bulk-last-day/${exchange}`,
+      `/eod-bulk-last-day/${toEodhdExchange(exchange)}`,
       params,
       z.array(BulkEodRowSchema)
     );
@@ -317,7 +348,7 @@ export class EodhdClient {
     from?: string,
     to?: string
   ): Promise<Dividend[]> {
-    const symbol = `${ticker}.${exchange}`;
+    const symbol = `${ticker}.${toEodhdExchange(exchange)}`;
     const params: Record<string, string> = {};
     if (from) params.from = from;
     if (to) params.to = to;
@@ -337,7 +368,7 @@ export class EodhdClient {
     from?: string,
     to?: string
   ): Promise<Split[]> {
-    const symbol = `${ticker}.${exchange}`;
+    const symbol = `${ticker}.${toEodhdExchange(exchange)}`;
     const params: Record<string, string> = {};
     if (from) params.from = from;
     if (to) params.to = to;
@@ -356,7 +387,7 @@ export class EodhdClient {
     ticker: string,
     exchange: string
   ): Promise<Fundamentals> {
-    const symbol = `${ticker}.${exchange}`;
+    const symbol = `${ticker}.${toEodhdExchange(exchange)}`;
     return this.request(
       `/fundamentals/${symbol}`,
       {},

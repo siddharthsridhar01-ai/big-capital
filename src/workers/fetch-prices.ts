@@ -20,7 +20,7 @@
 
 import { db } from "../db/client";
 import { prices, securities, transactions, investableUniverses } from "../db/schema";
-import { EodhdClient } from "../lib/eodhd";
+import { EodhdClient, toEodhdExchange } from "../lib/eodhd";
 import { sql, and, eq, isNull, isNotNull, ne } from "drizzle-orm";
 
 export interface PriceIngestResult {
@@ -47,14 +47,15 @@ export async function runPriceIngest(date?: string): Promise<PriceIngestResult> 
     .from(securities)
     .where(and(eq(securities.isActive, true), ne(securities.exchange, "INDEX")));
 
-  // Group by exchange
+  // Group by EODHD exchange code (US venues collapse into one "US" bulk call).
   const byExchange = new Map<
     string,
     Array<{ id: string; ticker: string; currency: string }>
   >();
   for (const s of targetSecurities) {
-    if (!byExchange.has(s.exchange)) byExchange.set(s.exchange, []);
-    byExchange.get(s.exchange)!.push({
+    const ex = toEodhdExchange(s.exchange);
+    if (!byExchange.has(ex)) byExchange.set(ex, []);
+    byExchange.get(ex)!.push({
       id: s.id,
       ticker: s.ticker,
       currency: s.currency,
