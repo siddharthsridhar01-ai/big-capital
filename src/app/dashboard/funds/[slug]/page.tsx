@@ -7,7 +7,8 @@ import {
   securities as securitiesTable,
 } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
+import { theses as thesesTable } from "@/db/schema-theses";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
@@ -19,6 +20,7 @@ import { computeDailyChange, computeUnrealisedPnL } from "@/lib/derived";
 import LiveHoldingsTable from "@/components/LiveHoldingsTable";
 import LiveFundHeader from "@/components/LiveFundHeader";
 import ExposuresPanel from "@/components/ExposuresPanel";
+import ActivityThesisCell, { type ThesisOption } from "@/components/ActivityThesisCell";
 
 export const dynamic = "force-dynamic";
 
@@ -100,12 +102,46 @@ export default async function FundPage({
       executedAt: transactions.executedAt,
       ticker: securitiesTable.ticker,
       name: securitiesTable.name,
+      securityId: transactions.securityId,
+      thesisId: transactions.thesisId,
+      thesisTitle: thesesTable.summary,
     })
     .from(transactions)
     .leftJoin(securitiesTable, eq(transactions.securityId, securitiesTable.id))
+    .leftJoin(thesesTable, eq(transactions.thesisId, thesesTable.id))
     .where(eq(transactions.fundId, fund.id))
     .orderBy(desc(transactions.executedAt))
     .limit(25);
+
+  // Active theses for the securities that appear in the activity feed, so an
+  // unlinked trade can be attached to an existing thesis in one click.
+  const activitySecurityIds = Array.from(
+    new Set(activityRows.map((a) => a.securityId).filter((x): x is string => !!x))
+  );
+  const thesisOptionRows =
+    activitySecurityIds.length > 0
+      ? await db
+          .select({
+            id: thesesTable.id,
+            title: thesesTable.summary,
+            securityId: thesesTable.securityId,
+          })
+          .from(thesesTable)
+          .where(
+            and(
+              eq(thesesTable.fundId, fund.id),
+              eq(thesesTable.status, "active"),
+              inArray(thesesTable.securityId, activitySecurityIds)
+            )
+          )
+      : [];
+  const thesisOptionsBySecurity = new Map<string, ThesisOption[]>();
+  for (const t of thesisOptionRows) {
+    if (!t.securityId) continue;
+    const list = thesisOptionsBySecurity.get(t.securityId) ?? [];
+    list.push({ id: t.id, title: t.title });
+    thesisOptionsBySecurity.set(t.securityId, list);
+  }
 
   // === NAV chart data points ===
   const navPoints: { date: string; nav: number; event?: string }[] = [];
@@ -423,6 +459,17 @@ export default async function FundPage({
                     </span>
                     <span style={{ ...numeric, fontSize: 13, fontWeight: 500, width: 104, textAlign: "right", flexShrink: 0, color: cash >= 0 ? "#1F5C3A" : "#7A1F1F" }}>
                       {cash >= 0 ? "+" : "−"}{ccySym(a.currency)}{money(cash)}
+                    </span>
+                    <span style={{ width: 240, flexShrink: 0, textAlign: "right", display: "flex", justifyContent: "flex-end" }}>
+                      <ActivityThesisCell
+                        fundSlug={fund.slug}
+                        txId={a.id}
+                        linkedThesisId={a.thesisId ?? null}
+                        linkedThesisTitle={a.thesisTitle ?? null}
+                        linkable={a.type === "buy" || a.type === "sell" || a.type === "short" || a.type === "cover"}
+                        securityId={a.securityId ?? null}
+                        options={a.securityId ? thesisOptionsBySecurity.get(a.securityId) ?? [] : []}
+                      />
                     </span>
                   </div>
                 );
