@@ -25,10 +25,12 @@ export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ slug: string; securityKey: string }>;
+  searchParams: Promise<{ side?: string; qty?: string }>;
 }
 
-export default async function FundSecurityPage({ params }: PageProps) {
+export default async function FundSecurityPage({ params, searchParams }: PageProps) {
   const { slug, securityKey } = await params;
+  const { side: sideParam, qty: qtyParam } = await searchParams;
   const user = await getOrCreateUser();
   if (!user) redirect("/sign-in");
 
@@ -461,6 +463,12 @@ export default async function FundSecurityPage({ params }: PageProps) {
                   grossExposure: portfolioState.grossExposure.toString(),
                   netExposure: portfolioState.netExposure.toString(),
                 }}
+                initialSide={
+                  sideParam === "buy" || sideParam === "sell" || sideParam === "short" || sideParam === "cover"
+                    ? sideParam
+                    : undefined
+                }
+                initialShares={qtyParam && /^\d+(\.\d+)?$/.test(qtyParam) ? qtyParam : undefined}
               />
             )}
           </div>

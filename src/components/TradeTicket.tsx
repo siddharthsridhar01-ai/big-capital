@@ -49,6 +49,9 @@ export interface TradeTicketProps {
     grossExposure: string; // 0..N, only relevant for L/S
     netExposure: string; // -1..1, only relevant for L/S
   };
+  /** Optional pre-fill (e.g. from a "Close position" action on the holdings table). */
+  initialSide?: "buy" | "sell" | "short" | "cover";
+  initialShares?: string;
 }
 
 interface UploadedMemo {
@@ -191,11 +194,13 @@ export default function TradeTicket(props: TradeTicketProps) {
     latestPrice,
     fxRateToBase,
     portfolioSnapshot,
+    initialSide,
+    initialShares,
   } = props;
 
   // ===== State =====
-  const [side, setSide] = useState<Side>("buy");
-  const [sharesInput, setSharesInput] = useState<string>("");
+  const [side, setSide] = useState<Side>(initialSide ?? "buy");
+  const [sharesInput, setSharesInput] = useState<string>(initialShares ?? "");
   const [rationale, setRationale] = useState<string>("");
   const [uploadedMemo, setUploadedMemo] = useState<UploadedMemo | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);

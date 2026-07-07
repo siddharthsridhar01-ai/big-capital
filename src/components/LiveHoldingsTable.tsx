@@ -151,6 +151,7 @@ export default function LiveHoldingsTable({
               "Mkt value",
               "Unrealised P/L",
               "Weight",
+              "",
             ].map((h) => (
               <th
                 key={h}
@@ -367,6 +368,46 @@ export default function LiveHoldingsTable({
                 >
                   {weight.toFixed(2)}%
                 </td>
+                {(() => {
+                  const qtyNum = new Decimal(p.quantity);
+                  const isLong = qtyNum.gt(0);
+                  const absQty = qtyNum.abs().toString();
+                  const base = `/dashboard/funds/${fundSlug}/securities/${p.ticker}-${p.exchange.replace(/ /g, "_")}`;
+                  const addSide = isLong ? "buy" : "short";
+                  const reduceSide = isLong ? "sell" : "cover";
+                  const linkStyle: React.CSSProperties = {
+                    fontFamily: "system-ui, sans-serif",
+                    fontSize: 11,
+                    textDecoration: "none",
+                    padding: "2px 6px",
+                  };
+                  return (
+                    <td
+                      style={{
+                        padding: "10px 14px",
+                        borderBottom: "1px solid #F0EFEA",
+                        textAlign: "right",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      <Link href={`${base}?side=${addSide}`} style={{ ...linkStyle, color: "#1F5C3A" }} title="Add to position">
+                        Add
+                      </Link>
+                      <span style={{ color: "#D9D9D2" }}>·</span>
+                      <Link href={`${base}?side=${reduceSide}`} style={{ ...linkStyle, color: "#6B6B66" }} title="Trim position">
+                        Trim
+                      </Link>
+                      <span style={{ color: "#D9D9D2" }}>·</span>
+                      <Link
+                        href={`${base}?side=${reduceSide}&qty=${absQty}`}
+                        style={{ ...linkStyle, color: "#7A1F1F", fontWeight: 600 }}
+                        title="Close entire position (pre-fills a full exit to review)"
+                      >
+                        Close
+                      </Link>
+                    </td>
+                  );
+                })()}
               </tr>
             );
           })}
