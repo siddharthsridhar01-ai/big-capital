@@ -110,6 +110,31 @@ export default function LiveHoldingsTable({
     document.title = `${baseSym}${fmtMoney(liveNav.toNumber())} · BIG Capital`;
   }
 
+  // Portfolio-level P&L: sum unrealised P/L and today's £ move across positions.
+  const pnlSummary = useMemo(() => {
+    let unrealised = new Decimal(0);
+    let costBasis = new Decimal(0);
+    let dayPnl = new Decimal(0);
+    for (const p of positions) {
+      const live = quotes.get(p.securityId);
+      const price = live?.price != null ? new Decimal(live.price) : p.latestPriceNative ? new Decimal(p.latestPriceNative) : null;
+      if (!price) continue;
+      const qty = new Decimal(p.quantity); // signed
+      const fx = new Decimal(p.latestFxToBase);
+      const avg = new Decimal(p.avgCostNative);
+      // Unrealised: (price - avg) * qty * fx  (signed qty makes shorts work)
+      unrealised = unrealised.plus(price.minus(avg).times(qty).times(fx));
+      costBasis = costBasis.plus(avg.times(qty.abs()).times(fx));
+      // Day: (price - prevClose) * qty * fx
+      const prev = live?.previousClose ?? (p.previousCloseNative ? Number(p.previousCloseNative) : null);
+      if (prev != null && prev > 0) {
+        dayPnl = dayPnl.plus(price.minus(prev).times(qty).times(fx));
+      }
+    }
+    const returnPct = costBasis.isZero() ? new Decimal(0) : unrealised.dividedBy(costBasis).times(100);
+    return { unrealised, returnPct, dayPnl };
+  }, [positions, quotes]);
+
   return (
     <div
       style={{
@@ -138,6 +163,47 @@ export default function LiveHoldingsTable({
           error={error}
         />
       </div>
+
+      {/* Portfolio P&L summary */}
+      {(() => {
+        const u = pnlSummary.unrealised;
+        const d = pnlSummary.dayPnl;
+        const pill = (label: string, amount: Decimal, pct?: Decimal) => {
+          const up = amount.gt(0);
+          const down = amount.lt(0);
+          const color = up ? "#1F5C3A" : down ? "#7A1F1F" : "#6B6B66";
+          const sign = up ? "+" : down ? "−" : "";
+          return (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <span style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: "#6B6B66" }}>{label}</span>
+              <span style={{ ...numericStyle, fontSize: 14, color, fontWeight: 600 }}>
+                {sign}{baseSym}{fmtMoney(amount.abs().toNumber())}
+                {pct !== undefined && (
+                  <span style={{ fontSize: 11, fontWeight: 500, marginLeft: 5 }}>
+                    ({sign}{pct.abs().toFixed(2)}%)
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        };
+        return (
+          <div
+            style={{
+              display: "flex",
+              gap: 32,
+              padding: "10px 20px",
+              borderBottom: "1px solid #F0EFEA",
+              background: "#FCFCFA",
+              flexWrap: "wrap",
+            }}
+          >
+            {pill("Unrealised P/L", u, pnlSummary.returnPct)}
+            {pill("Day P/L", d)}
+          </div>
+        );
+      })()}
+
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
