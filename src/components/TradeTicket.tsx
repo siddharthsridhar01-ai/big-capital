@@ -155,22 +155,6 @@ function fmtShares(d: Decimal): string {
  * given the latest constraint check result and the set of constraint types
  * that would map to that row.
  */
-function toneForRow(
-  check: ConstraintCheck | null,
-  constraintTypes: string[]
-): "ok" | "soft" | "hard" | undefined {
-  if (!check) return undefined;
-  const hardHit = check.hardViolations.some((v) =>
-    constraintTypes.includes(v.constraintType)
-  );
-  if (hardHit) return "hard";
-  const softHit = check.softViolations.some((v) =>
-    constraintTypes.includes(v.constraintType)
-  );
-  if (softHit) return "soft";
-  return undefined;
-}
-
 /**
  * Compact display name for GICS sectors. Most fit fine as-is; the very long
  * ones get abbreviated so they don't break the projection-row layout.
@@ -893,32 +877,6 @@ export default function TradeTicket(props: TradeTicketProps) {
           inKeystrokePause={inKeystrokePause}
           liveUpdatedAt={liveUpdatedAt}
         />
-        {/* Live readouts */}
-        <div
-          style={{
-            marginTop: 12,
-            padding: "10px 14px",
-            background: "#FAFAF7",
-            border: "1px solid #E5E5DE",
-            fontSize: 12,
-            color: "#6B6B66",
-            display: "flex",
-            gap: 24,
-            justifyContent: "space-between",
-            alignItems: "baseline",
-          }}
-        >
-          <span>Notional</span>
-          <span style={{ ...numeric, color: size ? "#00183A" : "#9A9A8E" }}>
-            {size
-              ? fmtMoney(size.notionalBase, fund.baseCurrency)
-              : "—"}
-          </span>
-          <span>Weight</span>
-          <span style={{ ...numeric, color: size ? "#00183A" : "#9A9A8E" }}>
-            {size ? fmtPct(size.weightTarget) : "—"}
-          </span>
-        </div>
         {/* Quick size — clickable, context-aware (reduce vs open) */}
         {(() => {
           const isReducing =
@@ -988,6 +946,74 @@ export default function TradeTicket(props: TradeTicketProps) {
           );
         })()}
       </Section>
+
+      {/* ORDER PREVIEW — one compact block: what this order does + its effect.
+          Replaces the old separate Notional readout / Portfolio projection /
+          Execution detail sections. View-only; all trade logic is unchanged. */}
+      {projection && size && priceBase && (
+        <Section label="Order preview">
+          <div style={{ border: "1px solid #E5E5DE", borderRadius: 8, background: "#FAFAF7", overflow: "hidden" }}>
+            <div style={{ padding: "11px 14px", borderBottom: "1px solid #E5E5DE", fontSize: 14, color: "#00183A" }}>
+              {side === "buy" ? "Buy" : side === "sell" ? "Sell" : side === "short" ? "Short" : "Cover"}{" "}
+              <span style={{ fontWeight: 500 }}>{fmtShares(size.shares)}</span> {security.ticker} @{" "}
+              <span style={{ ...numeric }}>{fmtMoney(priceNative ?? new Decimal(0), security.currency)}</span>{" "}
+              <span style={{ color: "#9A9A8E", fontSize: 12 }}>
+                market
+                {security.currency !== fund.baseCurrency
+                  ? ` · ≈ ${fmtMoney(priceBase, fund.baseCurrency)} after FX`
+                  : ""}
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+              <div style={{ padding: "9px 14px", borderBottom: "1px solid #EEEDE7", borderRight: "1px solid #EEEDE7", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontSize: 12, color: "#6B6B66" }}>Notional</span>
+                <span style={{ ...numeric, fontSize: 12, color: "#00183A" }}>{fmtMoney(projection.tradeNotionalBase, fund.baseCurrency)}</span>
+              </div>
+              <div style={{ padding: "9px 14px", borderBottom: "1px solid #EEEDE7", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontSize: 12, color: "#6B6B66" }}>Fee ({fund.tradingFeesBps} bps)</span>
+                <span style={{ ...numeric, fontSize: 12, color: "#00183A" }}>{fmtMoney(projection.feeBase, fund.baseCurrency)}</span>
+              </div>
+              <div style={{ padding: "9px 14px", borderRight: "1px solid #EEEDE7", display: "flex", justifyContent: "space-between", gap: 8, borderBottom: estRealisedPnl ? "none" : "none" }}>
+                <span style={{ fontSize: 12, color: "#6B6B66" }}>Cash impact</span>
+                <span style={{ ...numeric, fontSize: 12, color: projection.totalCashImpact.isNegative() ? "#7A1F1F" : "#1F5C3A" }}>
+                  {projection.totalCashImpact.isNegative() ? "−" : "+"}
+                  {fmtMoney(projection.totalCashImpact.abs(), fund.baseCurrency)}
+                </span>
+              </div>
+              <div style={{ padding: "9px 14px", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                {estRealisedPnl ? (
+                  <>
+                    <span style={{ fontSize: 12, color: "#6B6B66" }}>Realised P/L{estRealisedPnl.fullClose ? "" : " (partial)"}</span>
+                    <span style={{ ...numeric, fontSize: 12, color: estRealisedPnl.amountBase.isNegative() ? "#7A1F1F" : "#1F5C3A" }}>
+                      {estRealisedPnl.amountBase.isNegative() ? "−" : "+"}
+                      {fmtMoney(estRealisedPnl.amountBase.abs(), fund.baseCurrency)} ({estRealisedPnl.amountBase.isNegative() ? "−" : "+"}
+                      {estRealisedPnl.returnPct.abs().toFixed(1)}%)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 12, color: "#6B6B66" }}>Order type</span>
+                    <span style={{ fontSize: 12, color: "#00183A" }}>Market</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div style={{ padding: "9px 14px", borderTop: "1px solid #E5E5DE", fontSize: 11, color: "#6B6B66", ...numeric }}>
+              {security.ticker} {fmtPct(currentWeight)} → <span style={{ color: "#00183A" }}>{fmtPctSigned(projection.newPositionWeightSigned)}</span>
+              {"  ·  "}
+              {shortSectorLabel(security.gicsSector)} {fmtPct(new Decimal(portfolioSnapshot.currentSectorWeight))} → <span style={{ color: "#00183A" }}>{fmtPct(projection.newSectorWeight)}</span>
+              {"  ·  "}
+              Cash {fmtPct(cash.dividedBy(nav.isZero() ? new Decimal(1) : nav))} → <span style={{ color: "#00183A" }}>{fmtPct(projection.newCashPct)}</span>
+              {fund.isLongShort && (
+                <>
+                  {"  ·  "}
+                  Net {fmtPct(new Decimal(portfolioSnapshot.netExposure))}
+                </>
+              )}
+            </div>
+          </div>
+        </Section>
+      )}
 
       {/* THESIS (Phase 2c) */}
       <Section label="Investment thesis">
@@ -1099,112 +1125,9 @@ export default function TradeTicket(props: TradeTicketProps) {
         </div>
       </Section>
 
-      {/* PROJECTION */}
+      {/* SHORT-FEE + COMPLIANCE (projection now shown in Order preview above) */}
       {projection && size && priceBase && (
         <>
-          <Section label="Portfolio projection">
-            <ProjectionTable>
-              <ProjectionRow
-                label={`${security.ticker} position`}
-                before={fmtPct(currentWeight)}
-                after={fmtPctSigned(projection.newPositionWeightSigned)}
-                tone={toneForRow(constraintCheck, [
-                  "max_position_pct",
-                  "long_only",
-                  "universe_only",
-                ])}
-              />
-              <ProjectionRow
-                label={`${shortSectorLabel(security.gicsSector)} exposure`}
-                before={fmtPct(
-                  new Decimal(portfolioSnapshot.currentSectorWeight)
-                )}
-                after={fmtPct(projection.newSectorWeight)}
-                tone={toneForRow(constraintCheck, ["max_single_sector_pct"])}
-              />
-              <ProjectionRow
-                label="Cash"
-                before={fmtPct(
-                  cash.dividedBy(nav.isZero() ? new Decimal(1) : nav)
-                )}
-                after={fmtPct(projection.newCashPct)}
-                tone={toneForRow(constraintCheck, [
-                  "min_cash_pct",
-                  "max_cash_pct",
-                ])}
-              />
-              <ProjectionRow
-                label="Position count"
-                before={String(portfolioSnapshot.positionCount)}
-                after={String(
-                  currentQty.isZero() && (side === "buy" || side === "short")
-                    ? portfolioSnapshot.positionCount + 1
-                    : projection.newPositionShares.isZero()
-                      ? portfolioSnapshot.positionCount - 1
-                      : portfolioSnapshot.positionCount
-                )}
-                tone={toneForRow(constraintCheck, ["max_position_count"])}
-              />
-              {fund.isLongShort && (
-                <>
-                  <ProjectionRow
-                    label="Gross exposure"
-                    before={fmtPct(
-                      new Decimal(portfolioSnapshot.grossExposure)
-                    )}
-                    after={fmtPct(
-                      new Decimal(portfolioSnapshot.grossExposure)
-                    )}
-                    tone={toneForRow(constraintCheck, ["max_gross_exposure"])}
-                  />
-                  <ProjectionRow
-                    label="Net exposure"
-                    before={fmtPct(new Decimal(portfolioSnapshot.netExposure))}
-                    after={fmtPct(new Decimal(portfolioSnapshot.netExposure))}
-                    tone={toneForRow(constraintCheck, ["max_net_exposure"])}
-                  />
-                </>
-              )}
-            </ProjectionTable>
-          </Section>
-
-          <Section label="Execution detail">
-            <ProjectionTable>
-              <ExecRow label="Trade type" value={side.toUpperCase()} />
-              <ExecRow
-                label="Quantity"
-                value={`${fmtShares(size.shares)} shares`}
-              />
-              <ExecRow
-                label="Price (last close)"
-                value={`${fmtMoney(priceNative ?? new Decimal(0), security.currency)}${
-                  security.currency !== fund.baseCurrency
-                    ? ` (≈ ${fmtMoney(priceBase, fund.baseCurrency)} after FX)`
-                    : ""
-                }`}
-              />
-              <ExecRow
-                label="Notional"
-                value={fmtMoney(projection.tradeNotionalBase, fund.baseCurrency)}
-              />
-              <ExecRow
-                label={`Trading fee (${fund.tradingFeesBps} bps)`}
-                value={fmtMoney(projection.feeBase, fund.baseCurrency)}
-              />
-              <ExecRow
-                label="Total cash impact"
-                value={`${projection.totalCashImpact.isNegative() ? "−" : "+"}${fmtMoney(projection.totalCashImpact, fund.baseCurrency)}`}
-                emphasis
-              />
-              {estRealisedPnl && (
-                <ExecRow
-                  label={estRealisedPnl.fullClose ? "Est. realised P/L (full close)" : "Est. realised P/L (partial)"}
-                  value={`${estRealisedPnl.amountBase.isNegative() ? "−" : "+"}${fmtMoney(estRealisedPnl.amountBase.abs(), fund.baseCurrency)} (${estRealisedPnl.amountBase.isNegative() ? "−" : "+"}${estRealisedPnl.returnPct.abs().toFixed(2)}%)`}
-                />
-              )}
-            </ProjectionTable>
-          </Section>
-
           {/* SHORT BORROW FEE DISCLOSURE — only when opening/adding to a short */}
           {side === "short" && (
             <Section label="Short position cost (borrow fee)">
@@ -2101,61 +2024,6 @@ function ViolationCard({
         >
           {violation.message}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function ProjectionRow({
-  label,
-  before,
-  after,
-  tone,
-}: {
-  label: string;
-  before: string;
-  after: string;
-  tone?: "ok" | "soft" | "hard";
-}) {
-  const toneStyle =
-    tone === "hard"
-      ? { background: "#FAEAEA", borderLeft: "3px solid #7A1F1F" }
-      : tone === "soft"
-        ? { background: "#FBF3E5", borderLeft: "3px solid #C9A14A" }
-        : {};
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 80px 24px 80px",
-        alignItems: "center",
-        padding: "8px 14px",
-        paddingLeft: tone ? 11 : 14,
-        borderBottom: "1px solid #E5E5DE",
-        ...toneStyle,
-      }}
-    >
-      <div style={{ color: "#6B6B66" }}>{label}</div>
-      <div
-        style={{
-          textAlign: "right",
-          ...numeric,
-          color: "#9A9A8E",
-        }}
-      >
-        {before}
-      </div>
-      <div style={{ textAlign: "center", color: "#9A9A8E", fontSize: 10 }}>
-        →
-      </div>
-      <div
-        style={{
-          textAlign: "right",
-          ...numeric,
-          color: "#00183A",
-        }}
-      >
-        {after}
       </div>
     </div>
   );
