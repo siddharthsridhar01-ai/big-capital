@@ -12,7 +12,7 @@ import {
 import { useMemo, useState } from "react";
 import { serif, numeric } from "@/lib/typography";
 
-interface NavPoint {
+export interface NavPoint {
   date: string; // YYYY-MM-DD
   nav: number;
   /** Optional label for tooltip (e.g. "Buy 5 SHEL", "Inception"). */

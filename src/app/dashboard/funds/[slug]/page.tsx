@@ -17,8 +17,7 @@ import {
 } from "@/lib/portfolio";
 import { computeDailyChange, computeUnrealisedPnL } from "@/lib/derived";
 import LiveHoldingsTable from "@/components/LiveHoldingsTable";
-import LiveNavCards from "@/components/LiveNavCards";
-import NavChart from "@/components/NavChart";
+import LiveFundHeader from "@/components/LiveFundHeader";
 import ExposuresPanel from "@/components/ExposuresPanel";
 
 export const dynamic = "force-dynamic";
@@ -83,7 +82,6 @@ export default async function FundPage({
 
   // Live portfolio state computed from the transactions ledger
   const liveState = await computePortfolioState(fund.id);
-  const liveNavBase = liveState.navBase.toNumber();
   const liveCashBase = liveState.cashBase.toNumber();
 
   // Previous close prices for held positions — for daily change display
@@ -263,49 +261,29 @@ export default async function FundPage({
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-          gap: 1,
-          background: "#D9D9D2",
-          border: "1px solid #D9D9D2",
-          marginTop: 28,
-          marginBottom: 28,
-        }}
-      >
-        <LiveNavCards
-          currencySymbol={currencySymbol}
-          initialNavBase={liveState.navBase.toString()}
-          startingNav={startingNav}
-          cashBase={liveCashBase}
-          holdingsCount={liveState.positions.size}
-          holdingsSub={
-            liveState.positions.size === 0 ? "No positions yet" : `${liveState.positions.size} open`
-          }
-          constraintsCount={dedupedConstraints.length}
-          constraintsSub={`${dedupedConstraints.filter((c) => c.isHard).length} hard, ${dedupedConstraints.filter((c) => !c.isHard).length} soft`}
-          snapshotDate={latestNav.length > 0 ? latestNav[0].date : null}
-          positions={Array.from(liveState.positions.values()).map((p) => ({
-            securityId: p.securityId,
-            quantity: p.quantity.toString(),
-            latestPriceNative: p.latestPriceNative ? p.latestPriceNative.toString() : null,
-            latestFxToBase: p.latestFxToBase.toString(),
-          }))}
-        />
-      </div>
-
-      {/* NAV chart since inception */}
-      <div style={{ marginBottom: 28 }}>
-        <NavChart
-          fundName={fund.name}
-          fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
-          startingNav={startingNav}
-          inceptionDate={inceptionStr}
-          points={navPoints}
-          liveNav={liveNavBase}
-        />
-      </div>
+      <LiveFundHeader
+        currencySymbol={currencySymbol}
+        baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
+        initialNavBase={liveState.navBase.toString()}
+        startingNav={startingNav}
+        cashBase={liveCashBase}
+        holdingsCount={liveState.positions.size}
+        holdingsSub={
+          liveState.positions.size === 0 ? "No positions yet" : `${liveState.positions.size} open`
+        }
+        constraintsCount={dedupedConstraints.length}
+        constraintsSub={`${dedupedConstraints.filter((c) => c.isHard).length} hard, ${dedupedConstraints.filter((c) => !c.isHard).length} soft`}
+        snapshotDate={latestNav.length > 0 ? latestNav[0].date : null}
+        positions={Array.from(liveState.positions.values()).map((p) => ({
+          securityId: p.securityId,
+          quantity: p.quantity.toString(),
+          latestPriceNative: p.latestPriceNative ? p.latestPriceNative.toString() : null,
+          latestFxToBase: p.latestFxToBase.toString(),
+        }))}
+        fundName={fund.name}
+        inceptionDate={inceptionStr}
+        navPoints={navPoints}
+      />
 
       <ExposuresPanel
         baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
