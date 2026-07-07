@@ -919,52 +919,74 @@ export default function TradeTicket(props: TradeTicketProps) {
             {size ? fmtPct(size.weightTarget) : "—"}
           </span>
         </div>
-        {/* Sizing hints */}
-        {sizingHints && sizingHints.onePct > 0 && (
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 11,
-              color: "#9A9A8E",
-              display: "flex",
-              gap: 14,
-              alignItems: "baseline",
-            }}
-          >
-            <span
+        {/* Quick size — clickable, context-aware (reduce vs open) */}
+        {(() => {
+          const isReducing =
+            (side === "sell" && currentQty.gt(0)) ||
+            (side === "cover" && currentQty.lt(0));
+          const absPos = currentQty.abs();
+          const setShares = (n: number) => {
+            setSharesInput(String(Math.max(0, Math.round(n))));
+            setLastKeystrokeAt(Date.now());
+          };
+          const chip = (label: string, onClick: () => void, emphasis = false) => (
+            <button
+              key={label}
+              type="button"
+              onClick={onClick}
               style={{
-                fontSize: 10,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
+                fontFamily: "system-ui, sans-serif",
+                fontSize: 12,
+                padding: "4px 12px",
+                border: `1px solid ${emphasis ? "#7A1F1F" : "#D9D9D2"}`,
+                background: "white",
+                color: emphasis ? "#7A1F1F" : "#00183A",
+                cursor: "pointer",
+                borderRadius: 2,
+                fontWeight: emphasis ? 600 : 400,
               }}
             >
-              For reference
-            </span>
-            <span>
-              1% ≈{" "}
-              <span style={{ ...numeric, color: "#6B6B66" }}>
-                {sizingHints.onePct.toLocaleString()}
-              </span>{" "}
-              shares
-            </span>
-            <span>·</span>
-            <span>
-              5% ≈{" "}
-              <span style={{ ...numeric, color: "#6B6B66" }}>
-                {sizingHints.fivePct.toLocaleString()}
-              </span>{" "}
-              shares
-            </span>
-            <span>·</span>
-            <span>
-              10% ≈{" "}
-              <span style={{ ...numeric, color: "#6B6B66" }}>
-                {sizingHints.tenPct.toLocaleString()}
-              </span>{" "}
-              shares
-            </span>
-          </div>
-        )}
+              {label}
+            </button>
+          );
+          return (
+            <div
+              style={{
+                marginTop: 10,
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  color: "#9A9A8E",
+                  marginRight: 4,
+                }}
+              >
+                Quick size
+              </span>
+              {isReducing && absPos.gt(0)
+                ? [
+                    chip("25%", () => setShares(absPos.times(0.25).toNumber())),
+                    chip("50%", () => setShares(absPos.times(0.5).toNumber())),
+                    chip("75%", () => setShares(absPos.times(0.75).toNumber())),
+                    chip("Close all", () => setShares(absPos.toNumber()), true),
+                  ]
+                : sizingHints && sizingHints.onePct > 0
+                  ? [
+                      chip("1% NAV", () => setShares(sizingHints.onePct)),
+                      chip("5% NAV", () => setShares(sizingHints.fivePct)),
+                      chip("10% NAV", () => setShares(sizingHints.tenPct)),
+                    ]
+                  : null}
+            </div>
+          );
+        })()}
       </Section>
 
       {/* THESIS (Phase 2c) */}
