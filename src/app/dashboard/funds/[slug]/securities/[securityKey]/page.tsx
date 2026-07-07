@@ -458,6 +458,9 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
                   cashBalance: portfolioState.cashBase.toString(),
                   currentPositionWeight: currentPositionWeight.toString(),
                   currentPositionQuantity: currentPositionQuantity.toString(),
+                  currentPositionAvgCostNative: livePosition
+                    ? livePosition.avgCostNative.toString()
+                    : undefined,
                   currentSectorWeight: currentSectorWeight.toString(),
                   positionCount: portfolioState.positions.size,
                   grossExposure: portfolioState.grossExposure.toString(),

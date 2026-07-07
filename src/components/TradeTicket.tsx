@@ -44,6 +44,7 @@ export interface TradeTicketProps {
     cashBalance: string; // current cash in base ccy
     currentPositionWeight: string; // 0..1, this security's current weight
     currentPositionQuantity: string; // shares (signed, negative for short)
+    currentPositionAvgCostNative?: string; // avg cost in security ccy (for realised P/L preview)
     currentSectorWeight: string; // 0..1, current sector weight
     positionCount: number;
     grossExposure: string; // 0..N, only relevant for L/S
@@ -427,6 +428,30 @@ export default function TradeTicket(props: TradeTicketProps) {
   // ===== Memo requirement logic =====
   const isOpeningPosition =
     currentQty.isZero() && (side === "buy" || side === "short");
+
+  // Estimated realised P/L when this trade reduces/closes an existing position.
+  // Only the closing portion realises P/L (shares that offset the current
+  // holding). Long being sold: (price − avgCost) × qtyClosed × fx. Short being
+  // covered: (avgCost − price) × qtyClosed × fx. Shown as a preview only — the
+  // authoritative figure is booked server-side from the ledger on execution.
+  const estRealisedPnl = useMemo(() => {
+    if (!size || !priceNative) return null;
+    const avgStr = portfolioSnapshot.currentPositionAvgCostNative;
+    if (!avgStr) return null;
+    const isReducingLong = side === "sell" && currentQty.gt(0);
+    const isReducingShort = side === "cover" && currentQty.lt(0);
+    if (!isReducingLong && !isReducingShort) return null;
+    const avg = new Decimal(avgStr);
+    const qtyClosed = Decimal.min(size.shares, currentQty.abs());
+    if (qtyClosed.lte(0)) return null;
+    const perShare = isReducingLong ? priceNative.minus(avg) : avg.minus(priceNative);
+    const amountBase = perShare.times(qtyClosed).times(fx);
+    const costBasisBase = avg.times(qtyClosed).times(fx);
+    const returnPct = costBasisBase.isZero() ? new Decimal(0) : amountBase.dividedBy(costBasisBase).times(100);
+    const fullClose = qtyClosed.equals(currentQty.abs());
+    return { amountBase, returnPct, qtyClosed, fullClose };
+  }, [size, priceNative, fx, side, currentQty, portfolioSnapshot.currentPositionAvgCostNative]);
+
   // Phase 2c: the *thesis* now owns the deep investment memo (and opening a
   // position requires a thesis — see thesis section below). The per-trade
   // memo PDF therefore becomes always-optional supplementary research rather
@@ -1149,6 +1174,12 @@ export default function TradeTicket(props: TradeTicketProps) {
                 value={`${projection.totalCashImpact.isNegative() ? "−" : "+"}${fmtMoney(projection.totalCashImpact, fund.baseCurrency)}`}
                 emphasis
               />
+              {estRealisedPnl && (
+                <ExecRow
+                  label={estRealisedPnl.fullClose ? "Est. realised P/L (full close)" : "Est. realised P/L (partial)"}
+                  value={`${estRealisedPnl.amountBase.isNegative() ? "−" : "+"}${fmtMoney(estRealisedPnl.amountBase.abs(), fund.baseCurrency)} (${estRealisedPnl.amountBase.isNegative() ? "−" : "+"}${estRealisedPnl.returnPct.abs().toFixed(2)}%)`}
+                />
+              )}
             </ProjectionTable>
           </Section>
 
