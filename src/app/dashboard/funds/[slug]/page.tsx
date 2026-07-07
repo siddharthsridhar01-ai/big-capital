@@ -17,6 +17,7 @@ import {
 } from "@/lib/portfolio";
 import { computeDailyChange, computeUnrealisedPnL } from "@/lib/derived";
 import LiveHoldingsTable from "@/components/LiveHoldingsTable";
+import LiveNavCards from "@/components/LiveNavCards";
 import NavChart from "@/components/NavChart";
 import ExposuresPanel from "@/components/ExposuresPanel";
 
@@ -84,8 +85,6 @@ export default async function FundPage({
   const liveState = await computePortfolioState(fund.id);
   const liveNavBase = liveState.navBase.toNumber();
   const liveCashBase = liveState.cashBase.toNumber();
-  const liveSinceInceptionPct =
-    ((liveNavBase - startingNav) / startingNav) * 100;
 
   // Previous close prices for held positions — for daily change display
   const heldSecurityIds = Array.from(liveState.positions.keys());
@@ -275,44 +274,24 @@ export default async function FundPage({
           marginBottom: 28,
         }}
       >
-        <MetricCard
-          label="Fund value"
-          value={`${currencySymbol}${fmt(liveNavBase)}`}
-          sub={`Started ${currencySymbol}${fmt(startingNav)}`}
-        />
-        <MetricCard
-          label="Since inception"
-          value={`${liveSinceInceptionPct >= 0 ? "+" : ""}${liveSinceInceptionPct.toFixed(2)}%`}
-          sub="vs benchmark TBD"
-          valueColor={liveSinceInceptionPct >= 0 ? "#1F5C3A" : "#7A1F1F"}
-        />
-        <MetricCard
-          label="Holdings"
-          value={String(liveState.positions.size)}
-          sub={
-            liveState.positions.size === 0
-              ? "No positions yet"
-              : `${liveState.positions.size} open`
+        <LiveNavCards
+          currencySymbol={currencySymbol}
+          initialNavBase={liveState.navBase.toString()}
+          startingNav={startingNav}
+          cashBase={liveCashBase}
+          holdingsCount={liveState.positions.size}
+          holdingsSub={
+            liveState.positions.size === 0 ? "No positions yet" : `${liveState.positions.size} open`
           }
-        />
-        <MetricCard
-          label="Cash"
-          value={`${currencySymbol}${fmt(liveCashBase)}`}
-          sub={
-            liveNavBase > 0
-              ? `${((liveCashBase / liveNavBase) * 100).toFixed(1)}% of NAV`
-              : ""
-          }
-        />
-        <MetricCard
-          label="Constraints"
-          value={String(dedupedConstraints.length)}
-          sub={`${dedupedConstraints.filter((c) => c.isHard).length} hard, ${dedupedConstraints.filter((c) => !c.isHard).length} soft`}
-        />
-        <MetricCard
-          label="As of"
-          value={latestNav.length > 0 ? latestNav[0].date : "Today"}
-          sub={latestNav.length > 0 ? "Latest NAV snapshot" : "Computed live"}
+          constraintsCount={dedupedConstraints.length}
+          constraintsSub={`${dedupedConstraints.filter((c) => c.isHard).length} hard, ${dedupedConstraints.filter((c) => !c.isHard).length} soft`}
+          snapshotDate={latestNav.length > 0 ? latestNav[0].date : null}
+          positions={Array.from(liveState.positions.values()).map((p) => ({
+            securityId: p.securityId,
+            quantity: p.quantity.toString(),
+            latestPriceNative: p.latestPriceNative ? p.latestPriceNative.toString() : null,
+            latestFxToBase: p.latestFxToBase.toString(),
+          }))}
         />
       </div>
 
@@ -629,51 +608,4 @@ function prettyConstraintValue(type: string, value: unknown): string {
   return String(value);
 }
 
-function MetricCard({
-  label,
-  value,
-  sub,
-  valueColor = "#00183A",
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  valueColor?: string;
-}) {
-  return (
-    <div style={{ background: "white", padding: "14px 18px" }}>
-      <div
-        style={{
-          fontFamily: "system-ui, sans-serif",
-          fontSize: 10,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          color: "#6B6B66",
-          fontWeight: 500,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          ...numeric,
-          fontSize: 22,
-          color: valueColor,
-          marginTop: 4,
-        }}
-      >
-        {value}
-      </div>
-      <div
-        style={{
-          fontFamily: "system-ui, sans-serif",
-          fontSize: 11,
-          color: "#6B6B66",
-          marginTop: 2,
-        }}
-      >
-        {sub}
-      </div>
-    </div>
-  );
-}
+
