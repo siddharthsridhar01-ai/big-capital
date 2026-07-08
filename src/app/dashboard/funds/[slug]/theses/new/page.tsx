@@ -14,10 +14,10 @@ export default async function NewThesisPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ securityId?: string }>;
+  searchParams: Promise<{ securityId?: string; linkTxId?: string }>;
 }) {
   const { slug } = await params;
-  const { securityId: securityIdParam } = await searchParams;
+  const { securityId: securityIdParam, linkTxId: linkTxIdParam } = await searchParams;
   const user = await getOrCreateUser();
   if (!user) redirect("/sign-in");
 
@@ -99,6 +99,7 @@ export default async function NewThesisPage({
             ? securityIdParam
             : undefined
         }
+        linkTxId={linkTxIdParam || undefined}
         universe={universeRows.map((u) => ({
           securityId: u.securityId,
           ticker: u.ticker,

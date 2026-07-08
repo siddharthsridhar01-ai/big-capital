@@ -19,6 +19,8 @@ interface Props {
   universe: UniverseEntry[];
   /** Preselect this security (e.g. arriving from a trade's "New thesis" link). */
   initialSecurityId?: string;
+  /** If set, auto-link this trade to the thesis once it's created. */
+  linkTxId?: string;
 }
 
 type Conviction = "high" | "medium" | "low";
@@ -68,6 +70,7 @@ export default function NewThesisForm({
   fundBaseCurrency,
   universe,
   initialSecurityId,
+  linkTxId,
 }: Props) {
   const router = useRouter();
 
@@ -85,16 +88,24 @@ export default function NewThesisForm({
   // Filtered list of universe entries based on search box
   const filteredUniverse = useMemo(() => {
     const q = securityFilter.trim().toLowerCase();
-    if (!q) return universe.slice(0, 50);
-    return universe
-      .filter(
-        (u) =>
-          u.ticker.toLowerCase().includes(q) ||
-          u.name.toLowerCase().includes(q) ||
-          (u.gicsSector?.toLowerCase().includes(q) ?? false)
-      )
-      .slice(0, 50);
-  }, [universe, securityFilter]);
+    const base = !q
+      ? universe
+      : universe.filter(
+          (u) =>
+            u.ticker.toLowerCase().includes(q) ||
+            u.name.toLowerCase().includes(q) ||
+            (u.gicsSector?.toLowerCase().includes(q) ?? false)
+        );
+    // Keep the currently-selected security pinned at the top so it's always
+    // visible (e.g. when preselected from a trade's "New thesis" link, or after
+    // clicking a name further down the list).
+    let list = base;
+    if (securityId) {
+      const sel = universe.find((u) => u.securityId === securityId);
+      if (sel) list = [sel, ...base.filter((u) => u.securityId !== securityId)];
+    }
+    return list.slice(0, 50);
+  }, [universe, securityFilter, securityId]);
 
   const selectedSecurity = useMemo(
     () => universe.find((u) => u.securityId === securityId) ?? null,
@@ -150,7 +161,28 @@ export default function NewThesisForm({
         setSubmitting(false);
         return;
       }
-      // Redirect to thesis list
+
+      // If we arrived from a specific trade's "New thesis" link, attach the
+      // freshly-created thesis to that trade automatically, so the user doesn't
+      // have to link it by hand. Best-effort: if it fails, the thesis is still
+      // created and can be linked manually from the activity feed.
+      if (linkTxId && data.thesisId) {
+        try {
+          await fetch(`/api/funds/${fundSlug}/transactions/${linkTxId}/thesis`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ thesisId: data.thesisId }),
+          });
+        } catch {
+          // ignore — thesis exists; linking can be redone from the feed
+        }
+        // Return to the fund page so the now-linked trade is visible.
+        router.push(`/dashboard/funds/${fundSlug}`);
+        router.refresh();
+        return;
+      }
+
+      // Otherwise, go to the thesis list as before.
       router.push(`/dashboard/funds/${fundSlug}/theses`);
       router.refresh();
     } catch (err) {

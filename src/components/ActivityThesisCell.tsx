@@ -93,8 +93,8 @@ export default function ActivityThesisCell({
   };
 
   const newHref = securityId
-    ? `/dashboard/funds/${fundSlug}/theses/new?securityId=${securityId}`
-    : `/dashboard/funds/${fundSlug}/theses/new`;
+    ? `/dashboard/funds/${fundSlug}/theses/new?securityId=${securityId}&linkTxId=${txId}`
+    : `/dashboard/funds/${fundSlug}/theses/new?linkTxId=${txId}`;
 
   if (!open) {
     return (
