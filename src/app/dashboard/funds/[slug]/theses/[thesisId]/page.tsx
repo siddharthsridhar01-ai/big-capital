@@ -415,7 +415,7 @@ export default async function ThesisDetailPage({
       <div
         style={{
           display: "flex",
-          alignItems: "baseline",
+          alignItems: "flex-start",
           gap: 12,
           marginTop: 12,
           marginBottom: 4,
@@ -432,18 +432,37 @@ export default async function ThesisDetailPage({
           {t.ticker}
         </span>
         <span style={{ fontSize: 11, color: "#6B6B66" }}>{t.exchange}</span>
-        <span
-          style={{
-            marginLeft: "auto",
-            fontSize: 10,
-            letterSpacing: "0.05em",
-            textTransform: "uppercase",
-            color: st.color,
-            fontWeight: 600,
-          }}
-        >
-          {st.label}
-        </span>
+        <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <span
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              color: st.color,
+              fontWeight: 600,
+            }}
+          >
+            {st.label}
+          </span>
+          {(user.role === "admin" || t.authorUserId === user.id) && (
+            <Link
+              href={`/dashboard/funds/${slug}/theses/${thesisId}/edit`}
+              style={{
+                fontFamily: "system-ui, sans-serif",
+                fontSize: 12,
+                fontWeight: 500,
+                color: "#00183A",
+                background: "white",
+                border: "1px solid #00183A",
+                borderRadius: 4,
+                padding: "6px 14px",
+                textDecoration: "none",
+              }}
+            >
+              Edit thesis
+            </Link>
+          )}
+        </div>
       </div>
       <h1
         style={{
@@ -471,17 +490,6 @@ export default async function ThesisDetailPage({
         }}
       >
         opened by {t.authorName} · {dateStr(effectiveOpenedAt)}
-        {(user.role === "admin" || t.authorUserId === user.id) && (
-          <>
-            {" · "}
-            <Link
-              href={`/dashboard/funds/${slug}/theses/${thesisId}/edit`}
-              style={{ color: "#00183A", textDecoration: "none", borderBottom: "1px solid #D9D9D2" }}
-            >
-              Edit
-            </Link>
-          </>
-        )}
       </div>
 
       {/* HEADLINE STATS */}
