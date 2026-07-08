@@ -11,10 +11,13 @@ export const dynamic = "force-dynamic";
 
 export default async function NewThesisPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ securityId?: string }>;
 }) {
   const { slug } = await params;
+  const { securityId: securityIdParam } = await searchParams;
   const user = await getOrCreateUser();
   if (!user) redirect("/sign-in");
 
@@ -91,6 +94,11 @@ export default async function NewThesisPage({
       <NewThesisForm
         fundSlug={fund.slug}
         fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
+        initialSecurityId={
+          securityIdParam && universeRows.some((u) => u.securityId === securityIdParam)
+            ? securityIdParam
+            : undefined
+        }
         universe={universeRows.map((u) => ({
           securityId: u.securityId,
           ticker: u.ticker,

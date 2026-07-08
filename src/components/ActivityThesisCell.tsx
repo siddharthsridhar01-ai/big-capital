@@ -50,7 +50,7 @@ export default function ActivityThesisCell({
           fontSize: 11,
           color: MUTED,
           textDecoration: "none",
-          maxWidth: 220,
+          maxWidth: 360,
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -125,8 +125,8 @@ export default function ActivityThesisCell({
         flexWrap: "wrap",
         gap: 6,
         alignItems: "center",
-        justifyContent: "flex-end",
-        maxWidth: 320,
+        justifyContent: "flex-start",
+        maxWidth: 460,
       }}
     >
       {options.length > 0 ? (
@@ -194,7 +194,7 @@ export default function ActivityThesisCell({
         ✕
       </button>
       {error && (
-        <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 10, color: "#7A1F1F", width: "100%", textAlign: "right" }}>
+        <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 10, color: "#7A1F1F", width: "100%", textAlign: "left" }}>
           {error}
         </span>
       )}

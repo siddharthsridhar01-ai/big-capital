@@ -449,18 +449,10 @@ export default async function FundPage({
                   <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 16px", borderBottom: i < activityRows.length - 1 ? "1px solid #F0F0EC" : "none" }}>
                     <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: "#9A9A8E", width: 82, flexShrink: 0 }}>{dateStr}</span>
                     <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, fontWeight: 600, color: meta.color, width: 96, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.03em" }}>{meta.label}</span>
-                    <span style={{ ...serif, fontSize: 14, color: "#00183A", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ ...serif, fontSize: 14, color: "#00183A", width: 210, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {a.ticker ? a.ticker : "—"}{a.name ? <span style={{ color: "#9A9A8E", fontFamily: "system-ui, sans-serif", fontSize: 12 }}> · {a.name}</span> : null}
                     </span>
-                    <span style={{ ...numeric, fontSize: 12, color: "#6B6B66", textAlign: "right", flexShrink: 0 }}>
-                      {isDividend
-                        ? `${ccySym(a.currency)}${price.toFixed(4)}/sh`
-                        : `${Math.abs(qty).toLocaleString()} @ ${ccySym(a.currency)}${money(price)}`}
-                    </span>
-                    <span style={{ ...numeric, fontSize: 13, fontWeight: 500, width: 104, textAlign: "right", flexShrink: 0, color: cash >= 0 ? "#1F5C3A" : "#7A1F1F" }}>
-                      {cash >= 0 ? "+" : "−"}{ccySym(a.currency)}{money(cash)}
-                    </span>
-                    <span style={{ width: 240, flexShrink: 0, textAlign: "right", display: "flex", justifyContent: "flex-end" }}>
+                    <span style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "flex-start", overflow: "hidden" }}>
                       <ActivityThesisCell
                         fundSlug={fund.slug}
                         txId={a.id}
@@ -470,6 +462,14 @@ export default async function FundPage({
                         securityId={a.securityId ?? null}
                         options={a.securityId ? thesisOptionsBySecurity.get(a.securityId) ?? [] : []}
                       />
+                    </span>
+                    <span style={{ ...numeric, fontSize: 12, color: "#6B6B66", textAlign: "right", flexShrink: 0 }}>
+                      {isDividend
+                        ? `${ccySym(a.currency)}${price.toFixed(4)}/sh`
+                        : `${Math.abs(qty).toLocaleString()} @ ${ccySym(a.currency)}${money(price)}`}
+                    </span>
+                    <span style={{ ...numeric, fontSize: 13, fontWeight: 500, width: 104, textAlign: "right", flexShrink: 0, color: cash >= 0 ? "#1F5C3A" : "#7A1F1F" }}>
+                      {cash >= 0 ? "+" : "−"}{ccySym(a.currency)}{money(cash)}
                     </span>
                   </div>
                 );

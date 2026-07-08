@@ -17,6 +17,8 @@ interface Props {
   fundSlug: string;
   fundBaseCurrency: "GBP" | "USD" | "EUR";
   universe: UniverseEntry[];
+  /** Preselect this security (e.g. arriving from a trade's "New thesis" link). */
+  initialSecurityId?: string;
 }
 
 type Conviction = "high" | "medium" | "low";
@@ -65,10 +67,11 @@ export default function NewThesisForm({
   fundSlug,
   fundBaseCurrency,
   universe,
+  initialSecurityId,
 }: Props) {
   const router = useRouter();
 
-  const [securityId, setSecurityId] = useState("");
+  const [securityId, setSecurityId] = useState(initialSecurityId ?? "");
   const [securityFilter, setSecurityFilter] = useState("");
   const [conviction, setConviction] = useState<Conviction>("medium");
   const [holdingPeriod, setHoldingPeriod] = useState<HoldingPeriod>("medium");
