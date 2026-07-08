@@ -48,32 +48,12 @@ export default async function DashboardLayout({
               textDecoration: "none",
             }}
           >
-            <svg
-              width="22"
-              height="38"
-              viewBox="0 0 110 190"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <g fill="#00183A">
-                <polygon points="55,4 86,28 24,28" />
-                <polygon points="24,28 32,28 32,156 24,162" />
-                <polygon points="38,32 50,32 50,156 38,156" />
-                <polygon points="56,32 60,32 60,156 56,156" />
-                <polygon points="66,32 78,32 78,156 66,156" />
-                <polygon points="84,28 86,28 86,162 78,156" />
-                <polygon points="24,162 86,162 55,186" />
-              </g>
-            </svg>
-            <span
-              style={{
-                ...serif,
-                fontSize: 15,
-                color: "#00183A",
-                fontWeight: 500,
-              }}
-            >
-              BIG <em style={{ fontStyle: "italic", fontWeight: 400 }}>Capital</em>
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/big-capital-logo.png"
+              alt="BIG Capital"
+              style={{ height: 42, width: "auto", display: "block" }}
+            />
           </Link>
           <nav style={{ display: "flex", gap: 4 }}>
             <Link
