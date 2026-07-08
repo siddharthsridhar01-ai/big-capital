@@ -50,10 +50,14 @@ export default async function DashboardLayout({
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/big-capital-logo.png"
-              alt="BIG Capital"
-              style={{ height: 46, width: "auto", display: "block" }}
+              src="/big-capital-icon.png"
+              alt=""
+              style={{ height: 44, width: "auto", display: "block" }}
             />
+            <span style={{ ...serif, color: "#00183A", display: "flex", flexDirection: "column", lineHeight: 1.02 }}>
+              <span style={{ fontSize: 21, fontWeight: 600, letterSpacing: "0.02em" }}>BIG</span>
+              <span style={{ fontSize: 21, fontStyle: "italic", fontWeight: 400 }}>Capital</span>
+            </span>
           </Link>
           <nav style={{ display: "flex", gap: 4 }}>
             <Link

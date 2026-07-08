@@ -31,12 +31,13 @@ export default function PublicFundsLayout({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/big-capital-logo.png"
-            alt="BIG Capital"
-            style={{ height: 42, width: "auto", display: "block" }}
+            src="/big-capital-icon.png"
+            alt=""
+            style={{ height: 40, width: "auto", display: "block" }}
           />
-          <span style={{ ...serif, fontSize: 18, color: "#00183A", display: "none" }}>
-            BIG <span style={{ fontStyle: "italic" }}>Capital</span>
+          <span style={{ ...serif, color: "#00183A", display: "flex", flexDirection: "column", lineHeight: 1.02 }}>
+            <span style={{ fontSize: 19, fontWeight: 600, letterSpacing: "0.02em" }}>BIG</span>
+            <span style={{ fontSize: 19, fontStyle: "italic", fontWeight: 400 }}>Capital</span>
           </span>
         </Link>
 
