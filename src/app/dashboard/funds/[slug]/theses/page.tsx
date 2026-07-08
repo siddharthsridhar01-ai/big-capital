@@ -38,6 +38,7 @@ export default async function ThesesListPage({
       direction: theses.direction,
       conviction: theses.conviction,
       targetWeightPct: theses.targetWeightPct,
+      targetPriceNative: theses.targetPriceNative,
       holdingPeriod: theses.holdingPeriod,
       title: theses.title,
       summary: theses.summary,
@@ -46,6 +47,7 @@ export default async function ThesesListPage({
       ticker: securities.ticker,
       securityName: securities.name,
       exchange: securities.exchange,
+      currency: securities.currency,
     })
     .from(theses)
     .innerJoin(securities, eq(theses.securityId, securities.id))
@@ -211,10 +213,11 @@ export default async function ThesesListPage({
                 {[
                   { label: "Status", align: "left" as const, w: "90px" },
                   { label: "Ticker", align: "left" as const, w: "80px" },
-                  { label: "Summary", align: "left" as const, w: "auto" },
-                  { label: "Author", align: "left" as const, w: "140px" },
-                  { label: "Conviction", align: "left" as const, w: "90px" },
-                  { label: "Target wt.", align: "right" as const, w: "80px" },
+                  { label: "Title / summary", align: "left" as const, w: "auto" },
+                  { label: "Author", align: "left" as const, w: "130px" },
+                  { label: "Conviction", align: "left" as const, w: "84px" },
+                  { label: "Target wt.", align: "right" as const, w: "76px" },
+                  { label: "Target px.", align: "right" as const, w: "84px" },
                   { label: "Opened", align: "right" as const, w: "100px" },
                 ].map((h) => (
                   <th
@@ -385,6 +388,20 @@ export default async function ThesesListPage({
                     >
                       {r.targetWeightPct
                         ? `${(Number(r.targetWeightPct) * 100).toFixed(2)}%`
+                        : "—"}
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 14px",
+                        borderBottom: "1px solid #F0EFEA",
+                        textAlign: "right",
+                        ...numeric,
+                        color: "#0A0A0A",
+                        verticalAlign: "top",
+                      }}
+                    >
+                      {r.targetPriceNative
+                        ? `${r.currency === "USD" ? "$" : r.currency === "EUR" ? "€" : "£"}${Number(r.targetPriceNative).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : "—"}
                     </td>
                     <td
