@@ -337,11 +337,11 @@ export default async function ThesesListPage({
                       }}
                     >
                       {r.title && (
-                        <div style={{ ...serif, fontSize: 15, color: "#00183A", marginBottom: 4 }}>
+                        <div style={{ ...serif, fontSize: 15, fontWeight: 700, color: "#00183A", marginBottom: 3 }}>
                           {r.title}
                         </div>
                       )}
-                      {r.summary}
+                      <div style={{ color: r.title ? "#6B6B66" : "#0A0A0A" }}>{r.summary}</div>
                       {r.memoBlobUrl ? (
                         <div style={{ marginTop: 8 }}>
                           <PdfMemoCard

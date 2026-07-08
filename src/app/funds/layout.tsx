@@ -33,7 +33,7 @@ export default function PublicFundsLayout({
           <img
             src="/big-capital-logo.png"
             alt="BIG Capital"
-            style={{ height: 38, width: "auto", display: "block" }}
+            style={{ height: 42, width: "auto", display: "block" }}
           />
           <span style={{ ...serif, fontSize: 18, color: "#00183A", display: "none" }}>
             BIG <span style={{ fontStyle: "italic" }}>Capital</span>

@@ -52,7 +52,7 @@ export default async function DashboardLayout({
             <img
               src="/big-capital-logo.png"
               alt="BIG Capital"
-              style={{ height: 42, width: "auto", display: "block" }}
+              style={{ height: 46, width: "auto", display: "block" }}
             />
           </Link>
           <nav style={{ display: "flex", gap: 4 }}>
