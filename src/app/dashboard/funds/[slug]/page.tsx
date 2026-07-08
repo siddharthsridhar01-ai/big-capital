@@ -104,7 +104,8 @@ export default async function FundPage({
       name: securitiesTable.name,
       securityId: transactions.securityId,
       thesisId: transactions.thesisId,
-      thesisTitle: thesesTable.summary,
+      thesisTitle: thesesTable.title,
+      thesisSummary: thesesTable.summary,
     })
     .from(transactions)
     .leftJoin(securitiesTable, eq(transactions.securityId, securitiesTable.id))
@@ -123,7 +124,8 @@ export default async function FundPage({
       ? await db
           .select({
             id: thesesTable.id,
-            title: thesesTable.summary,
+            title: thesesTable.title,
+            summary: thesesTable.summary,
             securityId: thesesTable.securityId,
           })
           .from(thesesTable)
@@ -139,7 +141,7 @@ export default async function FundPage({
   for (const t of thesisOptionRows) {
     if (!t.securityId) continue;
     const list = thesisOptionsBySecurity.get(t.securityId) ?? [];
-    list.push({ id: t.id, title: t.title });
+    list.push({ id: t.id, title: t.title ?? t.summary });
     thesisOptionsBySecurity.set(t.securityId, list);
   }
 
@@ -457,7 +459,7 @@ export default async function FundPage({
                         fundSlug={fund.slug}
                         txId={a.id}
                         linkedThesisId={a.thesisId ?? null}
-                        linkedThesisTitle={a.thesisTitle ?? null}
+                        linkedThesisTitle={a.thesisTitle ?? a.thesisSummary ?? null}
                         linkable={a.type === "buy" || a.type === "sell" || a.type === "short" || a.type === "cover"}
                         securityId={a.securityId ?? null}
                         options={a.securityId ? thesisOptionsBySecurity.get(a.securityId) ?? [] : []}

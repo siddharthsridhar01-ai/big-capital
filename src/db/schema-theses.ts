@@ -93,6 +93,8 @@ export const theses = pgTable("theses", {
   }),
   holdingPeriod: holdingPeriodEnum("holding_period").notNull(),
 
+  // Optional short title/headline for the thesis (e.g. "Refining margins re-rate").
+  title: text("title"),
   // Short text summary — required, surfaced in lists and thesis review panels
   // Min 50 chars, max 500 chars (enforced at API layer)
   summary: text("summary").notNull(),

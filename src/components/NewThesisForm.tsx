@@ -79,6 +79,7 @@ export default function NewThesisForm({
   const [conviction, setConviction] = useState<Conviction>("medium");
   const [holdingPeriod, setHoldingPeriod] = useState<HoldingPeriod>("medium");
   const [summary, setSummary] = useState("");
+  const [title, setTitle] = useState("");
   const [targetWeightPct, setTargetWeightPct] = useState(""); // user enters as %, e.g. "5"
   const [targetPriceNative, setTargetPriceNative] = useState("");
   const [memoFile, setMemoFile] = useState<File | null>(null);
@@ -137,6 +138,7 @@ export default function NewThesisForm({
     form.append("securityId", securityId);
     form.append("conviction", conviction);
     form.append("holdingPeriod", holdingPeriod);
+    if (title.trim()) form.append("title", title.trim());
     form.append("summary", summary.trim());
     if (targetWeightPct) {
       // User input is "5" for 5% — convert to 0.05 for storage
@@ -401,6 +403,20 @@ export default function NewThesisForm({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* TITLE */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={SECTION_HEADER}>
+          Title <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E", fontWeight: 400 }}>(optional)</span>
+        </div>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={120}
+          placeholder="A short headline, e.g. “Refining margins re-rate”"
+          style={INPUT}
+        />
       </div>
 
       {/* SUMMARY */}

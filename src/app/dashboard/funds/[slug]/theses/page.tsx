@@ -1,8 +1,8 @@
 import { db } from "@/db/client";
-import { funds as fundsTable, securities, users } from "@/db/schema";
+import { funds as fundsTable, securities, users, transactions } from "@/db/schema";
 import { theses } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray, min } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
@@ -39,6 +39,7 @@ export default async function ThesesListPage({
       conviction: theses.conviction,
       targetWeightPct: theses.targetWeightPct,
       holdingPeriod: theses.holdingPeriod,
+      title: theses.title,
       summary: theses.summary,
       memoBlobUrl: theses.memoBlobUrl,
       memoBlobFilename: theses.memoBlobFilename,
@@ -51,6 +52,24 @@ export default async function ThesesListPage({
     .innerJoin(users, eq(theses.authorUserId, users.id))
     .where(eq(theses.fundId, fund.id))
     .orderBy(desc(theses.openedAt));
+
+  // Effective opened date = earliest linked trade (so the list matches the
+  // thesis timeline). Fall back to the creation date when nothing's linked.
+  const thesisIds = rows.map((r) => r.id);
+  const earliestTradeByThesis = new Map<string, Date>();
+  if (thesisIds.length > 0) {
+    const mins = await db
+      .select({ thesisId: transactions.thesisId, earliest: min(transactions.executedAt) })
+      .from(transactions)
+      .where(inArray(transactions.thesisId, thesisIds))
+      .groupBy(transactions.thesisId);
+    for (const m of mins) {
+      if (m.thesisId && m.earliest) earliestTradeByThesis.set(m.thesisId, new Date(m.earliest));
+    }
+  }
+  const effectiveOpened = (r: (typeof rows)[number]): Date =>
+    earliestTradeByThesis.get(r.id) ?? new Date(r.openedAt);
+  rows.sort((a, b) => effectiveOpened(b).getTime() - effectiveOpened(a).getTime());
 
   const activeCount = rows.filter((r) => r.status === "active").length;
   const closedCount = rows.filter(
@@ -219,7 +238,7 @@ export default async function ThesesListPage({
             </thead>
             <tbody>
               {rows.map((r) => {
-                const openedStr = new Date(r.openedAt).toLocaleDateString(
+                const openedStr = effectiveOpened(r).toLocaleDateString(
                   "en-GB",
                   { day: "2-digit", month: "short", year: "numeric" }
                 );
@@ -314,6 +333,11 @@ export default async function ThesesListPage({
                         overflowWrap: "anywhere",
                       }}
                     >
+                      {r.title && (
+                        <div style={{ ...serif, fontSize: 15, color: "#00183A", marginBottom: 4 }}>
+                          {r.title}
+                        </div>
+                      )}
                       {r.summary}
                       {r.memoBlobUrl ? (
                         <div style={{ marginTop: 8 }}>

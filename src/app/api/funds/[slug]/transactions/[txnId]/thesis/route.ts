@@ -1,5 +1,5 @@
 /**
- * PATCH /api/funds/[slug]/transactions/[txId]/thesis
+ * PATCH /api/funds/[slug]/transactions/[txnId]/thesis
  * Body: { thesisId: string | null }
  *
  * Links (or unlinks) an existing trade to a thesis after the fact — e.g. from
@@ -20,9 +20,9 @@ import { and, eq, isNull } from "drizzle-orm";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ slug: string; txId: string }> }
+  { params }: { params: Promise<{ slug: string; txnId: string }> }
 ) {
-  const { slug, txId } = await params;
+  const { slug, txnId } = await params;
   const user = await getOrCreateUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
   if (user.role !== "admin" && user.role !== "pm") {
@@ -55,7 +55,7 @@ export async function PATCH(
   const txRows = await db
     .select({ id: transactions.id, securityId: transactions.securityId })
     .from(transactions)
-    .where(and(eq(transactions.id, txId), eq(transactions.fundId, fund.id)))
+    .where(and(eq(transactions.id, txnId), eq(transactions.fundId, fund.id)))
     .limit(1);
   if (txRows.length === 0) return NextResponse.json({ ok: false, error: "Trade not found" }, { status: 404 });
   const tx = txRows[0];
@@ -74,6 +74,6 @@ export async function PATCH(
     }
   }
 
-  await db.update(transactions).set({ thesisId }).where(eq(transactions.id, txId));
+  await db.update(transactions).set({ thesisId }).where(eq(transactions.id, txnId));
   return NextResponse.json({ ok: true, thesisId });
 }

@@ -158,11 +158,13 @@ export default async function ThesisDetailPage({
       targetWeightPct: theses.targetWeightPct,
       targetPriceNative: theses.targetPriceNative,
       referencePriceNative: theses.referencePriceNative,
+      title: theses.title,
       summary: theses.summary,
       openedAt: theses.openedAt,
       closedAt: theses.closedAt,
       memoBlobUrl: theses.memoBlobUrl,
       securityId: theses.securityId,
+      authorUserId: theses.authorUserId,
       authorName: users.fullName,
       ticker: securities.ticker,
       securityName: securities.name,
@@ -276,7 +278,12 @@ export default async function ThesisDetailPage({
 
   // ---- Build the unified, chronological event list ----
   const events: TLEvent[] = [];
-  events.push({ kind: "open", date: new Date(t.openedAt) });
+  // The thesis "opened" date is the earliest linked trade's execution date —
+  // so attaching an earlier trade moves the opening back. Falls back to the
+  // thesis creation date when no trades are linked yet.
+  const effectiveOpenedAt =
+    trades.length > 0 ? new Date(trades[0].executedAt) : new Date(t.openedAt);
+  events.push({ kind: "open", date: effectiveOpenedAt });
   for (const tr of trades) {
     events.push({
       kind: "trade",
@@ -450,6 +457,11 @@ export default async function ThesisDetailPage({
       >
         {t.securityName}
       </h1>
+      {t.title && (
+        <div style={{ ...serif, fontSize: 18, color: "#3A3A34", margin: "0 0 6px", fontStyle: "italic" }}>
+          {t.title}
+        </div>
+      )}
       <div
         style={{
           fontFamily: "system-ui, sans-serif",
@@ -458,7 +470,18 @@ export default async function ThesisDetailPage({
           marginBottom: 16,
         }}
       >
-        opened by {t.authorName} · {dateStr(t.openedAt)}
+        opened by {t.authorName} · {dateStr(effectiveOpenedAt)}
+        {(user.role === "admin" || t.authorUserId === user.id) && (
+          <>
+            {" · "}
+            <Link
+              href={`/dashboard/funds/${slug}/theses/${thesisId}/edit`}
+              style={{ color: "#00183A", textDecoration: "none", borderBottom: "1px solid #D9D9D2" }}
+            >
+              Edit
+            </Link>
+          </>
+        )}
       </div>
 
       {/* HEADLINE STATS */}

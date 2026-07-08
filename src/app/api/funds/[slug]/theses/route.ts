@@ -144,6 +144,7 @@ export async function POST(
   const securityId = form.get("securityId");
   const conviction = form.get("conviction");
   const holdingPeriod = form.get("holdingPeriod");
+  const title = form.get("title");
   const summary = form.get("summary");
   const targetWeightPctRaw = form.get("targetWeightPct");
   const targetPriceNativeRaw = form.get("targetPriceNative");
@@ -318,6 +319,10 @@ export async function POST(
       authorUserId: user.id,
       conviction,
       holdingPeriod,
+      title:
+        typeof title === "string" && title.trim() !== ""
+          ? title.trim().slice(0, 120)
+          : null,
       summary: summaryTrimmed,
       targetWeightPct,
       targetPriceNative,
