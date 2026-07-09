@@ -119,7 +119,7 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
     .from(theses)
     .innerJoin(users, eq(theses.authorUserId, users.id))
     .leftJoin(thesisPostMortems, eq(thesisPostMortems.thesisId, theses.id))
-    .where(and(eq(theses.fundId, fund.id), eq(theses.securityId, security.id)))
+    .where(and(eq(theses.fundId, fund.id), eq(theses.securityId, security.id), eq(theses.approvalStatus, "approved")))
     .orderBy(desc(theses.openedAt))
     .limit(12);
 

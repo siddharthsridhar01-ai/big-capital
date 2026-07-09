@@ -47,6 +47,14 @@ export const thesisStatusEnum = pgEnum("thesis_status", [
   "abandoned", // thesis cancelled without ever placing a trade
 ]);
 
+// Approval workflow: analysts submit theses for review; PMs/admins approve.
+// Existing + PM/admin-authored theses default to "approved".
+export const thesisApprovalEnum = pgEnum("thesis_approval", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
 export const postMortemOutcomeEnum = pgEnum("post_mortem_outcome", [
   "win",
   "loss",
@@ -106,6 +114,11 @@ export const theses = pgTable("theses", {
 
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  // Approval workflow. Default "approved" so all pre-existing theses stay live.
+  approvalStatus: thesisApprovalEnum("approval_status").notNull().default("approved"),
+  submittedByUserId: uuid("submitted_by_user_id").references(() => users.id),
+  approvedByUserId: uuid("approved_by_user_id").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
 });
 
 // ---------------------------------------------------------------------------

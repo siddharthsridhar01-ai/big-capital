@@ -62,7 +62,7 @@ export async function PATCH(
 
   if (thesisId) {
     const thRows = await db
-      .select({ id: theses.id, securityId: theses.securityId })
+      .select({ id: theses.id, securityId: theses.securityId, approvalStatus: theses.approvalStatus })
       .from(theses)
       .where(and(eq(theses.id, thesisId), eq(theses.fundId, fund.id)))
       .limit(1);
@@ -71,6 +71,9 @@ export async function PATCH(
     }
     if (thRows[0].securityId !== tx.securityId) {
       return NextResponse.json({ ok: false, error: "That thesis is for a different security" }, { status: 400 });
+    }
+    if (thRows[0].approvalStatus !== "approved") {
+      return NextResponse.json({ ok: false, error: "That thesis is still pending approval" }, { status: 400 });
     }
   }
 

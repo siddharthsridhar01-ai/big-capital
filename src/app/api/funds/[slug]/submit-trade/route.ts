@@ -212,6 +212,7 @@ export async function POST(
         securityId: thesesTable.securityId,
         direction: thesesTable.direction,
         status: thesesTable.status,
+        approvalStatus: thesesTable.approvalStatus,
       })
       .from(thesesTable)
       .where(eq(thesesTable.id, body.thesisId))
@@ -226,6 +227,12 @@ export async function POST(
     if (t.fundId !== fund.id) {
       return NextResponse.json(
         { ok: false, error: "Thesis belongs to a different fund" },
+        { status: 400 }
+      );
+    }
+    if (t.approvalStatus !== "approved") {
+      return NextResponse.json(
+        { ok: false, error: "That thesis is still pending approval — a PM must approve it before trading on it" },
         { status: 400 }
       );
     }

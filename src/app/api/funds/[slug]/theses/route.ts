@@ -310,6 +310,10 @@ export async function POST(
     .limit(1);
   if (refRows.length > 0) referencePriceNative = refRows[0].closePrice;
 
+  // Approval workflow: PMs/admins publish directly; analysts submit for review.
+  const isPrivileged = user.role === "admin" || user.role === "pm";
+  const now = new Date();
+
   // Insert thesis
   const [inserted] = await db
     .insert(theses)
@@ -330,8 +334,16 @@ export async function POST(
       memoBlobUrl,
       memoBlobFilename,
       memoSizeBytes,
+      approvalStatus: isPrivileged ? "approved" : "pending",
+      submittedByUserId: user.id,
+      approvedByUserId: isPrivileged ? user.id : null,
+      approvedAt: isPrivileged ? now : null,
     })
     .returning({ id: theses.id });
 
-  return NextResponse.json({ ok: true, thesisId: inserted.id });
+  return NextResponse.json({
+    ok: true,
+    thesisId: inserted.id,
+    pending: !isPrivileged,
+  });
 }

@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import { theses, thesisPostMortems, thesisUpdates } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
+import ThesisApprovalActions from "@/components/ThesisApprovalActions";
 import { eq, and, asc, desc, isNotNull, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -152,6 +153,7 @@ export default async function ThesisDetailPage({
     .select({
       id: theses.id,
       status: theses.status,
+      approvalStatus: theses.approvalStatus,
       direction: theses.direction,
       conviction: theses.conviction,
       holdingPeriod: theses.holdingPeriod,
@@ -492,6 +494,42 @@ export default async function ThesisDetailPage({
         opened by {t.authorName} · {dateStr(effectiveOpenedAt)}
       </div>
 
+      {t.approvalStatus === "pending" && (
+        <div
+          style={{
+            background: "#FCFBF4",
+            border: "1px solid #E7DCae",
+            borderRadius: 8,
+            padding: "14px 16px",
+            marginBottom: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 700 }}>
+              Pending approval
+            </div>
+            <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#6B6B66", marginTop: 3 }}>
+              {user.role === "admin" || user.role === "pm"
+                ? "Review this thesis, then approve it so trades can be linked to it."
+                : "Submitted for review — a PM must approve it before trades can be linked."}
+            </div>
+          </div>
+          {(user.role === "admin" || user.role === "pm") && (
+            <ThesisApprovalActions fundSlug={slug} thesisId={thesisId} />
+          )}
+        </div>
+      )}
+      {t.approvalStatus === "rejected" && (
+        <div style={{ background: "#FBF3F3", border: "1px solid #E4C9C9", borderRadius: 8, padding: "12px 16px", marginBottom: 20, fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#7A1F1F" }}>
+          This thesis was not approved. Trades cannot be linked to it.
+        </div>
+      )}
+
       {/* HEADLINE STATS */}
       <div
         style={{
@@ -553,6 +591,11 @@ export default async function ThesisDetailPage({
           if (ev.kind === "open") {
             return (
               <TimelineItem key={i} color="#00183A" title="Thesis opened" date={dateStr(ev.date)} last={last}>
+                {t.title && (
+                  <div style={{ ...serif, fontSize: 16, fontWeight: 700, color: "#00183A", marginBottom: 8 }}>
+                    {t.title}
+                  </div>
+                )}
                 <div style={{ fontSize: 14, color: "#0A0A0A", lineHeight: 1.6, marginBottom: 12 }}>
                   {t.summary}
                 </div>

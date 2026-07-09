@@ -133,6 +133,7 @@ export default async function FundPage({
             and(
               eq(thesesTable.fundId, fund.id),
               eq(thesesTable.status, "active"),
+              eq(thesesTable.approvalStatus, "approved"),
               inArray(thesesTable.securityId, activitySecurityIds)
             )
           )
