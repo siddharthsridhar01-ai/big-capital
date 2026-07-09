@@ -481,11 +481,6 @@ export default async function ThesisDetailPage({
       >
         {t.securityName}
       </h1>
-      {t.title && (
-        <div style={{ ...serif, fontSize: 18, color: "#3A3A34", margin: "0 0 6px", fontStyle: "italic" }}>
-          {t.title}
-        </div>
-      )}
       <div
         style={{
           fontFamily: "system-ui, sans-serif",
@@ -594,11 +589,6 @@ export default async function ThesisDetailPage({
           if (ev.kind === "open") {
             return (
               <TimelineItem key={i} color="#00183A" title="Thesis opened" date={dateStr(ev.date)} last={last}>
-                {t.title && (
-                  <div style={{ ...serif, fontSize: 16, fontWeight: 700, color: "#00183A", marginBottom: 8 }}>
-                    {t.title}
-                  </div>
-                )}
                 <div style={{ fontSize: 14, color: "#0A0A0A", lineHeight: 1.6, marginBottom: 12 }}>
                   {t.summary}
                 </div>
@@ -682,7 +672,7 @@ export default async function ThesisDetailPage({
                       href={`/dashboard/funds/${slug}/trades/${ev.txnId}/edit`}
                       style={{ fontSize: 11, color: "#00183A", textDecoration: "none", borderBottom: "1px solid #D9D9D2" }}
                     >
-                      Edit note / attachment
+                      Edit note
                     </Link>
                   </div>
                 )}
@@ -692,11 +682,6 @@ export default async function ThesisDetailPage({
           if (ev.kind === "update") {
             return (
               <TimelineItem key={i} color="#8A6D1F" title="Thesis update" date={dateStr(ev.date)} last={last}>
-                {ev.updateTitle && (
-                  <div style={{ ...serif, fontSize: 15, fontWeight: 700, color: "#00183A", marginBottom: 4 }}>
-                    {ev.updateTitle}
-                  </div>
-                )}
                 <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
                   {ev.note}
                 </div>

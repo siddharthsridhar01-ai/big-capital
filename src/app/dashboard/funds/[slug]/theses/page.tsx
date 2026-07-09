@@ -254,7 +254,6 @@ export default async function ThesesListPage({
                       <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: 700, color: rejected ? "#7A1F1F" : "#8A6D1F", background: rejected ? "#FBF0F0" : "#F5EED6", border: `1px solid ${rejected ? "#E4C9C9" : "#E7DCae"}`, borderRadius: 3, padding: "1px 6px" }}>
                         {rejected ? "Not approved" : "Pending"}
                       </span>
-                      {r.title && <span style={{ ...serif, fontSize: 14, fontWeight: 700, color: "#00183A" }}>{r.title}</span>}
                     </div>
                     <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#0A0A0A", lineHeight: 1.4 }}>
                       {r.summary.length > 160 ? r.summary.slice(0, 160).trimEnd() + "…" : r.summary}
@@ -451,11 +450,6 @@ export default async function ThesesListPage({
                             <div style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 600, marginBottom: 2 }}>
                               {latestUpdateByThesis.get(r.id)!.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                             </div>
-                            {latestUpdateByThesis.get(r.id)!.title && (
-                              <div style={{ ...serif, fontSize: 14, fontWeight: 700, color: "#00183A", marginBottom: 2 }}>
-                                {latestUpdateByThesis.get(r.id)!.title}
-                              </div>
-                            )}
                             <div style={{ color: "#00183A", fontWeight: 500 }}>
                               {(() => {
                                 const n = latestUpdateByThesis.get(r.id)!.note;

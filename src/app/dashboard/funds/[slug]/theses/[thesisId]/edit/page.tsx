@@ -33,7 +33,6 @@ export default async function EditThesisPage({
       authorUserId: theses.authorUserId,
       conviction: theses.conviction,
       holdingPeriod: theses.holdingPeriod,
-      title: theses.title,
       summary: theses.summary,
       targetWeightPct: theses.targetWeightPct,
       targetPriceNative: theses.targetPriceNative,
@@ -83,7 +82,6 @@ export default async function EditThesisPage({
         initial={{
           conviction: t.conviction as "high" | "medium" | "low",
           holdingPeriod: t.holdingPeriod as "short" | "medium" | "long" | "indefinite",
-          title: t.title ?? "",
           summary: t.summary,
           targetWeightPct: twPercent,
           targetPriceNative: t.targetPriceNative != null ? String(t.targetPriceNative) : "",

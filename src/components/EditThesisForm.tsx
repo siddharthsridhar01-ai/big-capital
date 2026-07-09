@@ -15,7 +15,6 @@ interface Props {
   initial: {
     conviction: Conviction;
     holdingPeriod: HoldingPeriod;
-    title: string;
     summary: string;
     targetWeightPct: string; // as % e.g. "5" (already converted from stored 0.05)
     targetPriceNative: string;
@@ -74,7 +73,6 @@ export default function EditThesisForm({
 
   const [conviction, setConviction] = useState<Conviction>(initial.conviction);
   const [holdingPeriod, setHoldingPeriod] = useState<HoldingPeriod>(initial.holdingPeriod);
-  const [title, setTitle] = useState(initial.title);
   const [summary, setSummary] = useState(initial.summary);
   const [targetWeightPct, setTargetWeightPct] = useState(initial.targetWeightPct);
   const [targetPriceNative, setTargetPriceNative] = useState(initial.targetPriceNative);
@@ -93,7 +91,6 @@ export default function EditThesisForm({
     const form = new FormData();
     form.append("conviction", conviction);
     form.append("holdingPeriod", holdingPeriod);
-    if (title.trim()) form.append("title", title.trim());
     form.append("summary", summaryTrimmed);
     if (targetWeightPct) {
       const n = Number(targetWeightPct);
@@ -187,20 +184,6 @@ export default function EditThesisForm({
             <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: "#9A9A8E", marginTop: 4 }}>Where you expect the stock to trade</div>
           </div>
         </div>
-      </div>
-
-      {/* Title */}
-      <div style={{ marginBottom: 22 }}>
-        <div style={SECTION_HEADER}>
-          Title <span style={{ color: "#9A9A8E" }}>(optional)</span>
-        </div>
-        <input
-          style={INPUT}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          maxLength={120}
-          placeholder="A short headline, e.g. “Refining margins re-rate”"
-        />
       </div>
 
       {/* Summary */}

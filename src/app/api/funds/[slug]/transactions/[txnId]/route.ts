@@ -11,14 +11,10 @@
  * Auth: the fund admin, or an active member of the fund.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { db } from "@/db/client";
-import { funds as fundsTable, transactions, fundMembers, tradeAttachments } from "@/db/schema";
+import { funds as fundsTable, transactions, fundMembers } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
 import { and, eq, isNull } from "drizzle-orm";
-
-const MAX_PDF_SIZE = 10 * 1024 * 1024;
-const PDF_MAGIC_BYTES = [0x25, 0x50, 0x44, 0x46];
 
 export async function PATCH(
   req: NextRequest,
@@ -69,46 +65,9 @@ export async function PATCH(
     );
   }
 
-  // Update ONLY the rationale. Quantity/price/side/date are never modified.
+  // Update ONLY the rationale. Quantity/price/side/date are never modified, and
+  // trades cannot carry PDF attachments — those belong to theses only.
   await db.update(transactions).set({ rationale }).where(eq(transactions.id, txnId));
-
-  // Optional attachment add/replace.
-  const file = form.get("attachment");
-  if (file && file instanceof File && file.size > 0) {
-    if (file.size > MAX_PDF_SIZE) {
-      return NextResponse.json({ ok: false, error: "Attachment exceeds 10MB" }, { status: 400 });
-    }
-    const isLikelyPdf = file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
-    if (!isLikelyPdf) {
-      return NextResponse.json({ ok: false, error: "Attachment must be a PDF" }, { status: 400 });
-    }
-    const header = Array.from(new Uint8Array(await file.slice(0, 4).arrayBuffer()));
-    if (!PDF_MAGIC_BYTES.every((b, i) => header[i] === b)) {
-      return NextResponse.json({ ok: false, error: "File doesn't look like a valid PDF" }, { status: 400 });
-    }
-    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    let storageUrl: string;
-    try {
-      const blob = await put(`trades/${fund.slug}/${Date.now()}_${safe}`, file, {
-        access: "private",
-        contentType: "application/pdf",
-        addRandomSuffix: false,
-      });
-      storageUrl = blob.url;
-    } catch {
-      return NextResponse.json({ ok: false, error: "Failed to upload attachment" }, { status: 500 });
-    }
-    // Replace any existing attachment for this trade with the new one.
-    await db.delete(tradeAttachments).where(eq(tradeAttachments.transactionId, txnId));
-    await db.insert(tradeAttachments).values({
-      transactionId: txnId,
-      filename: file.name,
-      storageUrl,
-      mimeType: "application/pdf",
-      sizeBytes: file.size,
-      uploadedByUserId: user.id,
-    });
-  }
 
   return NextResponse.json({ ok: true, txnId });
 }

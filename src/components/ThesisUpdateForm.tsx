@@ -62,7 +62,6 @@ export default function ThesisUpdateForm({
   const sym = currency === "GBP" ? "£" : currency === "EUR" ? "€" : "$";
 
   const [note, setNote] = useState("");
-  const [title, setTitle] = useState("");
   const [conviction, setConviction] = useState<Conviction | "">("");
   const [holdingPeriod, setHoldingPeriod] = useState<HoldingPeriod | "">("");
   const [targetWeightPct, setTargetWeightPct] = useState("");
@@ -80,7 +79,6 @@ export default function ThesisUpdateForm({
 
     const form = new FormData();
     form.append("note", note.trim());
-    if (title.trim()) form.append("title", title.trim());
     if (conviction) form.append("conviction", conviction);
     if (holdingPeriod) form.append("holdingPeriod", holdingPeriod);
     if (targetWeightPct.trim()) form.append("targetWeightPct", targetWeightPct.trim());
@@ -99,7 +97,6 @@ export default function ThesisUpdateForm({
         return;
       }
       setNote("");
-      setTitle("");
       setConviction("");
       setHoldingPeriod("");
       setTargetWeightPct("");
@@ -122,17 +119,6 @@ export default function ThesisUpdateForm({
         fontFamily: "system-ui, sans-serif",
       }}
     >
-      <div style={{ marginBottom: 14 }}>
-        <label style={LABEL}>Title (optional)</label>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Short headline for this update"
-          maxLength={120}
-          style={INPUT}
-        />
-      </div>
-
       <div style={{ marginBottom: 18 }}>
         <label style={LABEL}>Update note (required)</label>
         <textarea

@@ -9,7 +9,6 @@ interface Props {
   tradeLabel: string; // e.g. "BUY 5 SHEL @ £29.62"
   initial: {
     rationale: string;
-    attachmentFilename: string | null;
   };
 }
 
@@ -38,7 +37,6 @@ const INPUT: React.CSSProperties = {
 export default function EditTradeForm({ fundSlug, txnId, tradeLabel, initial }: Props) {
   const router = useRouter();
   const [rationale, setRationale] = useState(initial.rationale);
-  const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,7 +48,6 @@ export default function EditTradeForm({ fundSlug, txnId, tradeLabel, initial }: 
     setError(null);
     const form = new FormData();
     form.append("rationale", rationale.trim());
-    if (file) form.append("attachment", file);
     try {
       const res = await fetch(`/api/funds/${fundSlug}/transactions/${txnId}`, {
         method: "PATCH",
@@ -62,7 +59,6 @@ export default function EditTradeForm({ fundSlug, txnId, tradeLabel, initial }: 
         setSubmitting(false);
         return;
       }
-      // Return to the thesis this trade sits under, if we came from there; else the fund page.
       router.back();
       router.refresh();
     } catch (e) {
@@ -91,7 +87,7 @@ export default function EditTradeForm({ fundSlug, txnId, tradeLabel, initial }: 
         </span>
       </div>
 
-      <div style={{ marginBottom: 22 }}>
+      <div style={{ marginBottom: 24 }}>
         <div style={SECTION_HEADER}>
           Rationale <span style={{ color: rationale.trim().length >= 20 ? "#9A9A8E" : "#7A1F1F" }}>({rationale.trim().length} chars, min 20)</span>
         </div>
@@ -100,23 +96,6 @@ export default function EditTradeForm({ fundSlug, txnId, tradeLabel, initial }: 
           value={rationale}
           onChange={(e) => setRationale(e.target.value)}
         />
-      </div>
-
-      <div style={{ marginBottom: 24 }}>
-        <div style={SECTION_HEADER}>Trade attachment PDF <span style={{ color: "#9A9A8E" }}>(optional)</span></div>
-        {initial.attachmentFilename && !file && (
-          <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66", marginBottom: 8 }}>
-            Current: <span style={{ color: "#00183A" }}>{initial.attachmentFilename}</span> — uploading a new file replaces it.
-          </div>
-        )}
-        {!initial.attachmentFilename && !file && (
-          <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66", marginBottom: 8 }}>
-            No attachment yet — add one here if you forgot at trade time.
-          </div>
-        )}
-        <input type="file" accept="application/pdf,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66" }} />
-        {file && <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#1F5C3A", marginTop: 6 }}>New file: {file.name} ({(file.size / 1024 / 1024).toFixed(1)}MB)</div>}
-        <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: "#9A9A8E", marginTop: 6 }}>PDF only · max 10 MB</div>
       </div>
 
       {error && <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#7A1F1F", marginBottom: 16 }}>{error}</div>}

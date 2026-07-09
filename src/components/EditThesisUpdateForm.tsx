@@ -13,7 +13,6 @@ interface Props {
   currencySymbol: string;
   initial: {
     note: string;
-    title: string;
     conviction: Conviction;
     holdingPeriod: HoldingPeriod;
     targetWeightPct: string; // as % e.g. "5"
@@ -45,7 +44,6 @@ const INPUT: React.CSSProperties = { width: "100%", border: "1px solid #D9D9D2",
 export default function EditThesisUpdateForm({ fundSlug, thesisId, updateId, currencySymbol, initial }: Props) {
   const router = useRouter();
   const [note, setNote] = useState(initial.note);
-  const [title, setTitle] = useState(initial.title);
   const [conviction, setConviction] = useState<Conviction>(initial.conviction);
   const [holdingPeriod, setHoldingPeriod] = useState<HoldingPeriod>(initial.holdingPeriod);
   const [targetWeightPct, setTargetWeightPct] = useState(initial.targetWeightPct);
@@ -62,7 +60,6 @@ export default function EditThesisUpdateForm({ fundSlug, thesisId, updateId, cur
     setError(null);
     const form = new FormData();
     form.append("note", note.trim());
-    form.append("title", title.trim());
     if (conviction) form.append("conviction", conviction);
     if (holdingPeriod) form.append("holdingPeriod", holdingPeriod);
     if (targetWeightPct) {
@@ -98,10 +95,6 @@ export default function EditThesisUpdateForm({ fundSlug, thesisId, updateId, cur
 
   return (
     <div style={{ border: "1px solid #E5E5DE", borderRadius: 10, background: "#FDFDFB", padding: 24, maxWidth: 720 }}>
-      <div style={{ marginBottom: 22 }}>
-        <div style={SECTION_HEADER}>Title <span style={{ color: "#9A9A8E" }}>(optional)</span></div>
-        <input style={INPUT} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Short headline for this update" />
-      </div>
       <div style={{ marginBottom: 22 }}>
         <div style={SECTION_HEADER}>Update note</div>
         <textarea style={{ ...INPUT, minHeight: 96, resize: "vertical", lineHeight: 1.5 }} value={note} onChange={(e) => setNote(e.target.value)} />

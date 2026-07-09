@@ -1,5 +1,5 @@
 import { db } from "@/db/client";
-import { funds as fundsTable, securities, transactions, fundMembers, tradeAttachments } from "@/db/schema";
+import { funds as fundsTable, securities, transactions, fundMembers } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
 import { and, eq, isNull } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
@@ -53,12 +53,6 @@ export default async function EditTradePage({
   if (rows.length === 0) notFound();
   const tx = rows[0];
 
-  const att = await db
-    .select({ filename: tradeAttachments.filename })
-    .from(tradeAttachments)
-    .where(eq(tradeAttachments.transactionId, txnId))
-    .limit(1);
-
   const sym = ccySym((tx.currency as string) ?? "GBP");
   const qtyAbs = Math.abs(Number(tx.quantity)).toLocaleString();
   const priceStr = tx.priceNative != null ? `${sym}${Number(tx.priceNative).toFixed(2)}` : "";
@@ -80,7 +74,6 @@ export default async function EditTradePage({
         tradeLabel={label}
         initial={{
           rationale: tx.rationale,
-          attachmentFilename: att.length > 0 ? att[0].filename : null,
         }}
       />
     </div>
