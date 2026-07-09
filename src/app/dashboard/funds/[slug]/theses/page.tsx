@@ -458,7 +458,12 @@ export default async function ThesesListPage({
                             </div>
                           </>
                         ) : (
-                          <div style={{ color: "#00183A", fontWeight: 500 }}>{r.summary}</div>
+                          <>
+                            <div style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "#9A9A8E", fontWeight: 600, marginBottom: 2 }}>
+                              {openedStr}
+                            </div>
+                            <div style={{ color: "#00183A", fontWeight: 500 }}>{r.summary}</div>
+                          </>
                         )}
                       </Link>
                       {r.memoBlobUrl ? (
