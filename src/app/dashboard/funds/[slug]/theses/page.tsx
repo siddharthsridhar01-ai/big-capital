@@ -331,6 +331,7 @@ export default async function ThesesListPage({
                   { label: "Target wt.", align: "right" as const, w: "76px" },
                   { label: "Target px.", align: "right" as const, w: "84px" },
                   { label: "Opened", align: "right" as const, w: "100px" },
+                  { label: "", align: "right" as const, w: "40px" },
                 ].map((h) => (
                   <th
                     key={h.label}
@@ -416,16 +417,7 @@ export default async function ThesesListPage({
                           color: "#00183A",
                         }}
                       >
-                        <Link
-                          href={`/dashboard/funds/${fund.slug}/theses/${r.id}`}
-                          style={{
-                            color: "#00183A",
-                            textDecoration: "none",
-                            borderBottom: "1px solid #C8C8C0",
-                          }}
-                        >
-                          {r.ticker}
-                        </Link>
+                        {r.ticker}
                       </div>
                       <div
                         style={{
@@ -456,7 +448,6 @@ export default async function ThesesListPage({
                         {latestUpdateByThesis.get(r.id) ? (
                           <>
                             <div style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 600, marginBottom: 2 }}>
-                              Latest update ·{" "}
                               {latestUpdateByThesis.get(r.id)!.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                             </div>
                             <div style={{ color: "#00183A", fontWeight: 500 }}>
@@ -553,6 +544,35 @@ export default async function ThesesListPage({
                       }}
                     >
                       {openedStr}
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 14px",
+                        borderBottom: "1px solid #F0EFEA",
+                        textAlign: "right",
+                        verticalAlign: "top",
+                      }}
+                    >
+                      <Link
+                        href={`/dashboard/funds/${fund.slug}/theses/${r.id}`}
+                        aria-label="Open thesis"
+                        title="Open thesis"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: 26,
+                          height: 26,
+                          borderRadius: 5,
+                          border: "1px solid #D9D9D2",
+                          color: "#00183A",
+                          textDecoration: "none",
+                          fontSize: 15,
+                          lineHeight: 1,
+                        }}
+                      >
+                        →
+                      </Link>
                     </td>
                   </tr>
                 );
