@@ -17,8 +17,6 @@ interface Props {
   cashBase: number;
   holdingsCount: number;
   holdingsSub: string;
-  constraintsCount: number;
-  constraintsSub: string;
   snapshotDate: string | null;
 }
 
@@ -59,8 +57,6 @@ export default function LiveNavCards({
   cashBase,
   holdingsCount,
   holdingsSub,
-  constraintsCount,
-  constraintsSub,
   snapshotDate,
 }: Props) {
   // Tick each second so the "updated Ns ago" label counts up between polls.
@@ -85,7 +81,6 @@ export default function LiveNavCards({
       />
       <Card label="Holdings" value={String(holdingsCount)} sub={holdingsSub} />
       <Card label="Cash" value={`${currencySymbol}${fmt(cashBase)}`} sub={liveNav > 0 ? `${cashPct.toFixed(1)}% of NAV` : ""} />
-      <Card label="Constraints" value={String(constraintsCount)} sub={constraintsSub} />
       <Card
         label="Fund value as of"
         value={isLive ? "Live" : snapshotDate ?? "Today"}

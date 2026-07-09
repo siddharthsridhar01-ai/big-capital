@@ -32,8 +32,6 @@ interface Props {
   cashBase: number;
   holdingsCount: number;
   holdingsSub: string;
-  constraintsCount: number;
-  constraintsSub: string;
   snapshotDate: string | null;
   positions: Position[];
   // NavChart props
@@ -82,8 +80,6 @@ export default function LiveFundHeader(props: Props) {
           cashBase={props.cashBase}
           holdingsCount={props.holdingsCount}
           holdingsSub={props.holdingsSub}
-          constraintsCount={props.constraintsCount}
-          constraintsSub={props.constraintsSub}
           snapshotDate={props.snapshotDate}
         />
       </div>

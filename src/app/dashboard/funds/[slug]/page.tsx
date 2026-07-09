@@ -310,8 +310,6 @@ export default async function FundPage({
         holdingsSub={
           liveState.positions.size === 0 ? "No positions yet" : `${liveState.positions.size} open`
         }
-        constraintsCount={dedupedConstraints.length}
-        constraintsSub={`${dedupedConstraints.filter((c) => c.isHard).length} hard, ${dedupedConstraints.filter((c) => !c.isHard).length} soft`}
         snapshotDate={latestNav.length > 0 ? latestNav[0].date : null}
         positions={Array.from(liveState.positions.values()).map((p) => ({
           securityId: p.securityId,
