@@ -620,6 +620,16 @@ export default async function ThesisDetailPage({
                     />
                   </div>
                 ) : null}
+                {(user.role === "admin" || t.authorUserId === user.id) && (
+                  <div style={{ marginTop: 10, textAlign: "right" }}>
+                    <Link
+                      href={`/dashboard/funds/${slug}/trades/${ev.txnId}/edit`}
+                      style={{ fontSize: 11, color: "#00183A", textDecoration: "none", borderBottom: "1px solid #D9D9D2" }}
+                    >
+                      Edit note / attachment
+                    </Link>
+                  </div>
+                )}
               </TimelineItem>
             );
           }
@@ -679,9 +689,19 @@ export default async function ThesisDetailPage({
                     />
                   </div>
                 ) : null}
-                <div style={{ fontSize: 10, color: "#9A9A8E", marginTop: 8 }}>
-                  {ev.author}
-                  {ev.fromTrade ? " · noted alongside a trade" : ""}
+                <div style={{ fontSize: 10, color: "#9A9A8E", marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span>
+                    {ev.author}
+                    {ev.fromTrade ? " · noted alongside a trade" : ""}
+                  </span>
+                  {(user.role === "admin" || t.authorUserId === user.id) && (
+                    <Link
+                      href={`/dashboard/funds/${slug}/theses/${thesisId}/updates/${ev.updateId}/edit`}
+                      style={{ fontSize: 11, color: "#00183A", textDecoration: "none", borderBottom: "1px solid #D9D9D2" }}
+                    >
+                      Edit
+                    </Link>
+                  )}
                 </div>
               </TimelineItem>
             );
