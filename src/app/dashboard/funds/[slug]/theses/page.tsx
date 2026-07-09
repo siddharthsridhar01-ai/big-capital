@@ -73,20 +73,52 @@ export default async function ThesesListPage({
     earliestTradeByThesis.get(r.id) ?? new Date(r.openedAt);
   rows.sort((a, b) => effectiveOpened(b).getTime() - effectiveOpened(a).getTime());
 
-  // Latest thesis update per thesis, so the list can show the most recent development.
+  // Each thesis is a living view: derive its CURRENT state from the most recent
+  // updates (latest non-null revision wins), plus the single latest update note.
   const latestUpdateByThesis = new Map<string, { note: string; createdAt: Date }>();
+  const currentByThesis = new Map<
+    string,
+    { conviction: string | null; tw: string | null; tp: string | null; convRev: boolean; twRev: boolean; tpRev: boolean }
+  >();
   if (thesisIds.length > 0) {
     const ups = await db
-      .select({ thesisId: thesisUpdates.thesisId, note: thesisUpdates.note, createdAt: thesisUpdates.createdAt })
+      .select({
+        thesisId: thesisUpdates.thesisId,
+        note: thesisUpdates.note,
+        createdAt: thesisUpdates.createdAt,
+        newConviction: thesisUpdates.newConviction,
+        newTargetWeightPct: thesisUpdates.newTargetWeightPct,
+        newTargetPriceNative: thesisUpdates.newTargetPriceNative,
+      })
       .from(thesisUpdates)
       .where(inArray(thesisUpdates.thesisId, thesisIds))
-      .orderBy(desc(thesisUpdates.createdAt));
+      .orderBy(desc(thesisUpdates.createdAt)); // newest first → first non-null is the latest revision
     for (const u of ups) {
       if (!latestUpdateByThesis.has(u.thesisId)) {
         latestUpdateByThesis.set(u.thesisId, { note: u.note, createdAt: new Date(u.createdAt) });
       }
+      const cur =
+        currentByThesis.get(u.thesisId) ?? { conviction: null, tw: null, tp: null, convRev: false, twRev: false, tpRev: false };
+      if (cur.conviction === null && u.newConviction) {
+        cur.conviction = u.newConviction;
+        cur.convRev = true;
+      }
+      if (cur.tw === null && u.newTargetWeightPct != null) {
+        cur.tw = String(u.newTargetWeightPct);
+        cur.twRev = true;
+      }
+      if (cur.tp === null && u.newTargetPriceNative != null) {
+        cur.tp = String(u.newTargetPriceNative);
+        cur.tpRev = true;
+      }
+      currentByThesis.set(u.thesisId, cur);
     }
   }
+  // Current value accessors (fall back to the opening thesis when never revised).
+  const curConviction = (r: (typeof rows)[number]) => currentByThesis.get(r.id)?.conviction ?? (r.conviction as string | null);
+  const curTW = (r: (typeof rows)[number]) => currentByThesis.get(r.id)?.tw ?? (r.targetWeightPct as string | null);
+  const curTP = (r: (typeof rows)[number]) => currentByThesis.get(r.id)?.tp ?? (r.targetPriceNative as string | null);
+  const rev = (r: (typeof rows)[number], f: "convRev" | "twRev" | "tpRev") => currentByThesis.get(r.id)?.[f] ?? false;
 
   const activeCount = rows.filter((r) => r.status === "active").length;
   const closedCount = rows.filter(
@@ -228,7 +260,7 @@ export default async function ThesesListPage({
                 {[
                   { label: "Status", align: "left" as const, w: "90px" },
                   { label: "Ticker", align: "left" as const, w: "80px" },
-                  { label: "Title / summary", align: "left" as const, w: "auto" },
+                  { label: "Title / latest", align: "left" as const, w: "auto" },
                   { label: "Author", align: "left" as const, w: "130px" },
                   { label: "Conviction", align: "left" as const, w: "84px" },
                   { label: "Target wt.", align: "right" as const, w: "76px" },
@@ -276,10 +308,11 @@ export default async function ThesesListPage({
                       : r.status === "post_mortem"
                         ? "#00183A"
                         : "#9A9A8E";
+                const convNow = curConviction(r);
                 const convColor =
-                  r.conviction === "high"
+                  convNow === "high"
                     ? "#1F5C3A"
-                    : r.conviction === "medium"
+                    : convNow === "medium"
                       ? "#5A3F08"
                       : "#6B6B66";
                 return (
@@ -356,21 +389,22 @@ export default async function ThesesListPage({
                           {r.title}
                         </div>
                       )}
-                      <div style={{ color: r.title ? "#6B6B66" : "#0A0A0A" }}>{r.summary}</div>
                       {latestUpdateByThesis.get(r.id) ? (
-                        <div style={{ marginTop: 8, paddingLeft: 8, borderLeft: "2px solid #E5E5DE" }}>
-                          <span style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 600 }}>
+                        <>
+                          <div style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 600, marginBottom: 2 }}>
                             Latest update ·{" "}
                             {latestUpdateByThesis.get(r.id)!.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                          </span>
-                          <div style={{ fontSize: 12, color: "#6B6B66", marginTop: 2 }}>
+                          </div>
+                          <div style={{ color: "#0A0A0A" }}>
                             {(() => {
                               const n = latestUpdateByThesis.get(r.id)!.note;
-                              return n.length > 140 ? n.slice(0, 140).trimEnd() + "…" : n;
+                              return n.length > 160 ? n.slice(0, 160).trimEnd() + "…" : n;
                             })()}
                           </div>
-                        </div>
-                      ) : null}
+                        </>
+                      ) : (
+                        <div style={{ color: r.title ? "#6B6B66" : "#0A0A0A" }}>{r.summary}</div>
+                      )}
                       {r.memoBlobUrl ? (
                         <div style={{ marginTop: 8 }}>
                           <PdfMemoCard
@@ -403,7 +437,10 @@ export default async function ThesesListPage({
                         fontWeight: 600,
                       }}
                     >
-                      {r.conviction}
+                      {convNow ?? "—"}
+                      {rev(r, "convRev") && (
+                        <div style={{ fontSize: 9, color: "#8A6D1F", fontWeight: 600, marginTop: 2 }}>revised ↑</div>
+                      )}
                     </td>
                     <td
                       style={{
@@ -415,9 +452,12 @@ export default async function ThesesListPage({
                         verticalAlign: "top",
                       }}
                     >
-                      {r.targetWeightPct
-                        ? `${(Number(r.targetWeightPct) * 100).toFixed(2)}%`
+                      {curTW(r)
+                        ? `${(Number(curTW(r)) * 100).toFixed(2)}%`
                         : "—"}
+                      {rev(r, "twRev") && (
+                        <div style={{ fontSize: 9, color: "#8A6D1F", fontWeight: 600, marginTop: 2 }}>revised ↑</div>
+                      )}
                     </td>
                     <td
                       style={{
@@ -429,9 +469,12 @@ export default async function ThesesListPage({
                         verticalAlign: "top",
                       }}
                     >
-                      {r.targetPriceNative
-                        ? `${r.currency === "USD" ? "$" : r.currency === "EUR" ? "€" : "£"}${Number(r.targetPriceNative).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      {curTP(r)
+                        ? `${r.currency === "USD" ? "$" : r.currency === "EUR" ? "€" : "£"}${Number(curTP(r)).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : "—"}
+                      {rev(r, "tpRev") && (
+                        <div style={{ fontSize: 9, color: "#8A6D1F", fontWeight: 600, marginTop: 2 }}>revised ↑</div>
+                      )}
                     </td>
                     <td
                       style={{
