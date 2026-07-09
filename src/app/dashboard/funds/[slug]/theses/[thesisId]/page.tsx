@@ -644,28 +644,6 @@ export default async function ThesisDetailPage({
                     {ev.rationale}
                   </div>
                 ) : null}
-                {ev.attachmentFilename ? (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                      <span style={{ fontSize: 11, color: "#6B6B66" }}>
-                        Trade attachment · {ev.attachmentFilename}
-                      </span>
-                      <a
-                        href={`/api/funds/${slug}/transactions/${ev.txnId}/attachment`}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ fontSize: 11, color: "#00183A", textDecoration: "none", borderBottom: "1px solid #00183A" }}
-                      >
-                        Open in new tab ↗
-                      </a>
-                    </div>
-                    <iframe
-                      src={`/api/funds/${slug}/transactions/${ev.txnId}/attachment`}
-                      title="Trade attachment"
-                      style={{ width: "100%", height: 460, border: "1px solid #E5E5DE", background: "#FAFAF7" }}
-                    />
-                  </div>
-                ) : null}
                 {(user.role === "admin" || t.authorUserId === user.id) && (
                   <div style={{ marginTop: 10, textAlign: "right" }}>
                     <Link
