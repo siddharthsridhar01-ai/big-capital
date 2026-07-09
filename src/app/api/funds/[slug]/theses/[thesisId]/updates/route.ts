@@ -75,6 +75,9 @@ export async function POST(
   }
   const note = noteRaw.trim();
 
+  const titleRaw = form.get("title");
+  const title = typeof titleRaw === "string" && titleRaw.trim() !== "" ? titleRaw.trim().slice(0, 120) : null;
+
   // Optional revisions
   const convRaw = form.get("conviction");
   let newConviction: string | null = null;
@@ -168,6 +171,7 @@ export async function POST(
       authorUserId: user.id,
       transactionId: null,
       note,
+      title,
       newConviction,
       newHoldingPeriod,
       newTargetWeightPct,

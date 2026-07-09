@@ -32,6 +32,7 @@ export default async function EditThesisUpdatePage({
       id: thesisUpdates.id,
       authorUserId: thesisUpdates.authorUserId,
       note: thesisUpdates.note,
+      title: thesisUpdates.title,
       newConviction: thesisUpdates.newConviction,
       newHoldingPeriod: thesisUpdates.newHoldingPeriod,
       newTargetWeightPct: thesisUpdates.newTargetWeightPct,
@@ -75,6 +76,7 @@ export default async function EditThesisUpdatePage({
         currencySymbol={ccySym(u.currency as string)}
         initial={{
           note: u.note,
+          title: u.title ?? "",
           conviction: (u.newConviction as "" | "high" | "medium" | "low") ?? "",
           holdingPeriod: (u.newHoldingPeriod as "" | "short" | "medium" | "long" | "indefinite") ?? "",
           targetWeightPct: twPercent,

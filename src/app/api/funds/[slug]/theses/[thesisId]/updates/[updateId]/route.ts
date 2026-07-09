@@ -67,6 +67,9 @@ export async function PATCH(
   }
   const note = noteRaw.trim();
 
+  const titleRaw = form.get("title");
+  const title = typeof titleRaw === "string" && titleRaw.trim() !== "" ? titleRaw.trim().slice(0, 120) : null;
+
   const convRaw = form.get("conviction");
   let newConviction: string | null = null;
   if (convRaw === "high" || convRaw === "medium" || convRaw === "low") newConviction = convRaw;
@@ -99,6 +102,7 @@ export async function PATCH(
 
   const updateData: Record<string, unknown> = {
     note,
+    title,
     newConviction,
     newHoldingPeriod,
     newTargetWeightPct,

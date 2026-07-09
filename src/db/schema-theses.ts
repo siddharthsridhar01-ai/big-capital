@@ -179,6 +179,7 @@ export const thesisUpdates = pgTable("thesis_updates", {
   // is created by the migration.
   transactionId: uuid("transaction_id"),
   note: text("note").notNull(),
+  title: text("title"),
   // Optional revisions captured by this update (null = field not revised).
   // Stored as the NEW value; the theses row stays the original opening
   // snapshot, so the timeline reads as a progression rather than overwriting.

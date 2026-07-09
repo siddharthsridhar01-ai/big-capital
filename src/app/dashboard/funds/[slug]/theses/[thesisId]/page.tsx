@@ -103,6 +103,7 @@ type TLEvent =
       date: Date;
       updateId: string;
       note: string;
+      updateTitle: string | null;
       fromTrade: boolean;
       author: string;
       newConviction: string | null;
@@ -221,6 +222,7 @@ export default async function ThesisDetailPage({
     .select({
       id: thesisUpdates.id,
       note: thesisUpdates.note,
+      title: thesisUpdates.title,
       transactionId: thesisUpdates.transactionId,
       createdAt: thesisUpdates.createdAt,
       newConviction: thesisUpdates.newConviction,
@@ -306,6 +308,7 @@ export default async function ThesisDetailPage({
       date: new Date(u.createdAt),
       updateId: u.id,
       note: u.note,
+      updateTitle: u.title,
       fromTrade: u.transactionId != null,
       author: u.author,
       newConviction: u.newConviction,
@@ -689,6 +692,11 @@ export default async function ThesisDetailPage({
           if (ev.kind === "update") {
             return (
               <TimelineItem key={i} color="#8A6D1F" title="Thesis update" date={dateStr(ev.date)} last={last}>
+                {ev.updateTitle && (
+                  <div style={{ ...serif, fontSize: 15, fontWeight: 700, color: "#00183A", marginBottom: 4 }}>
+                    {ev.updateTitle}
+                  </div>
+                )}
                 <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
                   {ev.note}
                 </div>

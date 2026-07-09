@@ -77,7 +77,7 @@ export default async function ThesesListPage({
 
   // Each thesis is a living view: derive its CURRENT state from the most recent
   // updates (latest non-null revision wins), plus the single latest update note.
-  const latestUpdateByThesis = new Map<string, { note: string; createdAt: Date }>();
+  const latestUpdateByThesis = new Map<string, { note: string; title: string | null; createdAt: Date }>();
   const currentByThesis = new Map<
     string,
     { conviction: string | null; tw: string | null; tp: string | null; convRev: boolean; twRev: boolean; tpRev: boolean }
@@ -87,6 +87,7 @@ export default async function ThesesListPage({
       .select({
         thesisId: thesisUpdates.thesisId,
         note: thesisUpdates.note,
+        title: thesisUpdates.title,
         createdAt: thesisUpdates.createdAt,
         newConviction: thesisUpdates.newConviction,
         newTargetWeightPct: thesisUpdates.newTargetWeightPct,
@@ -97,7 +98,7 @@ export default async function ThesesListPage({
       .orderBy(desc(thesisUpdates.createdAt)); // newest first → first non-null is the latest revision
     for (const u of ups) {
       if (!latestUpdateByThesis.has(u.thesisId)) {
-        latestUpdateByThesis.set(u.thesisId, { note: u.note, createdAt: new Date(u.createdAt) });
+        latestUpdateByThesis.set(u.thesisId, { note: u.note, title: u.title, createdAt: new Date(u.createdAt) });
       }
       const cur =
         currentByThesis.get(u.thesisId) ?? { conviction: null, tw: null, tp: null, convRev: false, twRev: false, tpRev: false };
@@ -450,6 +451,11 @@ export default async function ThesesListPage({
                             <div style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 600, marginBottom: 2 }}>
                               {latestUpdateByThesis.get(r.id)!.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                             </div>
+                            {latestUpdateByThesis.get(r.id)!.title && (
+                              <div style={{ ...serif, fontSize: 14, fontWeight: 700, color: "#00183A", marginBottom: 2 }}>
+                                {latestUpdateByThesis.get(r.id)!.title}
+                              </div>
+                            )}
                             <div style={{ color: "#00183A", fontWeight: 500 }}>
                               {(() => {
                                 const n = latestUpdateByThesis.get(r.id)!.note;
