@@ -1,6 +1,6 @@
 import { db } from "@/db/client";
 import { funds as fundsTable, securities, users, transactions } from "@/db/schema";
-import { theses } from "@/db/schema-theses";
+import { theses, thesisUpdates } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
 import { eq, desc, inArray, min } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
@@ -72,6 +72,21 @@ export default async function ThesesListPage({
   const effectiveOpened = (r: (typeof rows)[number]): Date =>
     earliestTradeByThesis.get(r.id) ?? new Date(r.openedAt);
   rows.sort((a, b) => effectiveOpened(b).getTime() - effectiveOpened(a).getTime());
+
+  // Latest thesis update per thesis, so the list can show the most recent development.
+  const latestUpdateByThesis = new Map<string, { note: string; createdAt: Date }>();
+  if (thesisIds.length > 0) {
+    const ups = await db
+      .select({ thesisId: thesisUpdates.thesisId, note: thesisUpdates.note, createdAt: thesisUpdates.createdAt })
+      .from(thesisUpdates)
+      .where(inArray(thesisUpdates.thesisId, thesisIds))
+      .orderBy(desc(thesisUpdates.createdAt));
+    for (const u of ups) {
+      if (!latestUpdateByThesis.has(u.thesisId)) {
+        latestUpdateByThesis.set(u.thesisId, { note: u.note, createdAt: new Date(u.createdAt) });
+      }
+    }
+  }
 
   const activeCount = rows.filter((r) => r.status === "active").length;
   const closedCount = rows.filter(
@@ -342,6 +357,20 @@ export default async function ThesesListPage({
                         </div>
                       )}
                       <div style={{ color: r.title ? "#6B6B66" : "#0A0A0A" }}>{r.summary}</div>
+                      {latestUpdateByThesis.get(r.id) ? (
+                        <div style={{ marginTop: 8, paddingLeft: 8, borderLeft: "2px solid #E5E5DE" }}>
+                          <span style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 600 }}>
+                            Latest update ·{" "}
+                            {latestUpdateByThesis.get(r.id)!.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                          </span>
+                          <div style={{ fontSize: 12, color: "#6B6B66", marginTop: 2 }}>
+                            {(() => {
+                              const n = latestUpdateByThesis.get(r.id)!.note;
+                              return n.length > 140 ? n.slice(0, 140).trimEnd() + "…" : n;
+                            })()}
+                          </div>
+                        </div>
+                      ) : null}
                       {r.memoBlobUrl ? (
                         <div style={{ marginTop: 8 }}>
                           <PdfMemoCard
