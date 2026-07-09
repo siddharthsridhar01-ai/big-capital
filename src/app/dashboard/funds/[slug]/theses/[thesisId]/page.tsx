@@ -575,6 +575,16 @@ export default async function ThesisDetailPage({
                     <iframe src={memoUrl} title="Thesis memo" style={{ width: "100%", height: 460, border: "1px solid #E5E5DE", background: "#FAFAF7" }} />
                   </div>
                 ) : null}
+                {(user.role === "admin" || t.authorUserId === user.id) && (
+                  <div style={{ marginTop: 12, textAlign: "right" }}>
+                    <Link
+                      href={`/dashboard/funds/${slug}/theses/${thesisId}/edit`}
+                      style={{ fontSize: 11, color: "#00183A", textDecoration: "none", borderBottom: "1px solid #D9D9D2" }}
+                    >
+                      Edit opening thesis
+                    </Link>
+                  </div>
+                )}
               </TimelineItem>
             );
           }
