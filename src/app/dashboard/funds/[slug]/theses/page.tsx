@@ -2,6 +2,7 @@ import { db } from "@/db/client";
 import { funds as fundsTable, securities, users, transactions } from "@/db/schema";
 import { theses, thesisUpdates } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
+import ThesisApprovalActions from "@/components/ThesisApprovalActions";
 import { eq, desc, inArray, min } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -48,6 +49,7 @@ export default async function ThesesListPage({
       securityName: securities.name,
       exchange: securities.exchange,
       currency: securities.currency,
+      approvalStatus: theses.approvalStatus,
     })
     .from(theses)
     .innerJoin(securities, eq(theses.securityId, securities.id))
@@ -120,8 +122,19 @@ export default async function ThesesListPage({
   const curTP = (r: (typeof rows)[number]) => currentByThesis.get(r.id)?.tp ?? (r.targetPriceNative as string | null);
   const rev = (r: (typeof rows)[number], f: "convRev" | "twRev" | "tpRev") => currentByThesis.get(r.id)?.[f] ?? false;
 
-  const activeCount = rows.filter((r) => r.status === "active").length;
-  const closedCount = rows.filter(
+  const approvedRows = rows.filter((r) => r.approvalStatus === "approved");
+  const canApprove = user.role === "admin" || user.role === "pm";
+  // Under-review = pending or rejected. PMs/admins see all of them; anyone else
+  // sees only their own, so a rejected submission never silently disappears.
+  const reviewRows = rows.filter(
+    (r) =>
+      (r.approvalStatus === "pending" || r.approvalStatus === "rejected") &&
+      (canApprove || r.authorUserId === user.id)
+  );
+  const pendingCount = rows.filter((r) => r.approvalStatus === "pending").length;
+
+  const activeCount = approvedRows.filter((r) => r.status === "active").length;
+  const closedCount = approvedRows.filter(
     (r) => r.status === "closed" || r.status === "post_mortem"
   ).length;
 
@@ -207,11 +220,63 @@ export default async function ThesesListPage({
       >
         Investment theses document the rationale, conviction, and target for
         each idea. Trades execute on a thesis; post-mortems review how the
-        thesis played out. {rows.length} total · {activeCount} active ·{" "}
-        {closedCount} closed.
+        thesis played out. {approvedRows.length} total · {activeCount} active ·{" "}
+        {closedCount} closed
+        {pendingCount > 0 ? ` · ${pendingCount} pending approval` : ""}.
       </div>
 
-      {rows.length === 0 ? (
+      {reviewRows.length > 0 && (
+        <div
+          style={{
+            background: "#FCFBF4",
+            border: "1px solid #E7DCae",
+            borderRadius: 8,
+            padding: "16px 18px",
+            marginBottom: 20,
+          }}
+        >
+          <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 700, marginBottom: 12 }}>
+            {canApprove ? "Awaiting review" : "Your submissions"} ({reviewRows.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {reviewRows.map((r) => {
+              const rejected = r.approvalStatus === "rejected";
+              return (
+                <div key={r.id} style={{ display: "flex", alignItems: "flex-start", gap: 14, paddingBottom: 10, borderBottom: "1px solid #EFEAD6" }}>
+                  <div style={{ minWidth: 70 }}>
+                    <Link href={`/dashboard/funds/${fund.slug}/theses/${r.id}`} style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, fontWeight: 600, color: "#00183A", textDecoration: "none" }}>
+                      {r.ticker}
+                    </Link>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: 700, color: rejected ? "#7A1F1F" : "#8A6D1F", background: rejected ? "#FBF0F0" : "#F5EED6", border: `1px solid ${rejected ? "#E4C9C9" : "#E7DCae"}`, borderRadius: 3, padding: "1px 6px" }}>
+                        {rejected ? "Not approved" : "Pending"}
+                      </span>
+                      {r.title && <span style={{ ...serif, fontSize: 14, fontWeight: 700, color: "#00183A" }}>{r.title}</span>}
+                    </div>
+                    <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#0A0A0A", lineHeight: 1.4 }}>
+                      {r.summary.length > 160 ? r.summary.slice(0, 160).trimEnd() + "…" : r.summary}
+                    </div>
+                    <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: "#9A9A8E", marginTop: 3 }}>
+                      Submitted by {r.authorName ?? "—"}
+                    </div>
+                  </div>
+                  {canApprove ? (
+                    <ThesisApprovalActions fundSlug={fund.slug} thesisId={r.id} />
+                  ) : (
+                    <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: rejected ? "#7A1F1F" : "#8A6D1F", fontWeight: 600, whiteSpace: "nowrap" }}>
+                      {rejected ? "Not approved" : "Awaiting approval"}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {approvedRows.length === 0 ? (
         <div
           style={{
             background: "white",
@@ -260,7 +325,7 @@ export default async function ThesesListPage({
                 {[
                   { label: "Status", align: "left" as const, w: "90px" },
                   { label: "Ticker", align: "left" as const, w: "80px" },
-                  { label: "Title / latest", align: "left" as const, w: "auto" },
+                  { label: "Latest update", align: "left" as const, w: "auto" },
                   { label: "Author", align: "left" as const, w: "130px" },
                   { label: "Conviction", align: "left" as const, w: "84px" },
                   { label: "Target wt.", align: "right" as const, w: "76px" },
@@ -287,7 +352,7 @@ export default async function ThesesListPage({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {approvedRows.map((r) => {
                 const openedStr = effectiveOpened(r).toLocaleDateString(
                   "en-GB",
                   { day: "2-digit", month: "short", year: "numeric" }
@@ -384,27 +449,27 @@ export default async function ThesesListPage({
                         overflowWrap: "anywhere",
                       }}
                     >
-                      {r.title && (
-                        <div style={{ ...serif, fontSize: 15, fontWeight: 700, color: "#00183A", marginBottom: 3 }}>
-                          {r.title}
-                        </div>
-                      )}
-                      {latestUpdateByThesis.get(r.id) ? (
-                        <>
-                          <div style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 600, marginBottom: 2 }}>
-                            Latest update ·{" "}
-                            {latestUpdateByThesis.get(r.id)!.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                          </div>
-                          <div style={{ color: "#0A0A0A" }}>
-                            {(() => {
-                              const n = latestUpdateByThesis.get(r.id)!.note;
-                              return n.length > 160 ? n.slice(0, 160).trimEnd() + "…" : n;
-                            })()}
-                          </div>
-                        </>
-                      ) : (
-                        <div style={{ color: r.title ? "#6B6B66" : "#0A0A0A" }}>{r.summary}</div>
-                      )}
+                      <Link
+                        href={`/dashboard/funds/${slug}/theses/${r.id}`}
+                        style={{ textDecoration: "none", display: "block" }}
+                      >
+                        {latestUpdateByThesis.get(r.id) ? (
+                          <>
+                            <div style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "#8A6D1F", fontWeight: 600, marginBottom: 2 }}>
+                              Latest update ·{" "}
+                              {latestUpdateByThesis.get(r.id)!.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                            </div>
+                            <div style={{ color: "#00183A", fontWeight: 500 }}>
+                              {(() => {
+                                const n = latestUpdateByThesis.get(r.id)!.note;
+                                return n.length > 160 ? n.slice(0, 160).trimEnd() + "…" : n;
+                              })()}
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ color: "#00183A", fontWeight: 500 }}>{r.summary}</div>
+                        )}
+                      </Link>
                       {r.memoBlobUrl ? (
                         <div style={{ marginTop: 8 }}>
                           <PdfMemoCard
