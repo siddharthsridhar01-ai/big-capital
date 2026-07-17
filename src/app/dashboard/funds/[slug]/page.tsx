@@ -84,6 +84,7 @@ export default async function FundPage({
   // Benchmark since-inception comparison for the "Since inception" card.
   let benchmarkSinceInceptionPct: number | null = null;
   let benchmarkLabel: string | null = null;
+  let benchmarkChartPoints: { date: string; fund: number; benchmark: number | null }[] = [];
   if (fund.benchmarkSecurityId) {
     const benchSnaps = await db
       .select({
@@ -96,6 +97,11 @@ export default async function FundPage({
       .orderBy(navSnapshots.date);
     const perf = computeFundPerformance(benchSnaps, fund.inceptionDate);
     benchmarkSinceInceptionPct = perf.benchmarkCumulative;
+    benchmarkChartPoints = perf.fundSeries.map((p, i) => ({
+      date: p.date,
+      fund: p.pct,
+      benchmark: perf.benchmarkSeries[i]?.pct ?? null,
+    }));
 
     const benchSec = await db
       .select({ name: securitiesTable.name, ticker: securitiesTable.ticker })
@@ -344,6 +350,7 @@ export default async function FundPage({
         snapshotDate={latestNav.length > 0 ? latestNav[0].date : null}
         benchmarkSinceInceptionPct={benchmarkSinceInceptionPct}
         benchmarkLabel={benchmarkLabel}
+        benchmarkPoints={benchmarkChartPoints}
         positions={Array.from(liveState.positions.values()).map((p) => ({
           securityId: p.securityId,
           quantity: p.quantity.toString(),

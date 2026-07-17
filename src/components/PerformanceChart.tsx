@@ -42,9 +42,11 @@ function fmtDateLong(iso: string): string {
 export default function PerformanceChart({
   points,
   benchmarkName,
+  bare = false,
 }: {
   points: PerfPoint[];
   benchmarkName: string | null;
+  bare?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -130,7 +132,7 @@ export default function PerformanceChart({
       ref={wrapRef}
       onMouseMove={onMove}
       onMouseLeave={() => setHoverIdx(null)}
-      style={{ position: "relative", border: "1px solid #E5E5DE", background: "white" }}
+      style={{ position: "relative", border: bare ? "none" : "1px solid #E5E5DE", background: bare ? "transparent" : "white" }}
     >
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Cumulative return since inception">
         {/* Y gridlines + labels */}
