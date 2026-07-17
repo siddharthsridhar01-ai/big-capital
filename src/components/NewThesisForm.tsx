@@ -9,13 +9,13 @@ interface UniverseEntry {
   ticker: string;
   name: string;
   exchange: string;
-  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
   gicsSector: string | null;
 }
 
 interface Props {
   fundSlug: string;
-  fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+  fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
   universe: UniverseEntry[];
   /** Preselect this security (e.g. arriving from a trade's "New thesis" link). */
   initialSecurityId?: string;

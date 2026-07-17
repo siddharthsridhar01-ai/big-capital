@@ -11,7 +11,7 @@ import postgres from "postgres";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const NEW_CURRENCIES = ["JPY", "HKD", "CNY", "KRW", "SGD", "INR"];
+const NEW_CURRENCIES = ["JPY", "HKD", "CNY", "KRW", "SGD", "INR", "TWD"];
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);

@@ -33,7 +33,7 @@ export const userRoleEnum = pgEnum("user_role", ["admin", "pm", "analyst"]);
 
 export const fundMemberRoleEnum = pgEnum("fund_member_role", ["pm", "senior_analyst", "analyst"]);
 
-export const currencyEnum = pgEnum("currency", ["GBP", "USD", "EUR", "JPY", "HKD", "CNY", "KRW", "SGD", "INR"]);
+export const currencyEnum = pgEnum("currency", ["GBP", "USD", "EUR", "JPY", "HKD", "CNY", "KRW", "SGD", "INR", "TWD"]);
 
 export const securityTypeEnum = pgEnum("security_type", [
   "equity",

@@ -32,7 +32,7 @@ type Option = {
   label: string;
 };
 
-const CANDIDATES: Record<string, { benchmarkName: string; baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR"; options: Option[] }> = {
+const CANDIDATES: Record<string, { benchmarkName: string; baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"; options: Option[] }> = {
   "uk-equity": {
     benchmarkName: "FTSE All-Share (total-return proxy)",
     baseCurrency: "GBP",

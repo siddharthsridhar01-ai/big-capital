@@ -31,7 +31,7 @@ import {
   prices as pricesTable,
 } from "@/db/schema";
 
-export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
 
 export interface LivePosition {
   securityId: string;
@@ -482,6 +482,7 @@ const FALLBACK_PER_EUR: Record<string, number> = {
   KRW: 1480,
   SGD: 1.45,
   INR: 90,
+  TWD: 35,
 };
 
 export function staticFxFallback(from: Currency, to: Currency): Decimal {

@@ -12,14 +12,14 @@
 import { serif, numeric } from "@/lib/typography";
 
 interface ExposuresPanelProps {
-  baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+  baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
   navBase: number;
   positions: Array<{
     securityId: string;
     ticker: string;
     name: string;
     exchange: string;
-    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
     gicsSector: string | null;
     /** Signed quantity. */
     quantity: number;
@@ -34,7 +34,7 @@ interface ExposuresPanelProps {
   netExposure: number;
 }
 
-const baseSyms: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥", KRW: "₩", SGD: "S$", INR: "₹" };
+const baseSyms: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥", KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$" };
 
 function fmtMoney(n: number, ccy: string) {
   return `${baseSyms[ccy] ?? "$"}${new Intl.NumberFormat("en-GB", {

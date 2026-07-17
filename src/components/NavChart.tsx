@@ -23,7 +23,7 @@ export interface NavPoint {
 
 interface NavChartProps {
   fundName: string;
-  fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+  fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
   startingNav: number;
   /** YYYY-MM-DD format. */
   inceptionDate: string;
@@ -59,7 +59,7 @@ function fundAgeDays(inceptionDate: string): number {
   return Math.floor((Date.now() - inception.getTime()) / 86400000);
 }
 
-const baseSyms: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥", KRW: "₩", SGD: "S$", INR: "₹" };
+const baseSyms: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥", KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$" };
 
 function fmtMoney(n: number, currency: string) {
   return `${baseSyms[currency] ?? "$"}${new Intl.NumberFormat("en-GB", {

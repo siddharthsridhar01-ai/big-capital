@@ -106,7 +106,7 @@ export default async function FundUniversePage({
     ticker: r.ticker,
     name: r.name,
     exchange: r.exchange,
-    currency: r.currency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR",
+    currency: r.currency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD",
     gicsSector: r.gicsSector,
     gicsIndustry: r.gicsIndustry,
     latestPrice: priceMap.get(r.securityId)?.closePrice ?? null,
@@ -176,7 +176,7 @@ export default async function FundUniversePage({
       <UniverseTable
         rows={rows}
         fundSlug={fund.slug}
-        fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR"}
+        fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"}
       />
     </main>
   );

@@ -23,7 +23,7 @@ Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_EVEN });
 // Types
 // ---------------------------------------------------------------------------
 
-export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
 
 export interface Transaction {
   id: string;

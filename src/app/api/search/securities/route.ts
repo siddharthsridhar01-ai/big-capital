@@ -40,7 +40,7 @@ export interface SearchResult {
   ticker: string;
   exchange: string;
   name: string;
-  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
   gicsSector: string | null;
   gicsIndustry: string | null;
   /** Latest known close from the DB (yesterday-or-earlier data). */
@@ -222,7 +222,7 @@ async function attachPrices(
     ticker: string;
     exchange: string;
     name: string;
-    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
     gicsSector: string | null;
     gicsIndustry: string | null;
   }>

@@ -12,7 +12,7 @@
  */
 import Decimal from "decimal.js";
 
-export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
+export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
 
 export interface RawDividend {
   date: string; // ex-date, YYYY-MM-DD

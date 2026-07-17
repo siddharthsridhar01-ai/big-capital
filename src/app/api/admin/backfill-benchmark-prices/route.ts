@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      const rows: Array<{ securityId: string; date: string; closePrice: string; currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR"; source: string }> = [];
+      const rows: Array<{ securityId: string; date: string; closePrice: string; currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"; source: string }> = [];
       for (const q of chart.quotes ?? []) {
         const close = q.close;
         if (close == null || !Number.isFinite(close) || !q.date) continue;
