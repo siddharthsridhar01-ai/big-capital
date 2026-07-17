@@ -25,8 +25,13 @@ const RANGES: { key: string; label: string; days: number }[] = [
   { key: "1Y", label: "1Y", days: 365 },
 ];
 
-function fmtDate(d: string) {
+function fmtDayMonth(d: string) {
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+function fmtMonthYear(d: string) {
+  const dt = new Date(d);
+  const mon = dt.toLocaleDateString("en-GB", { month: "short" });
+  return `${mon} '${String(dt.getFullYear()).slice(2)}`;
 }
 
 export default function SecurityPriceChart({
@@ -74,6 +79,12 @@ export default function SecurityPriceChart({
   const lo = Math.min(...data.map((d) => d.close));
   const hi = Math.max(...data.map((d) => d.close));
   const pad = Math.max((hi - lo) * 0.12, hi * 0.002);
+
+  // Show the year on the axis only when the visible window crosses a calendar
+  // year (otherwise day+month is more useful and less cluttered).
+  const spansYears =
+    data.length > 1 &&
+    new Date(data[0].date).getFullYear() !== new Date(data[data.length - 1].date).getFullYear();
 
   return (
     <div>
@@ -126,7 +137,7 @@ export default function SecurityPriceChart({
             <XAxis
               dataKey="date"
               tick={{ fontSize: 10, fill: "#9A9A8E" }}
-              tickFormatter={fmtDate}
+              tickFormatter={spansYears ? fmtMonthYear : fmtDayMonth}
               axisLine={{ stroke: "#E5E5DE" }}
               tickLine={false}
               minTickGap={40}

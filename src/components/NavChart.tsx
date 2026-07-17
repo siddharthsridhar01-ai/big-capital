@@ -75,6 +75,12 @@ function fmtShortDate(d: string) {
   });
 }
 
+function fmtMonthYear(d: string) {
+  const date = new Date(d);
+  const mon = date.toLocaleDateString("en-GB", { month: "short" });
+  return `${mon} '${String(date.getFullYear()).slice(2)}`;
+}
+
 export default function NavChart({
   fundBaseCurrency,
   startingNav,
@@ -162,6 +168,11 @@ export default function NavChart({
   const max = Math.max(...navVals, ...benchVals);
   const pad = Math.max((max - min) * 0.15, startingNav * 0.001);
   const yDomain: [number, number] = [min - pad, max + pad];
+
+  // Show the year on the axis only when the visible window crosses a calendar year.
+  const spansYears =
+    data.length > 1 &&
+    new Date(data[0].date).getFullYear() !== new Date(data[data.length - 1].date).getFullYear();
 
   // Range-specific return: NAV at the START of the visible window vs current
   const rangeStartNav = data[0]?.nav ?? startingNav;
@@ -347,7 +358,7 @@ export default function NavChart({
             <XAxis
               dataKey="date"
               tick={{ fontSize: 10, fill: "#9A9A8E" }}
-              tickFormatter={fmtShortDate}
+              tickFormatter={spansYears ? fmtMonthYear : fmtShortDate}
               axisLine={{ stroke: "#E5E5DE" }}
               tickLine={false}
               minTickGap={32}
