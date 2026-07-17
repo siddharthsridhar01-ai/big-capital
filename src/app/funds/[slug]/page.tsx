@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
 import type { HoldingsSnapshotPayload } from "@/lib/holdings-reconstruction";
+import PerformanceChart from "@/components/PerformanceChart";
 import {
   computeFundPerformance,
   computePeriodReturns,
@@ -262,8 +263,12 @@ export default async function PublicFundPage({ params }: PageProps) {
           ) : null}
         </div>
         <PerformanceChart
-          fund={perf.fundSeries.map((p) => p.pct)}
-          benchmark={perf.benchmarkSeries.map((p) => p.pct)}
+          points={perf.fundSeries.map((p, i) => ({
+            date: p.date,
+            fund: p.pct,
+            benchmark: perf.benchmarkSeries[i]?.pct ?? null,
+          }))}
+          benchmarkName={benchmarkName ?? null}
         />
         {asOf ? (
           <div style={{ fontSize: 10, color: "#9A9A8E", marginTop: 6, fontFamily: "system-ui, sans-serif" }}>
@@ -555,72 +560,5 @@ function Stat({
         {sub}
       </div>
     </div>
-  );
-}
-
-/**
- * Server-rendered SVG line chart of cumulative-return series (%). No client
- * JS — fast, SEO-friendly, and avoids the empty-container chart warning.
- */
-function PerformanceChart({
-  fund,
-  benchmark,
-}: {
-  fund: number[];
-  benchmark: number[];
-}) {
-  const W = 920;
-  const H = 200;
-  const pad = { top: 14, right: 8, bottom: 18, left: 8 };
-
-  if (fund.length < 2) {
-    return (
-      <div
-        style={{
-          border: "1px solid #E5E5DE",
-          background: "white",
-          padding: "28px 22px",
-          fontSize: 13,
-          color: "#6B6B66",
-          fontFamily: "system-ui, sans-serif",
-          textAlign: "center",
-        }}
-      >
-        The performance chart will appear as daily data accumulates.
-      </div>
-    );
-  }
-
-  const all = [...fund, ...benchmark, 0];
-  let min = Math.min(...all);
-  let max = Math.max(...all);
-  if (min === max) {
-    min -= 1;
-    max += 1;
-  }
-  const range = max - min;
-  min -= range * 0.08;
-  max += range * 0.08;
-
-  const plotW = W - pad.left - pad.right;
-  const plotH = H - pad.top - pad.bottom;
-  const x = (i: number, n: number) =>
-    pad.left + (n <= 1 ? 0 : (i / (n - 1)) * plotW);
-  const y = (v: number) => pad.top + (1 - (v - min) / (max - min)) * plotH;
-  const toPoints = (s: number[]) => s.map((v, i) => `${x(i, s.length).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-
-  const zeroY = y(0);
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", border: "1px solid #E5E5DE", background: "white" }} role="img" aria-label="Cumulative return since inception">
-      {/* zero baseline */}
-      <line x1={pad.left} y1={zeroY} x2={W - pad.right} y2={zeroY} stroke="#E5E5DE" strokeWidth="1" />
-      <text x={pad.left + 2} y={zeroY - 4} fontSize="10" fill="#9A9A8E" fontFamily="system-ui">0%</text>
-      <text x={pad.left + 2} y={pad.top + 8} fontSize="10" fill="#9A9A8E" fontFamily="system-ui">{max.toFixed(1)}%</text>
-      {benchmark.length > 1 ? (
-        <polyline fill="none" stroke="#9A9A8E" strokeWidth="1.5" points={toPoints(benchmark)} />
-      ) : null}
-      <polyline fill="none" stroke="#00183A" strokeWidth="2" points={toPoints(fund)} />
-    </svg>
   );
 }
