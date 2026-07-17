@@ -423,6 +423,52 @@ export const tradeAttachments = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Pending orders — queued trades awaiting the next close (next-close execution)
+// ---------------------------------------------------------------------------
+
+/**
+ * An order a PM has submitted that has NOT yet executed. Under the next-close
+ * execution model every order queues here first and is filled at the next
+ * official close by the fill job — which books it into `transactions`. Kept
+ * separate from the ledger because a pending order is an intention, not a fact.
+ * Captures everything the fill job needs to execute later (side, size,
+ * rationale, thesis link, any soft-breach justification).
+ */
+export const pendingOrders = pgTable(
+  "pending_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fundId: uuid("fund_id")
+      .notNull()
+      .references(() => funds.id, { onDelete: "cascade" }),
+    securityId: uuid("security_id")
+      .notNull()
+      .references(() => securities.id),
+    side: transactionTypeEnum("side").notNull(), // buy | sell | short | cover
+    quantity: numeric("quantity", { precision: 24, scale: 8 }).notNull(), // unsigned magnitude
+    submittedByUserId: uuid("submitted_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    submittedAt: timestamp("submitted_at").notNull().defaultNow(),
+    rationale: text("rationale").notNull(),
+    thesisId: uuid("thesis_id"),
+    updateNote: text("update_note"),
+    softOverrideJustification: text("soft_override_justification"),
+    // pending | filled | cancelled | rejected
+    status: text("status").notNull().default("pending"),
+    filledTransactionId: uuid("filled_transaction_id"),
+    fillPrice: numeric("fill_price", { precision: 20, scale: 6 }),
+    rejectionReason: text("rejection_reason"),
+    resolvedAt: timestamp("resolved_at"), // filled/cancelled/rejected time
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    fundStatusIdx: index("pending_orders_fund_status_idx").on(t.fundId, t.status),
+    statusIdx: index("pending_orders_status_idx").on(t.status),
+  })
+);
+
+// ---------------------------------------------------------------------------
 // Positions and post-mortems (lifecycle: opened → ... → closed)
 // ---------------------------------------------------------------------------
 
