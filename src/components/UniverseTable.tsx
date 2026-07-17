@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import { numeric } from "@/lib/typography";
@@ -22,6 +23,7 @@ interface UniverseTableProps {
   rows: UniverseRow[];
   fundSlug: string;
   fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  canManage?: boolean;
 }
 
 type SortKey =
@@ -35,13 +37,40 @@ type SortKey =
 
 type SortDir = "asc" | "desc";
 
-const currencySymbol = (ccy: string) =>
-  ccy === "GBP" ? "£" : ccy === "EUR" ? "€" : "$";
+const CCY_SYMBOLS: Record<string, string> = {
+  GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥",
+  KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$",
+};
+const currencySymbol = (ccy: string) => CCY_SYMBOLS[ccy] ?? "$";
 
 export default function UniverseTable({
   rows,
   fundSlug,
+  canManage = false,
 }: UniverseTableProps) {
+  const router = useRouter();
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  async function removeFromWatchlist(securityId: string, ticker: string) {
+    if (removing) return;
+    if (!window.confirm(`Remove ${ticker} from this fund's watchlist? It can be re-added anytime.`)) return;
+    setRemoving(securityId);
+    try {
+      const res = await fetch(`/api/funds/${fundSlug}/universe`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ securityId }),
+      });
+      if (res.ok) router.refresh();
+      else {
+        const d = await res.json().catch(() => ({}));
+        window.alert(d.error ?? "Couldn't remove that name.");
+      }
+    } finally {
+      setRemoving(null);
+    }
+  }
+
   const [sortKey, setSortKey] = useState<SortKey>("popular");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filter, setFilter] = useState("");
@@ -281,13 +310,22 @@ export default function UniverseTable({
                 onSort={onSort}
                 align="right"
               />
+              {canManage && (
+                <th
+                  style={{
+                    fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase",
+                    color: "#6B6B66", borderBottom: "1px solid #E5E5DE",
+                    padding: "10px 14px", fontWeight: 500, textAlign: "right", whiteSpace: "nowrap",
+                  }}
+                />
+              )}
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={canManage ? 8 : 7}
                   style={{
                     padding: "32px 16px",
                     textAlign: "center",
@@ -412,6 +450,34 @@ export default function UniverseTable({
                     >
                       {r.tradeCount}
                     </td>
+                    {canManage && (
+                      <td
+                        style={{
+                          padding: "9px 14px",
+                          borderBottom: "1px solid #F0EFEA",
+                          textAlign: "right",
+                        }}
+                      >
+                        <button
+                          onClick={() => removeFromWatchlist(r.securityId, r.ticker)}
+                          disabled={removing === r.securityId}
+                          style={{
+                            background: "transparent",
+                            border: "1px solid #E5E5DE",
+                            borderRadius: 3,
+                            color: removing === r.securityId ? "#C8C8C0" : "#7A1F1F",
+                            fontFamily: "system-ui, sans-serif",
+                            fontSize: 11,
+                            padding: "3px 9px",
+                            cursor: removing === r.securityId ? "default" : "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                          title="Remove from watchlist"
+                        >
+                          {removing === r.securityId ? "…" : "Remove"}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })

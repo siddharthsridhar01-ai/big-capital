@@ -14,6 +14,7 @@ import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
 import UniverseTable from "@/components/UniverseTable";
 import AddToUniverse from "@/components/AddToUniverse";
+import { mandateHint } from "@/lib/mandates";
 
 export const dynamic = "force-dynamic";
 
@@ -157,7 +158,7 @@ export default async function FundUniversePage({
           marginTop: 12,
         }}
       >
-        Investable universe
+        Watchlist
       </div>
       <h1
         style={{
@@ -181,19 +182,20 @@ export default async function FundUniversePage({
           lineHeight: 1.5,
         }}
       >
-        Securities approved for trading in this fund. Click any name to open
-        its security page and place a trade.{" "}
+        The fund's watchlist — securities approved for trading. Click any name
+        to open its security page and place a trade.{" "}
         {canManage
-          ? "Add any listed name below — it's validated live and becomes tradable immediately."
-          : "The investable universe is managed by the fund's PMs."}
+          ? "Add any eligible name below (validated live), or remove one you no longer want."
+          : "The watchlist is managed by the fund's PMs."}
       </div>
 
-      {canManage && <AddToUniverse fundSlug={fund.slug} />}
+      {canManage && <AddToUniverse fundSlug={fund.slug} mandateHint={mandateHint(fund.slug)} />}
 
       <UniverseTable
         rows={rows}
         fundSlug={fund.slug}
         fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"}
+        canManage={canManage}
       />
     </main>
   );

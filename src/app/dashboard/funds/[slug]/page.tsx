@@ -315,7 +315,7 @@ export default async function FundPage({
               whiteSpace: "nowrap",
             }}
           >
-            Browse universe →
+            Browse watchlist →
           </Link>
           <Link
             href={`/dashboard/funds/${fund.slug}/briefings`}
@@ -656,7 +656,7 @@ export default async function FundPage({
 
 function prettyConstraintLabel(type: string): string {
   const labels: Record<string, string> = {
-    universe_only: "Investable universe",
+    universe_only: "Watchlist",
     long_only: "Long-only",
     max_position_pct: "Max position size",
     min_cash_pct: "Min cash holding",

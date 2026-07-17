@@ -9,7 +9,7 @@ type Result =
   | { kind: "error"; msg: string }
   | null;
 
-export default function AddToUniverse({ fundSlug }: { fundSlug: string }) {
+export default function AddToUniverse({ fundSlug, mandateHint }: { fundSlug: string; mandateHint?: string | null }) {
   const router = useRouter();
   const [symbol, setSymbol] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,8 +29,8 @@ export default function AddToUniverse({ fundSlug }: { fundSlug: string }) {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setResult({ kind: "error", msg: data.error ?? "Something went wrong." });
-      } else if (data.alreadyInUniverse) {
-        setResult({ kind: "info", msg: `${data.security.ticker} is already in this fund's universe.`, warning: data.warning });
+      } else if (data.alreadyInWatchlist) {
+        setResult({ kind: "info", msg: `${data.security.ticker} is already on this fund's watchlist.`, warning: data.warning });
       } else {
         const sec = data.security;
         setResult({
@@ -63,12 +63,15 @@ export default function AddToUniverse({ fundSlug }: { fundSlug: string }) {
       }}
     >
       <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, fontWeight: 600, color: "#00183A", marginBottom: 4 }}>
-        Add a security
+        Add to watchlist
       </div>
       <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66", marginBottom: 12, lineHeight: 1.5 }}>
         Enter the exact ticker as listed on Yahoo Finance — including the exchange suffix for non-US names
         (e.g. <code>AAPL</code>, <code>AZN.L</code>, <code>7203.T</code>, <code>2330.TW</code>). It&apos;s
-        validated live and added to this fund&apos;s tradable universe.
+        validated live and added to this fund&apos;s watchlist.
+        {mandateHint && (
+          <span style={{ display: "block", marginTop: 6, color: "#8A6D1F" }}>Mandate: {mandateHint}</span>
+        )}
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <input
