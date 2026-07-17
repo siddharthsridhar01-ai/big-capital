@@ -90,7 +90,7 @@ export async function runPriceIngest(date?: string): Promise<PriceIngestResult> 
             securityId: sec.id,
             date: r.date,
             closePrice: r.close.toString(),
-            currency: sec.currency as "GBP" | "USD" | "EUR",
+            currency: sec.currency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR",
             source: "EODHD",
           };
         });

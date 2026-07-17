@@ -10,7 +10,7 @@ interface UniverseRow {
   ticker: string;
   name: string;
   exchange: string;
-  currency: "GBP" | "USD" | "EUR";
+  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
   gicsSector: string | null;
   gicsIndustry: string | null;
   latestPrice: string | null;
@@ -21,7 +21,7 @@ interface UniverseRow {
 interface UniverseTableProps {
   rows: UniverseRow[];
   fundSlug: string;
-  fundBaseCurrency: "GBP" | "USD" | "EUR";
+  fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
 }
 
 type SortKey =

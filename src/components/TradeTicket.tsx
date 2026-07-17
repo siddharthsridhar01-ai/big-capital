@@ -23,7 +23,7 @@ export interface TradeTicketProps {
     id: string;
     name: string;
     slug: string;
-    baseCurrency: "GBP" | "USD" | "EUR";
+    baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
     startingNav: string;
     tradingFeesBps: number;
     isLongShort: boolean;
@@ -33,7 +33,7 @@ export interface TradeTicketProps {
     ticker: string;
     exchange: string;
     name: string;
-    currency: "GBP" | "USD" | "EUR";
+    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
     gicsSector: string | null;
   };
   latestPrice: string | null;
@@ -116,7 +116,7 @@ interface ComputedSize {
   weightTarget: Decimal; // 0..1
 }
 
-function fmtMoney(d: Decimal, currency: "GBP" | "USD" | "EUR"): string {
+function fmtMoney(d: Decimal, currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR"): string {
   const sym = currency === "GBP" ? "£" : currency === "EUR" ? "€" : "$";
   const n = d.toNumber();
   const formatted = new Intl.NumberFormat("en-GB", {
@@ -1660,7 +1660,7 @@ function LivePriceStatus({
   liveUpdatedAt,
 }: {
   priceNative: Decimal | null;
-  securityCurrency: "GBP" | "USD" | "EUR";
+  securityCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
   isUsingLive: boolean;
   isUsingFallback: boolean;
   frozen: boolean;
@@ -1742,7 +1742,7 @@ function ShortFeePanel({
   annualRateBps,
 }: {
   positionNotionalBase: Decimal;
-  baseCurrency: "GBP" | "USD" | "EUR";
+  baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
   annualRateBps: number;
 }) {
   const annualRate = new Decimal(annualRateBps).dividedBy(10000);

@@ -31,7 +31,7 @@ import {
   prices as pricesTable,
 } from "@/db/schema";
 
-export type Currency = "GBP" | "USD" | "EUR";
+export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
 
 export interface LivePosition {
   securityId: string;
@@ -468,24 +468,29 @@ export async function loadPreviousClosePrices(
  */
 export const FALLBACK_FX_SOURCE = "FALLBACK_FX_RATE_v1";
 
-const FALLBACK_RATES: Record<string, number> = {
-  "GBP/USD": 1.27,
-  "USD/GBP": 1 / 1.27,
-  "EUR/USD": 1.09,
-  "USD/EUR": 1 / 1.09,
-  "GBP/EUR": 1.165,
-  "EUR/GBP": 1 / 1.165,
-  // Self-conversions
-  "GBP/GBP": 1,
-  "USD/USD": 1,
-  "EUR/EUR": 1,
+// Approximate EUR-based rates (units of currency per 1 EUR). LAST-RESORT
+// fallback only — the live daily ECB rates are used in normal operation. Any
+// pair is derived via EUR (1 from = (perEur[to]/perEur[from]) to), so no pair
+// throws. Values are indicative; they only matter if a daily rate is missing.
+const FALLBACK_PER_EUR: Record<string, number> = {
+  EUR: 1,
+  USD: 1.08,
+  GBP: 0.84,
+  JPY: 170,
+  HKD: 8.4,
+  CNY: 7.8,
+  KRW: 1480,
+  SGD: 1.45,
+  INR: 90,
 };
 
 export function staticFxFallback(from: Currency, to: Currency): Decimal {
-  const key = `${from}/${to}`;
-  const rate = FALLBACK_RATES[key];
-  if (rate === undefined) {
+  if (from === to) return new Decimal(1);
+  const perFrom = FALLBACK_PER_EUR[from];
+  const perTo = FALLBACK_PER_EUR[to];
+  if (perFrom == null || perTo == null || perFrom === 0) {
     throw new Error(`No fallback FX rate for ${from}/${to}`);
   }
-  return new Decimal(rate);
+  // 1 `from` = (1/perFrom) EUR = (perTo/perFrom) `to`
+  return new Decimal(perTo).dividedBy(perFrom);
 }

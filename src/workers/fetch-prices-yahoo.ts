@@ -20,7 +20,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { yahooProvider, toYahooSymbol } from "../lib/intraday/yahoo";
 
-export type Currency = "GBP" | "USD" | "EUR";
+export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
 const SUPPORTED = new Set<string>(["GBP", "USD", "EUR"]);
 
 /**

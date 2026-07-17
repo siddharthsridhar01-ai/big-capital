@@ -17,7 +17,7 @@ export interface SeedTicker {
   ticker: string;
   exchange: string;
   name: string;
-  currency: "GBP" | "USD" | "EUR";
+  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
   gicsSector: string;
   gicsIndustry: string;
   isin?: string;

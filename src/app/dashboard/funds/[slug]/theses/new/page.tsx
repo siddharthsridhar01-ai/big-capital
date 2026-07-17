@@ -93,7 +93,7 @@ export default async function NewThesisPage({
 
       <NewThesisForm
         fundSlug={fund.slug}
-        fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
+        fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR"}
         initialSecurityId={
           securityIdParam && universeRows.some((u) => u.securityId === securityIdParam)
             ? securityIdParam
@@ -105,7 +105,7 @@ export default async function NewThesisPage({
           ticker: u.ticker,
           name: u.name,
           exchange: u.exchange,
-          currency: u.currency as "GBP" | "USD" | "EUR",
+          currency: u.currency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR",
           gicsSector: u.gicsSector,
         }))}
       />

@@ -20,7 +20,7 @@ import AbandonThesisButton from "@/components/AbandonThesisButton";
 
 export const dynamic = "force-dynamic";
 
-type Cur = "GBP" | "USD" | "EUR";
+type Cur = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
 const sym = (c: string) => (c === "GBP" ? "£" : c === "EUR" ? "€" : "$");
 function money(v: string | number | null, c: string) {
   const n = Number(v ?? 0);

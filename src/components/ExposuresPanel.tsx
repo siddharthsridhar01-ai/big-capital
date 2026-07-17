@@ -12,14 +12,14 @@
 import { serif, numeric } from "@/lib/typography";
 
 interface ExposuresPanelProps {
-  baseCurrency: "GBP" | "USD" | "EUR";
+  baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
   navBase: number;
   positions: Array<{
     securityId: string;
     ticker: string;
     name: string;
     exchange: string;
-    currency: "GBP" | "USD" | "EUR";
+    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
     gicsSector: string | null;
     /** Signed quantity. */
     quantity: number;
@@ -34,7 +34,7 @@ interface ExposuresPanelProps {
   netExposure: number;
 }
 
-const baseSyms: Record<string, string> = { GBP: "£", USD: "$", EUR: "€" };
+const baseSyms: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥", KRW: "₩", SGD: "S$", INR: "₹" };
 
 function fmtMoney(n: number, ccy: string) {
   return `${baseSyms[ccy] ?? "$"}${new Intl.NumberFormat("en-GB", {

@@ -8,7 +8,7 @@ import { computeDailyChange, computeUnrealisedPnL } from "@/lib/derived";
 
 interface HoldingsTableProps {
   fundSlug: string;
-  fundBaseCurrency: "GBP" | "USD" | "EUR";
+  fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
   /** NAV from the server-side initial render — used until live data arrives. */
   initialNavBase: string;
   positions: Array<{
@@ -16,7 +16,7 @@ interface HoldingsTableProps {
     ticker: string;
     name: string;
     exchange: string;
-    currency: "GBP" | "USD" | "EUR";
+    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
     gicsSector: string | null;
     /** Signed: positive long, negative short. */
     quantity: string;
@@ -41,7 +41,8 @@ const SERIF: React.CSSProperties = {
 };
 
 function symbolOf(ccy: string) {
-  return ccy === "GBP" ? "£" : ccy === "EUR" ? "€" : "$";
+  const m: Record<string, string> = { GBP: "£", EUR: "€", USD: "$", JPY: "¥", HKD: "HK$", CNY: "¥", KRW: "₩", SGD: "S$", INR: "₹" };
+  return m[ccy] ?? "$";
 }
 
 function fmtMoney(n: number, decimals = 2) {

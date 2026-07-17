@@ -56,10 +56,10 @@ import {
 } from "@/lib/constraints";
 import {
   computePortfolioState,
-  staticFxFallback,
   FALLBACK_FX_SOURCE,
   type Currency,
 } from "@/lib/portfolio";
+import { resolveFxToBase } from "@/lib/fx";
 import { getQuotes } from "@/lib/intraday/cache";
 import { activeProvider } from "@/lib/intraday/provider";
 import { toYahooSymbol } from "@/lib/intraday/yahoo";
@@ -352,14 +352,17 @@ export async function POST(
   }
 
   // ----- Compute fresh portfolio state -----
-  // FX (security ccy -> base ccy). State-independent, so computed before the
-  // lock and reused inside it.
+  // FX (security ccy -> base ccy). Uses the stored daily ECB rate (accurate,
+  // important for volatile non-major currencies), falling back to the static
+  // table only if no daily rate exists. State-independent, so computed before
+  // the lock and reused inside it.
   const fxToBase =
     security.currency === fund.baseCurrency
       ? new Decimal(1)
-      : staticFxFallback(
+      : await resolveFxToBase(
           security.currency as Currency,
-          fund.baseCurrency as Currency
+          fund.baseCurrency as Currency,
+          new Date().toISOString().slice(0, 10)
         );
 
   // ----- Atomic check-and-write under a per-fund advisory lock -----

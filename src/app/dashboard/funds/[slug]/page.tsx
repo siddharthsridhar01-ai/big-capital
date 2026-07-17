@@ -352,7 +352,7 @@ export default async function FundPage({
 
       <LiveFundHeader
         currencySymbol={currencySymbol}
-        baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
+        baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR"}
         initialNavBase={liveState.navBase.toString()}
         startingNav={startingNav}
         cashBase={liveCashBase}
@@ -375,7 +375,7 @@ export default async function FundPage({
       />
 
       <ExposuresPanel
-        baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
+        baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR"}
         navBase={liveState.navBase.toNumber()}
         positions={Array.from(liveState.positions.values()).map((p) => ({
           securityId: p.securityId,
@@ -448,7 +448,7 @@ export default async function FundPage({
       ) : (
         <LiveHoldingsTable
           fundSlug={fund.slug}
-          fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR"}
+          fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR"}
           initialNavBase={liveState.navBase.toString()}
           positions={Array.from(liveState.positions.values()).map((p) => ({
             securityId: p.securityId,

@@ -26,7 +26,7 @@ interface Position {
 
 interface Props {
   currencySymbol: string;
-  baseCurrency: "GBP" | "USD" | "EUR";
+  baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
   initialNavBase: string;
   startingNav: number;
   cashBase: number;

@@ -12,7 +12,7 @@ interface LivePriceHeadlineProps {
   /** Server-rendered previous close (e.g. yesterday's close from prices table). */
   snapshotPreviousClose: string | null;
   snapshotDate: string;
-  currency: "GBP" | "USD" | "EUR";
+  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
 }
 
 export default function LivePriceHeadline({

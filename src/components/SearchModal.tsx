@@ -9,7 +9,7 @@ interface SearchResult {
   ticker: string;
   exchange: string;
   name: string;
-  currency: "GBP" | "USD" | "EUR";
+  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR";
   gicsSector: string | null;
   gicsIndustry: string | null;
   latestPrice: string | null;

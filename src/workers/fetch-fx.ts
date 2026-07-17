@@ -25,7 +25,7 @@ export async function runFxIngest(): Promise<{
 }> {
   const ecb = new EcbFxClient("big-capital-fx-worker/0.1");
   const days = await ecb.getLast90Days();
-  const rows = EcbFxClient.expandToFxRows(days, ["GBP", "USD", "EUR"]);
+  const rows = EcbFxClient.expandToFxRows(days, ["GBP", "USD", "EUR", "JPY", "HKD", "CNY", "KRW", "SGD", "INR"]);
 
   if (rows.length === 0) {
     console.warn("FX ingest: ECB returned no rows");
