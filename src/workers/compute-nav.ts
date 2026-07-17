@@ -35,6 +35,13 @@ import { seedOpeningCash } from "../lib/holdings-reconstruction";
 import { sql, eq, and, lte, gte } from "drizzle-orm";
 import Decimal from "decimal.js";
 
+// Synthetic cash-hurdle benchmarks for absolute-return funds (market-neutral,
+// net-long L/S): accrue a flat daily rate instead of ratioing a market price.
+// ~USD SOFR / GBP SONIA cash level; a simplification, tunable here.
+const CASH_HURDLE_TICKERS = new Set(["SOFR_CASH", "SONIA_CASH"]);
+const CASH_HURDLE_ANNUAL_RATE = 0.043;
+const CASH_HURDLE_DAILY_RATE = new Decimal(CASH_HURDLE_ANNUAL_RATE).dividedBy(252);
+
 export interface NavSnapshotResult {
   fundsProcessed: number;
   daysComputed: number;
@@ -59,8 +66,10 @@ export async function runNavSnapshot(
       inceptionDate: funds.inceptionDate,
       startingNav: funds.startingNav,
       benchmarkSecurityId: funds.benchmarkSecurityId,
+      benchmarkTicker: securities.ticker,
     })
     .from(funds)
+    .leftJoin(securities, eq(securities.id, funds.benchmarkSecurityId))
     .where(eq(funds.isActive, true));
 
   // 2. Determine date range to compute
@@ -204,23 +213,32 @@ export async function runNavSnapshot(
         let benchmarkDailyReturn: string | null = null;
         let benchmarkValue: string | null = null;
         if (fund.benchmarkSecurityId) {
-          const benchPrice = latestPriceMap.get(fund.benchmarkSecurityId);
-          if (benchPrice) {
-            benchmarkValue = benchPrice.price;
-            // Look up previous day's benchmark price
-            const prevBench = priceRows.find(
-              (r) =>
-                r.securityId === fund.benchmarkSecurityId &&
-                r.date < date
-            );
-            if (prevBench) {
-              const today = new Decimal(benchPrice.price);
-              const yesterday = new Decimal(prevBench.closePrice);
-              if (!yesterday.isZero()) {
-                benchmarkDailyReturn = today
-                  .minus(yesterday)
-                  .dividedBy(yesterday)
-                  .toString();
+          if (fund.benchmarkTicker && CASH_HURDLE_TICKERS.has(fund.benchmarkTicker)) {
+            // Synthetic cash hurdle (e.g. SOFR/SONIA): no market price to ratio,
+            // so accrue a flat daily rate. This lets absolute-return funds
+            // (market-neutral, net-long L/S) be measured against cash rather than
+            // a misleading equity index. Full history is computable from inception
+            // since it doesn't depend on fetched prices.
+            benchmarkDailyReturn = CASH_HURDLE_DAILY_RATE.toString();
+          } else {
+            const benchPrice = latestPriceMap.get(fund.benchmarkSecurityId);
+            if (benchPrice) {
+              benchmarkValue = benchPrice.price;
+              // Look up previous day's benchmark price
+              const prevBench = priceRows.find(
+                (r) =>
+                  r.securityId === fund.benchmarkSecurityId &&
+                  r.date < date
+              );
+              if (prevBench) {
+                const today = new Decimal(benchPrice.price);
+                const yesterday = new Decimal(prevBench.closePrice);
+                if (!yesterday.isZero()) {
+                  benchmarkDailyReturn = today
+                    .minus(yesterday)
+                    .dividedBy(yesterday)
+                    .toString();
+                }
               }
             }
           }

@@ -18,6 +18,8 @@ interface Props {
   holdingsCount: number;
   holdingsSub: string;
   snapshotDate: string | null;
+  benchmarkSinceInceptionPct?: number | null;
+  benchmarkLabel?: string | null;
 }
 
 const numeric: React.CSSProperties = {
@@ -58,6 +60,8 @@ export default function LiveNavCards({
   holdingsCount,
   holdingsSub,
   snapshotDate,
+  benchmarkSinceInceptionPct = null,
+  benchmarkLabel = null,
 }: Props) {
   // Tick each second so the "updated Ns ago" label counts up between polls.
   const [, setTick] = useState(0);
@@ -70,13 +74,24 @@ export default function LiveNavCards({
   const cashPct = liveNav > 0 ? (cashBase / liveNav) * 100 : 0;
   const isLive = lastUpdated != null;
 
+  const benchPctStr =
+    benchmarkSinceInceptionPct != null
+      ? `${benchmarkSinceInceptionPct >= 0 ? "+" : ""}${(benchmarkSinceInceptionPct * 100).toFixed(2)}%`
+      : null;
+  const sinceInceptionSub =
+    benchmarkLabel == null
+      ? "vs benchmark TBD"
+      : benchPctStr == null
+        ? `vs ${benchmarkLabel} · building`
+        : `vs ${benchmarkLabel} ${benchPctStr}`;
+
   return (
     <>
       <Card label="Fund value" value={`${currencySymbol}${fmt(liveNav)}`} sub={`Started ${currencySymbol}${fmt(startingNav)}`} />
       <Card
         label="Since inception"
         value={`${sinceInceptionPct >= 0 ? "+" : ""}${sinceInceptionPct.toFixed(2)}%`}
-        sub="vs benchmark TBD"
+        sub={sinceInceptionSub}
         valueColor={sinceInceptionPct >= 0 ? "#1F5C3A" : "#7A1F1F"}
       />
       <Card label="Holdings" value={String(holdingsCount)} sub={holdingsSub} />

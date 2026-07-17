@@ -17,6 +17,7 @@ import {
   loadPreviousClosePrices,
 } from "@/lib/portfolio";
 import { computeDailyChange, computeUnrealisedPnL } from "@/lib/derived";
+import { computeFundPerformance } from "@/lib/public-performance";
 import LiveHoldingsTable from "@/components/LiveHoldingsTable";
 import LiveFundHeader from "@/components/LiveFundHeader";
 import ExposuresPanel from "@/components/ExposuresPanel";
@@ -79,6 +80,36 @@ export default async function FundPage({
 
   const currencySymbol =
     fund.baseCurrency === "GBP" ? "£" : fund.baseCurrency === "EUR" ? "€" : "$";
+
+  // Benchmark since-inception comparison for the "Since inception" card.
+  let benchmarkSinceInceptionPct: number | null = null;
+  let benchmarkLabel: string | null = null;
+  if (fund.benchmarkSecurityId) {
+    const benchSnaps = await db
+      .select({
+        date: navSnapshots.date,
+        dailyReturn: navSnapshots.dailyReturn,
+        benchmarkDailyReturn: navSnapshots.benchmarkDailyReturn,
+      })
+      .from(navSnapshots)
+      .where(eq(navSnapshots.fundId, fund.id))
+      .orderBy(navSnapshots.date);
+    const perf = computeFundPerformance(benchSnaps, fund.inceptionDate);
+    benchmarkSinceInceptionPct = perf.benchmarkCumulative;
+
+    const benchSec = await db
+      .select({ name: securitiesTable.name, ticker: securitiesTable.ticker })
+      .from(securitiesTable)
+      .where(eq(securitiesTable.id, fund.benchmarkSecurityId))
+      .limit(1);
+    if (benchSec.length > 0) {
+      const ticker = benchSec[0].ticker;
+      benchmarkLabel =
+        ticker === "SOFR_CASH" || ticker === "SONIA_CASH"
+          ? "cash hurdle"
+          : benchSec[0].name.replace(/\s*\(total-return proxy\)\s*/i, "").trim();
+    }
+  }
 
   const startingNav = Number(fund.startingNav);
 
@@ -311,6 +342,8 @@ export default async function FundPage({
           liveState.positions.size === 0 ? "No positions yet" : `${liveState.positions.size} open`
         }
         snapshotDate={latestNav.length > 0 ? latestNav[0].date : null}
+        benchmarkSinceInceptionPct={benchmarkSinceInceptionPct}
+        benchmarkLabel={benchmarkLabel}
         positions={Array.from(liveState.positions.values()).map((p) => ({
           securityId: p.securityId,
           quantity: p.quantity.toString(),

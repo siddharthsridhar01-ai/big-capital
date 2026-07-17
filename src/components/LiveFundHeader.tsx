@@ -33,6 +33,8 @@ interface Props {
   holdingsCount: number;
   holdingsSub: string;
   snapshotDate: string | null;
+  benchmarkSinceInceptionPct?: number | null;
+  benchmarkLabel?: string | null;
   positions: Position[];
   // NavChart props
   fundName: string;
@@ -81,6 +83,8 @@ export default function LiveFundHeader(props: Props) {
           holdingsCount={props.holdingsCount}
           holdingsSub={props.holdingsSub}
           snapshotDate={props.snapshotDate}
+          benchmarkSinceInceptionPct={props.benchmarkSinceInceptionPct ?? null}
+          benchmarkLabel={props.benchmarkLabel ?? null}
         />
       </div>
 
