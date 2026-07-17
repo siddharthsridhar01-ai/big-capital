@@ -19,6 +19,7 @@ import { serif as serif_, numeric } from "@/lib/typography";
 import { computePortfolioState, staticFxFallback } from "@/lib/portfolio";
 import { computeDailyChange } from "@/lib/derived";
 import LivePriceHeadline from "@/components/LivePriceHeadline";
+import SecurityPriceChart from "@/components/SecurityPriceChart";
 import Decimal from "decimal.js";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +91,17 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
     .where(eq(prices.securityId, security.id))
     .orderBy(desc(prices.date))
     .limit(30);
+
+  // Fuller ascending history for the price chart
+  const priceChartRows = await db
+    .select({ date: prices.date, close: prices.closePrice })
+    .from(prices)
+    .where(eq(prices.securityId, security.id))
+    .orderBy(prices.date);
+  const priceChartPoints = priceChartRows.map((p) => ({
+    date: String(p.date).slice(0, 10),
+    close: Number(p.close),
+  }));
 
   // Existing position in this fund for this security
   const positionRows = await db
@@ -480,6 +492,18 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
         {/* Right column: price history + transaction history */}
         <div>
           <SectionLabel>Recent prices</SectionLabel>
+          {priceChartPoints.length >= 2 && (
+            <div
+              style={{
+                background: "white",
+                border: "1px solid #D9D9D2",
+                padding: "12px 14px 8px",
+                marginBottom: 12,
+              }}
+            >
+              <SecurityPriceChart points={priceChartPoints} currency={security.currency} />
+            </div>
+          )}
           {priceHistory.length > 0 ? (
             <div
               style={{
