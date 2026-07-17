@@ -69,7 +69,7 @@ export default function AddToUniverse({ fundSlug, mandateHint }: { fundSlug: str
       <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66", marginBottom: 12, lineHeight: 1.5 }}>
         Enter the exact ticker as listed on Yahoo Finance — including the exchange suffix for non-US names
         (e.g. <code>AAPL</code>, <code>AZN.L</code>, <code>7203.T</code>, <code>2330.TW</code>). It&apos;s
-        validated live and added to this fund&apos;s watchlist.
+        validated live and added to this fund&apos;s watchlist. Single-name equities only — no ETFs or funds.
         {mandateHint && (
           <span style={{ display: "block", marginTop: 6, color: "#8A6D1F" }}>Mandate: {mandateHint}</span>
         )}

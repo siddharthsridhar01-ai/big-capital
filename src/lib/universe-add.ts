@@ -104,8 +104,8 @@ export async function addSecurityToWatchlist(
   }
 
   const qType = (quote.quoteType ?? "").toUpperCase();
-  if (qType !== "EQUITY" && qType !== "ETF") {
-    return { ok: false, status: 422, body: { ok: false, error: `"${raw}" is a ${qType || "non-equity"} instrument. Only equities and ETFs can be added.` } };
+  if (qType !== "EQUITY") {
+    return { ok: false, status: 422, body: { ok: false, error: `"${raw}" is a ${qType || "non-equity"} instrument. Only single-name equities can be added — no ETFs, funds, or other instruments.` } };
   }
   if (quote.regularMarketPrice <= 0) {
     return { ok: false, status: 422, body: { ok: false, error: `"${raw}" returned an invalid price.` } };
