@@ -29,23 +29,24 @@ type Option = {
   symbol: string;
   ticker: string;
   exchange: string;
-  currency: "GBP" | "USD" | "EUR";
   label: string;
 };
 
-const CANDIDATES: Record<string, { benchmarkName: string; options: Option[] }> = {
+const CANDIDATES: Record<string, { benchmarkName: string; baseCurrency: "GBP" | "USD" | "EUR"; options: Option[] }> = {
   "uk-equity": {
     benchmarkName: "FTSE All-Share (total-return proxy)",
+    baseCurrency: "GBP",
     options: [
-      { symbol: "FTAL.L", ticker: "FTAL", exchange: "LSE", currency: "GBP", label: "SPDR FTSE UK All Share UCITS ETF (Acc)" },
+      { symbol: "FTAL.L", ticker: "FTAL", exchange: "LSE", label: "SPDR FTSE UK All Share UCITS ETF (Acc)" },
     ],
   },
   "global-equity": {
     benchmarkName: "MSCI World (total-return proxy)",
+    baseCurrency: "USD",
     options: [
-      { symbol: "SWDA.L", ticker: "SWDA", exchange: "LSE", currency: "USD", label: "iShares Core MSCI World UCITS ETF USD (Acc)" },
-      { symbol: "IWDA.L", ticker: "IWDA", exchange: "LSE", currency: "USD", label: "iShares Core MSCI World UCITS ETF USD (Acc), alt line" },
-      { symbol: "XDWD.L", ticker: "XDWD", exchange: "LSE", currency: "USD", label: "Xtrackers MSCI World UCITS ETF 1C (Acc)" },
+      { symbol: "IWDA.L", ticker: "IWDA", exchange: "LSE", label: "iShares Core MSCI World UCITS ETF USD (Acc), USD line" },
+      { symbol: "XDWD.L", ticker: "XDWD", exchange: "LSE", label: "Xtrackers MSCI World UCITS ETF 1C (Acc)" },
+      { symbol: "SWDA.L", ticker: "SWDA", exchange: "LSE", label: "iShares Core MSCI World UCITS ETF (Acc), GBP line — currency fallback only" },
     ],
   },
 };
@@ -83,12 +84,23 @@ export async function GET(req: NextRequest) {
       currency: priceBySymbol.get(o.symbol)?.currency ?? null,
     }));
 
-    const chosen = cfg.options.find((o) => priceBySymbol.get(o.symbol)?.price != null);
+    const priced = cfg.options.filter((o) => priceBySymbol.get(o.symbol)?.price != null);
+    // Prefer a proxy whose live currency matches the fund's base currency; only
+    // fall back to a currency-mismatched one if nothing else priced.
+    const matched = priced.find((o) => priceBySymbol.get(o.symbol)?.currency === cfg.baseCurrency);
+    const chosen = matched ?? priced[0];
 
     if (!chosen) {
       report.push({ fund: slug, benchmark: cfg.benchmarkName, status: "no_valid_proxy", checked });
       continue;
     }
+
+    const liveCurrency = priceBySymbol.get(chosen.symbol)?.currency ?? null;
+    if (liveCurrency !== "GBP" && liveCurrency !== "USD" && liveCurrency !== "EUR") {
+      report.push({ fund: slug, benchmark: cfg.benchmarkName, status: "unsupported_currency", chosen: chosen.symbol, liveCurrency, checked });
+      continue;
+    }
+    const currencyWarning = liveCurrency !== cfg.baseCurrency;
 
     // Resolve the fund's benchmark security (create one if somehow missing).
     const fundRows = await db
@@ -108,7 +120,7 @@ export async function GET(req: NextRequest) {
         .set({
           ticker: chosen.ticker,
           exchange: chosen.exchange,
-          currency: chosen.currency,
+          currency: liveCurrency,
           name: cfg.benchmarkName,
           isBenchmark: true,
           isActive: true,
@@ -120,7 +132,7 @@ export async function GET(req: NextRequest) {
         .values({
           ticker: chosen.ticker,
           exchange: chosen.exchange,
-          currency: chosen.currency,
+          currency: liveCurrency,
           name: cfg.benchmarkName,
           isBenchmark: true,
           isActive: true,
@@ -135,7 +147,9 @@ export async function GET(req: NextRequest) {
       status: "set",
       chosen: chosen.symbol,
       livePrice: priceBySymbol.get(chosen.symbol)?.price ?? null,
-      currency: priceBySymbol.get(chosen.symbol)?.currency ?? null,
+      currency: liveCurrency,
+      fundBaseCurrency: cfg.baseCurrency,
+      currencyWarning: currencyWarning ? `Proxy priced in ${liveCurrency} but fund base is ${cfg.baseCurrency} — using anyway; consider a ${cfg.baseCurrency} proxy` : null,
       checked,
     });
   }
