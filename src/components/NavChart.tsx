@@ -34,7 +34,7 @@ interface NavChartProps {
   benchmarkName?: string | null;
 }
 
-type RangeKey = "1D" | "5D" | "1M" | "3M" | "6M" | "YTD" | "1Y" | "ALL";
+type RangeKey = "5D" | "1M" | "3M" | "6M" | "YTD" | "1Y" | "ALL";
 
 interface RangeOption {
   key: RangeKey;
@@ -44,7 +44,6 @@ interface RangeOption {
 }
 
 const RANGES: RangeOption[] = [
-  { key: "1D", label: "1D", days: 1 },
   { key: "5D", label: "5D", days: 5 },
   { key: "1M", label: "1M", days: 30 },
   { key: "3M", label: "3M", days: 90 },

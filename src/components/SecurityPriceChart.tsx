@@ -15,9 +15,9 @@ const CCY_SYMBOLS: Record<string, string> = {
   KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$",
 };
 
-// No "All" — with ~1y of history it duplicates 1Y.
+// No "All" — with ~1y of history it duplicates 1Y. No "1D" — daily closes
+// make a single-day view flat and uninformative.
 const RANGES: { key: string; label: string; days: number }[] = [
-  { key: "1D", label: "1D", days: 1 },
   { key: "1W", label: "1W", days: 7 },
   { key: "1M", label: "1M", days: 30 },
   { key: "3M", label: "3M", days: 90 },
