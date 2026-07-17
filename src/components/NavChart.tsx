@@ -15,6 +15,8 @@ import { serif, numeric } from "@/lib/typography";
 export interface NavPoint {
   date: string; // YYYY-MM-DD
   nav: number;
+  /** Benchmark rebased to the same starting capital (£ growth-of-100k). */
+  benchmarkNav?: number | null;
   /** Optional label for tooltip (e.g. "Buy 5 SHEL", "Inception"). */
   event?: string;
 }
@@ -28,6 +30,8 @@ interface NavChartProps {
   points: NavPoint[];
   /** Current live NAV (will be added as the latest point). */
   liveNav?: number;
+  /** Short benchmark label for the legend/tooltip; null hides the benchmark line. */
+  benchmarkName?: string | null;
 }
 
 type RangeKey = "1D" | "5D" | "1M" | "3M" | "6M" | "YTD" | "1Y" | "ALL";
@@ -73,12 +77,12 @@ function fmtShortDate(d: string) {
 }
 
 export default function NavChart({
-  fundName,
   fundBaseCurrency,
   startingNav,
   inceptionDate,
   points,
   liveNav,
+  benchmarkName = null,
 }: NavChartProps) {
   const ageDays = fundAgeDays(inceptionDate);
 
@@ -152,8 +156,11 @@ export default function NavChart({
 
   // Domain padding so the line doesn't kiss the edges (calculated on the
   // filtered data, not the full data — chart auto-zooms to the selected range)
-  const min = Math.min(...data.map((d) => d.nav));
-  const max = Math.max(...data.map((d) => d.nav));
+  const hasBench = benchmarkName != null && data.some((d) => d.benchmarkNav != null);
+  const navVals = data.map((d) => d.nav);
+  const benchVals = hasBench ? data.filter((d) => d.benchmarkNav != null).map((d) => d.benchmarkNav as number) : [];
+  const min = Math.min(...navVals, ...benchVals);
+  const max = Math.max(...navVals, ...benchVals);
   const pad = Math.max((max - min) * 0.15, startingNav * 0.001);
   const yDomain: [number, number] = [min - pad, max + pad];
 
@@ -179,6 +186,32 @@ export default function NavChart({
       : activeRange === "YTD"
         ? "NAV (year to date)"
         : `NAV (last ${activeRangeOption?.label})`;
+
+  const renderTooltip = (o: { active?: boolean; payload?: Array<{ dataKey?: string; value?: number }>; label?: string }) => {
+    if (!o.active || !o.payload || o.payload.length === 0) return null;
+    const navV = o.payload.find((p) => p.dataKey === "nav")?.value;
+    const benchV = o.payload.find((p) => p.dataKey === "benchmarkNav")?.value;
+    const dateLabel = o.label
+      ? new Date(o.label).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+      : "";
+    const gapPct = navV != null && benchV != null && benchV !== 0 ? ((navV - benchV) / benchV) * 100 : null;
+    return (
+      <div style={{ background: "white", border: "1px solid #D9D9D2", padding: "8px 10px", fontFamily: "system-ui, sans-serif" }}>
+        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6B6B66", marginBottom: 4 }}>{dateLabel}</div>
+        {navV != null && (
+          <div style={{ fontSize: 12, color: rangeIsUp ? "#1F5C3A" : "#7A1F1F", fontWeight: 600 }}>Fund {fmtMoney(navV, fundBaseCurrency)}</div>
+        )}
+        {benchV != null && (
+          <div style={{ fontSize: 12, color: "#8A6D1F" }}>{benchmarkName ?? "Benchmark"} {fmtMoney(benchV, fundBaseCurrency)}</div>
+        )}
+        {gapPct != null && (
+          <div style={{ fontSize: 11, color: gapPct >= 0 ? "#1F5C3A" : "#7A1F1F", marginTop: 2 }}>
+            {gapPct >= 0 ? "+" : ""}{gapPct.toFixed(2)}% vs benchmark
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -299,6 +332,13 @@ export default function NavChart({
         })}
       </div>
 
+      {hasBench && (
+        <div style={{ display: "flex", gap: 16, marginBottom: 8, fontSize: 11, color: "#6B6B66", fontFamily: "system-ui, sans-serif" }}>
+          <span><span style={{ color: rangeIsUp ? "#1F5C3A" : "#7A1F1F" }}>■</span> Fund</span>
+          <span><span style={{ color: "#8A6D1F" }}>■</span> {benchmarkName} <span style={{ color: "#9A9A8E" }}>· rebased to {fmtMoney(startingNav, fundBaseCurrency)}</span></span>
+        </div>
+      )}
+
       <div style={{ width: "100%", height: 220 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
@@ -323,39 +363,25 @@ export default function NavChart({
               tickLine={false}
               width={48}
             />
-            <Tooltip
-              contentStyle={{
-                background: "white",
-                border: "1px solid #D9D9D2",
-                fontSize: 12,
-                fontFamily: "system-ui, sans-serif",
-                padding: "8px 10px",
-              }}
-              labelStyle={{
-                color: "#6B6B66",
-                fontSize: 10,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-                marginBottom: 4,
-              }}
-              labelFormatter={(label) =>
-                new Date(label).toLocaleDateString("en-GB", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })
-              }
-              formatter={((value: unknown) => [
-                fmtMoney(Number(value), fundBaseCurrency),
-                fundName,
-              ]) as never}
-            />
+            <Tooltip content={renderTooltip as never} />
             <ReferenceLine
               y={startingNav}
               stroke="#9A9A8E"
               strokeDasharray="3 3"
               strokeWidth={1}
             />
+            {hasBench && (
+              <Line
+                type="monotone"
+                dataKey="benchmarkNav"
+                stroke="#8A6D1F"
+                strokeWidth={1.5}
+                dot={false}
+                activeDot={{ r: 4 }}
+                isAnimationActive={false}
+                connectNulls
+              />
+            )}
             <Line
               type="monotone"
               dataKey="nav"

@@ -4,9 +4,7 @@ import { useMemo } from "react";
 import Decimal from "decimal.js";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import LiveNavCards from "@/components/LiveNavCards";
-import { type NavPoint } from "@/components/NavChart";
-import { type PerfPoint } from "@/components/PerformanceChart";
-import FundChartTabs from "@/components/FundChartTabs";
+import NavChart, { type NavPoint } from "@/components/NavChart";
 
 /**
  * Owns the SINGLE intraday poll for the fund header, computes the live NAV once,
@@ -37,7 +35,6 @@ interface Props {
   snapshotDate: string | null;
   benchmarkSinceInceptionPct?: number | null;
   benchmarkLabel?: string | null;
-  benchmarkPoints?: PerfPoint[];
   positions: Position[];
   // NavChart props
   fundName: string;
@@ -92,14 +89,13 @@ export default function LiveFundHeader(props: Props) {
       </div>
 
       <div style={{ marginBottom: 28 }}>
-        <FundChartTabs
+        <NavChart
           fundName={props.fundName}
           fundBaseCurrency={props.baseCurrency}
           startingNav={props.startingNav}
           inceptionDate={props.inceptionDate}
           points={props.navPoints}
           liveNav={liveNav}
-          benchmarkPoints={props.benchmarkPoints ?? []}
           benchmarkName={props.benchmarkLabel ?? null}
         />
       </div>

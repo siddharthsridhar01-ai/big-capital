@@ -184,11 +184,24 @@ export default async function FundPage({
   }
 
   // === NAV chart data points ===
-  const navPoints: { date: string; nav: number; event?: string }[] = [];
+  // Benchmark rebased to the same starting capital ("growth of {startingNav}"),
+  // so both lines share the £ axis and the gap between them IS the relative
+  // performance — no separate % chart needed.
+  const benchPctByDate = new Map<string, number>();
+  for (const bp of benchmarkChartPoints) {
+    if (bp.benchmark != null) benchPctByDate.set(bp.date, bp.benchmark);
+  }
+  const rebasedBench = (date: string): number | null => {
+    const pct = benchPctByDate.get(date);
+    return pct != null ? startingNav * (1 + pct / 100) : null;
+  };
+
+  const navPoints: { date: string; nav: number; benchmarkNav?: number | null; event?: string }[] = [];
   const inceptionStr = String(fund.inceptionDate).slice(0, 10);
   navPoints.push({
     date: inceptionStr,
     nav: startingNav,
+    benchmarkNav: rebasedBench(inceptionStr) ?? (benchPctByDate.size > 0 ? startingNav : null),
     event: "Inception",
   });
 
@@ -200,7 +213,7 @@ export default async function FundPage({
   for (const s of snapshots) {
     const dateStr = String(s.date).slice(0, 10);
     if (dateStr !== inceptionStr) {
-      navPoints.push({ date: dateStr, nav: Number(s.nav) });
+      navPoints.push({ date: dateStr, nav: Number(s.nav), benchmarkNav: rebasedBench(dateStr) });
     }
   }
 
@@ -350,7 +363,6 @@ export default async function FundPage({
         snapshotDate={latestNav.length > 0 ? latestNav[0].date : null}
         benchmarkSinceInceptionPct={benchmarkSinceInceptionPct}
         benchmarkLabel={benchmarkLabel}
-        benchmarkPoints={benchmarkChartPoints}
         positions={Array.from(liveState.positions.values()).map((p) => ({
           securityId: p.securityId,
           quantity: p.quantity.toString(),
