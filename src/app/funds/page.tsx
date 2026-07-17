@@ -1,6 +1,6 @@
 import { db } from "@/db/client";
 import { funds as fundsTable, navSnapshots } from "@/db/schema";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
 import { computeFundPerformance, pctLabel, SnapshotRow } from "@/lib/public-performance";
@@ -18,6 +18,7 @@ export default async function PublicFundsIndex() {
       inceptionDate: fundsTable.inceptionDate,
     })
     .from(fundsTable)
+    .where(eq(fundsTable.isActive, true))
     .orderBy(asc(fundsTable.name));
 
   // One snapshots query, grouped by fund, to show a since-inception return.
