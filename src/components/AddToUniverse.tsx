@@ -33,9 +33,10 @@ export default function AddToUniverse({ fundSlug, mandateHint }: { fundSlug: str
         setResult({ kind: "info", msg: `${data.security.ticker} is already on this fund's watchlist.`, warning: data.warning });
       } else {
         const sec = data.security;
+        const days = typeof data.daysStored === "number" && data.daysStored > 0 ? ` Loaded ${data.daysStored} days of price history.` : "";
         setResult({
           kind: "success",
-          msg: `Added ${sec.ticker} — ${sec.name} (${sec.exchange}, ${sec.currency})${sec.type === "ETF" ? " · ETF" : ""}.`,
+          msg: `Added ${sec.ticker} — ${sec.name} (${sec.exchange}, ${sec.currency})${sec.type === "ETF" ? " · ETF" : ""}.${days}`,
           warning: data.warning,
         });
         setSymbol("");

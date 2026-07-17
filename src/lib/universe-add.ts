@@ -4,8 +4,8 @@
  * and the admin seed route so validation + mandate rules are identical.
  */
 import { db } from "@/db/client";
-import { securities as securitiesTable, investableUniverses } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { securities as securitiesTable, investableUniverses, prices } from "@/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import { toYahooSymbol } from "@/lib/intraday/yahoo";
 import { checkMandate } from "@/lib/mandates";
 import YahooFinance from "yahoo-finance2";
@@ -32,6 +32,43 @@ function normaliseCurrency(c: string): string {
   return u.toUpperCase();
 }
 
+/**
+ * Backfill ~1y of daily closes for a newly-added security so it's immediately
+ * chartable and tradable (the trade ticket + security page read the `prices`
+ * table). Best-effort: returns the number of days stored, 0 on any failure.
+ */
+export async function backfillSecurityPrices(securityId: string, rawSymbol: string, storeCcyFallback: Currency10): Promise<number> {
+  const period1 = new Date(Date.now() - 365 * 86400000);
+  const period2 = new Date();
+  try {
+    const chart = await yf.chart(rawSymbol, { period1, period2, interval: "1d" });
+    const meta = (chart.meta?.currency as string | undefined) ?? "";
+    const isPence = meta === "GBp" || meta === "GBX";
+    const storeCurrency: Currency10 = isPence ? "GBP" : storeCcyFallback;
+    const rows: Array<{ securityId: string; date: string; closePrice: string; currency: Currency10; source: string }> = [];
+    for (const q of chart.quotes ?? []) {
+      const close = q.close;
+      if (close == null || !Number.isFinite(close) || !q.date) continue;
+      const d = new Date(q.date).toISOString().slice(0, 10);
+      const price = isPence ? close / 100 : close;
+      rows.push({ securityId, date: d, closePrice: price.toString(), currency: storeCurrency, source: "yahoo-add" });
+    }
+    const CHUNK = 200;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await db
+        .insert(prices)
+        .values(rows.slice(i, i + CHUNK))
+        .onConflictDoUpdate({
+          target: [prices.securityId, prices.date],
+          set: { closePrice: sql`excluded.close_price`, currency: sql`excluded.currency`, source: sql`excluded.source` },
+        });
+    }
+    return rows.length;
+  } catch {
+    return 0;
+  }
+}
+
 export type Currency10 = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
 
 export interface AddOutcome {
@@ -43,7 +80,7 @@ export interface AddOutcome {
 export async function addSecurityToWatchlist(
   fund: { id: string; slug: string },
   rawSymbol: string,
-  opts: { fetchSector?: boolean } = {}
+  opts: { fetchSector?: boolean; backfill?: boolean } = {}
 ): Promise<AddOutcome> {
   const raw = (rawSymbol ?? "").trim().toUpperCase();
   if (!raw) return { ok: false, status: 400, body: { ok: false, error: "Enter a ticker symbol" } };
@@ -137,6 +174,17 @@ export async function addSecurityToWatchlist(
     securityCreated = true;
   }
 
+  // Backfill price history for any security with no price rows yet (new, or a
+  // previously-added name that never got priced) so it's immediately chartable
+  // and tradable. Skipped if the security already has prices.
+  let daysStored = 0;
+  if (opts.backfill !== false) {
+    const hasPrice = await db.select({ d: prices.date }).from(prices).where(eq(prices.securityId, securityId)).limit(1);
+    if (hasPrice.length === 0) {
+      daysStored = await backfillSecurityPrices(securityId, raw, currency as Currency10);
+    }
+  }
+
   // Link into this fund's watchlist (reactivate if previously removed; dedup if active)
   const today = new Date().toISOString().slice(0, 10);
   const link = await db
@@ -168,6 +216,6 @@ export async function addSecurityToWatchlist(
   }
   return {
     ok: true, status: 200,
-    body: { ok: true, added: true, securityCreated, security: { ticker, name, exchange, currency, type: qType, sector }, warning },
+    body: { ok: true, added: true, securityCreated, daysStored, security: { ticker, name, exchange, currency, type: qType, sector }, warning },
   };
 }
