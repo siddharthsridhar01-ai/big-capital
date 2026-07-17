@@ -15,12 +15,14 @@ const CCY_SYMBOLS: Record<string, string> = {
   KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$",
 };
 
-const RANGES: { key: string; label: string; days: number | "ALL" }[] = [
+// No "All" — with ~1y of history it duplicates 1Y.
+const RANGES: { key: string; label: string; days: number }[] = [
+  { key: "1D", label: "1D", days: 1 },
+  { key: "1W", label: "1W", days: 7 },
   { key: "1M", label: "1M", days: 30 },
   { key: "3M", label: "3M", days: 90 },
   { key: "6M", label: "6M", days: 182 },
   { key: "1Y", label: "1Y", days: 365 },
-  { key: "ALL", label: "All", days: "ALL" },
 ];
 
 function fmtDate(d: string) {
@@ -35,14 +37,24 @@ export default function SecurityPriceChart({
   currency: string;
 }) {
   const sym = CCY_SYMBOLS[currency] ?? "$";
-  const [range, setRange] = useState<string>(points.length > 90 ? "3M" : "ALL");
+  const [range, setRange] = useState<string>("1M");
+
+  // Age of the series in days (for disabling ranges we can't cover)
+  const spanDays = points.length > 0
+    ? (Date.now() - new Date(points[0].date).getTime()) / 86400000
+    : 0;
 
   const data = useMemo(() => {
-    const r = RANGES.find((x) => x.key === range);
-    if (!r || r.days === "ALL") return points;
+    const r = RANGES.find((x) => x.key === range) ?? RANGES[2];
     const cutoff = Date.now() - r.days * 86400000;
-    const filtered = points.filter((p) => new Date(p.date).getTime() >= cutoff);
-    return filtered.length >= 2 ? filtered : points;
+    const inWindow = points.filter((p) => new Date(p.date).getTime() >= cutoff);
+    if (inWindow.length >= 2) return inWindow;
+    // Anchor: prepend the most recent point before the cutoff so the window
+    // still spans "from ~N days ago to now" (matters for 1D/1W on daily data).
+    const before = points.filter((p) => new Date(p.date).getTime() < cutoff);
+    const anchor = before[before.length - 1] ?? points[0];
+    const last = points[points.length - 1];
+    return anchor && last && anchor !== last ? [anchor, last] : points.slice(-2);
   }, [points, range]);
 
   if (points.length < 2) {
@@ -57,6 +69,7 @@ export default function SecurityPriceChart({
   const last = data[data.length - 1]?.close ?? 0;
   const up = last >= first;
   const stroke = up ? "#1F5C3A" : "#7A1F1F";
+  const retPct = first !== 0 ? ((last - first) / first) * 100 : 0;
 
   const lo = Math.min(...data.map((d) => d.close));
   const hi = Math.max(...data.map((d) => d.close));
@@ -64,33 +77,48 @@ export default function SecurityPriceChart({
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 2, marginBottom: 8 }}>
-        {RANGES.map((r) => {
-          const disabled = typeof r.days === "number" &&
-            points.length > 0 &&
-            (Date.now() - new Date(points[0].date).getTime()) / 86400000 < r.days * 0.5;
-          const active = r.key === range;
-          return (
-            <button
-              key={r.key}
-              onClick={() => !disabled && setRange(r.key)}
-              disabled={disabled}
-              style={{
-                padding: "3px 9px",
-                background: active ? "#00183A" : "transparent",
-                color: active ? "white" : disabled ? "#C8C8C0" : "#6B6B66",
-                border: "1px solid",
-                borderColor: active ? "#00183A" : "transparent",
-                borderRadius: 3,
-                fontFamily: "system-ui, sans-serif",
-                fontSize: 11,
-                cursor: disabled ? "not-allowed" : "pointer",
-              }}
-            >
-              {r.label}
-            </button>
-          );
-        })}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ display: "flex", gap: 2 }}>
+          {RANGES.map((r) => {
+            // Disable a range if the series doesn't reach back far enough
+            // (1D/1W always available; longer ones need ~half the span).
+            const disabled = r.days > 7 && spanDays < r.days * 0.5;
+            const active = r.key === range;
+            return (
+              <button
+                key={r.key}
+                onClick={() => !disabled && setRange(r.key)}
+                disabled={disabled}
+                style={{
+                  padding: "3px 9px",
+                  background: active ? "#00183A" : "transparent",
+                  color: active ? "white" : disabled ? "#C8C8C0" : "#6B6B66",
+                  border: "1px solid",
+                  borderColor: active ? "#00183A" : "transparent",
+                  borderRadius: 3,
+                  fontFamily: "system-ui, sans-serif",
+                  fontSize: 11,
+                  cursor: disabled ? "not-allowed" : "pointer",
+                }}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+        <div
+          style={{
+            fontFamily: "system-ui, sans-serif",
+            fontVariantNumeric: "tabular-nums",
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: up ? "#1F5C3A" : "#7A1F1F",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {retPct >= 0 ? "▲" : "▼"} {Math.abs(retPct).toFixed(2)}%{" "}
+          <span style={{ color: "#9A9A8E", fontWeight: 400 }}>· {range}</span>
+        </div>
       </div>
       <div style={{ width: "100%", height: 180 }}>
         <ResponsiveContainer width="100%" height="100%">
