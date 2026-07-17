@@ -260,6 +260,7 @@ export async function POST(
   let priceNative: Decimal | null = null;
   let priceSource: "live" | "db_fallback" = "db_fallback";
   let priceProviderLabel = "DB";
+  let marketState: string = "UNKNOWN";
 
   try {
     const yahooSym = toYahooSymbol(security.ticker, security.exchange);
@@ -268,31 +269,34 @@ export async function POST(
     ]);
     const liveQuote = quotes[0]?.quote;
     if (liveQuote?.price != null) {
-      priceNative = new Decimal(liveQuote.price);
-      priceSource = "live";
-      priceProviderLabel = activeProvider.displayLabel;
+      marketState = liveQuote.marketState;
+      // Only fill against an ACTIVE market (regular/pre/post). A CLOSED or
+      // unknown state means the "live" price is really a stale close — filling
+      // there would let someone trade on public news (e.g. after-hours
+      // earnings) at a pre-news price. See the reject below.
+      if (marketState === "REGULAR" || marketState === "PRE" || marketState === "POST") {
+        priceNative = new Decimal(liveQuote.price);
+        priceSource = "live";
+        priceProviderLabel = activeProvider.displayLabel;
+      }
     }
   } catch (err) {
     console.error("[submit-trade] live price fetch failed:", err);
-    // Fall through to DB
   }
 
   if (priceNative == null) {
-    const priceRows = await db
-      .select()
-      .from(pricesTable)
-      .where(eq(pricesTable.securityId, security.id))
-      .orderBy(desc(pricesTable.date))
-      .limit(1);
-    if (priceRows.length === 0) {
-      return NextResponse.json(
-        { ok: false, error: "No price available for this security" },
-        { status: 400 }
-      );
-    }
-    priceNative = new Decimal(priceRows[0].closePrice);
-    priceSource = "db_fallback";
-    priceProviderLabel = `DB close ${priceRows[0].date}`;
+    // Refuse rather than fill at a stale close. This closes the look-ahead
+    // exploit: trading on already-public information at a price that predates it.
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          marketState === "CLOSED"
+            ? `${security.ticker}'s market is closed right now. Trades fill against a live price while the market is open — this prevents dealing on overnight news at a stale price.`
+            : `Couldn't get a live price for ${security.ticker}. Trades execute against a live quote during market hours — please try again shortly.`,
+      },
+      { status: 409 }
+    );
   }
 
   // ----- Price reasonability check vs expected -----
