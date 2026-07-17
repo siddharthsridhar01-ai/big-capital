@@ -166,7 +166,7 @@ export default function PerformanceChart({
               <text x="10" y="16" fontSize="10" fill="#6B6B66" fontFamily="system-ui">{fmtDateLong(hp.date)}</text>
               <text x="10" y="33" fontSize="11" fill={FUND_COLOR} fontFamily="system-ui" fontWeight="600">Fund {fmtPct(hp.fund)}</text>
               {hp.benchmark != null && (
-                <text x="10" y="50" fontSize="11" fill={BENCH_COLOR} fontFamily="system-ui">{(benchmarkName ?? "Benchmark").length > 22 ? (benchmarkName ?? "Benchmark").slice(0, 22) + "…" : benchmarkName ?? "Benchmark"} {fmtPct(hp.benchmark)}</text>
+                <text x="10" y="50" fontSize="11" fill={BENCH_COLOR} fontFamily="system-ui">{benchmarkName ?? "Benchmark"} {fmtPct(hp.benchmark)}</text>
               )}
               {excess != null && (
                 <text x="10" y="67" fontSize="11" fill={excess >= 0 ? "#1F5C3A" : "#7A1F1F"} fontFamily="system-ui">Excess {fmtPct(excess)}</text>

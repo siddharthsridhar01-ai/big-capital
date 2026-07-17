@@ -73,7 +73,11 @@ export default async function PublicFundPage({ params }: PageProps) {
       .from(securities)
       .where(eq(securities.id, fund.benchmarkSecurityId))
       .limit(1);
-    benchmarkName = b[0]?.name ?? b[0]?.ticker ?? null;
+    const t = b[0]?.ticker;
+    if (t === "FTAL") benchmarkName = "FTSE All-Share";
+    else if (t === "IWDA" || t === "SWDA" || t === "XDWD") benchmarkName = "MSCI World";
+    else if (t === "SOFR_CASH" || t === "SONIA_CASH") benchmarkName = "cash hurdle";
+    else benchmarkName = b[0]?.name?.replace(/\s*\(total-return proxy\)\s*/i, "").trim() ?? b[0]?.ticker ?? null;
   }
 
   const snapRows = await db
