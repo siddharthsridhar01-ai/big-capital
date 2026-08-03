@@ -37,13 +37,26 @@ export default function LivePriceHeadline({
     return () => clearInterval(h);
   }, []);
 
-  const effectivePrice = live?.price ?? Number(snapshotClosePrice);
-  const effectivePrev =
-    live?.previousClose ??
-    (snapshotPreviousClose ? Number(snapshotPreviousClose) : null);
-  const dc = computeDailyChange(effectivePrice, effectivePrev);
+  // "Live" means the security's market is ACTIVELY trading. After the close
+  // Yahoo still returns a price (the close itself), so keying off price alone
+  // would mislabel a stale close as live. Gate on marketState instead.
+  const marketOpen =
+    live?.marketState === "REGULAR" ||
+    live?.marketState === "PRE" ||
+    live?.marketState === "POST";
+  const isLive = marketOpen && live?.price != null;
 
-  const isLive = !!live?.price;
+  // When the market is shut, show OUR last recorded close (price + date from the
+  // same source) rather than a live-derived value with a mismatched date. This
+  // is honest — if our stored history is stale, the date makes that visible.
+  const effectivePrice =
+    isLive && live?.price != null ? live.price : Number(snapshotClosePrice);
+  const snapshotPrevNum = snapshotPreviousClose
+    ? Number(snapshotPreviousClose)
+    : null;
+  const effectivePrev =
+    isLive && live?.previousClose != null ? live.previousClose : snapshotPrevNum;
+  const dc = computeDailyChange(effectivePrice, effectivePrev);
   const ago = lastUpdated
     ? Math.max(0, Math.floor((Date.now() - lastUpdated.getTime()) / 1000))
     : null;

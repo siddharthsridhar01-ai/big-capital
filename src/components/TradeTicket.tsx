@@ -290,8 +290,17 @@ export default function TradeTicket(props: TradeTicketProps) {
     return serverSnapshotNative;
   }, [frozenPriceNative, inKeystrokePause, liveQuote, serverSnapshotNative]);
 
-  // Are we showing live data or the server snapshot?
-  const isUsingLive = !frozenPriceNative && liveQuote?.price != null;
+  // Are we showing live data or the server snapshot? "Live" requires the
+  // market to be actively trading — after the close Yahoo still returns the
+  // closing price, which must not be labelled Live (and won't fill: submit-trade
+  // rejects when the market is shut).
+  const marketOpen =
+    liveQuote?.marketState === "REGULAR" ||
+    liveQuote?.marketState === "PRE" ||
+    liveQuote?.marketState === "POST";
+  const isUsingLive = !frozenPriceNative && liveQuote?.price != null && marketOpen;
+  const isMarketClosed =
+    !frozenPriceNative && liveQuote?.price != null && !marketOpen;
   const isUsingFallback = !frozenPriceNative && !liveQuote?.price && !!serverSnapshotNative;
 
   const fx = useMemo(() => new Decimal(fxRateToBase), [fxRateToBase]);
@@ -872,6 +881,7 @@ export default function TradeTicket(props: TradeTicketProps) {
           priceNative={priceNative}
           securityCurrency={security.currency}
           isUsingLive={isUsingLive}
+          isMarketClosed={isMarketClosed}
           isUsingFallback={isUsingFallback}
           frozen={!!frozenPriceNative}
           inKeystrokePause={inKeystrokePause}
@@ -1654,6 +1664,7 @@ function LivePriceStatus({
   priceNative,
   securityCurrency,
   isUsingLive,
+  isMarketClosed,
   isUsingFallback,
   frozen,
   inKeystrokePause,
@@ -1662,6 +1673,7 @@ function LivePriceStatus({
   priceNative: Decimal | null;
   securityCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
   isUsingLive: boolean;
+  isMarketClosed: boolean;
   isUsingFallback: boolean;
   frozen: boolean;
   inKeystrokePause: boolean;
@@ -1695,6 +1707,13 @@ function LivePriceStatus({
       <>
         Live · current <strong style={{ fontWeight: 600 }}>{sym}{priceNative?.toFixed(2) ?? "—"}</strong>
         {inKeystrokePause ? " · paused while typing" : ago != null ? ` · updated ${ago}s ago` : ""}
+      </>
+    );
+  } else if (isMarketClosed) {
+    dotColor = "#8A6D1F";
+    label = (
+      <>
+        Market closed · last close <strong style={{ fontWeight: 600 }}>{sym}{priceNative?.toFixed(2) ?? "—"}</strong> · trades execute during market hours
       </>
     );
   } else if (isUsingFallback) {
