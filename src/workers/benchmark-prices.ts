@@ -47,9 +47,11 @@ export async function refreshBenchmarkPrices(
   for (const sec of benchSecs) {
     const sym = toYahooSymbol(sec.ticker, sec.exchange);
     try {
+      // Yahoo's period2 is EXCLUSIVE, so passing today omits today's bar.
+      // Request through tomorrow to include the latest session.
       const chart = await yf.chart(sym, {
         period1: from,
-        period2: toDate,
+        period2: new Date(Date.now() + 86400_000).toISOString().slice(0, 10),
         interval: "1d",
       });
       const meta = (chart.meta?.currency as string | undefined) ?? "";

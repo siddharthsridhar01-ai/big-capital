@@ -104,9 +104,12 @@ export async function ingestDailyCloses(
   const handle = async (sec: (typeof secs)[number]) => {
     const sym = toYahooSymbol(sec.ticker, sec.exchange);
     try {
+      // NOTE: Yahoo treats period2 as EXCLUSIVE (midnight at the start of that
+      // date), so passing today would silently omit today's bar. Request through
+      // tomorrow to make sure the most recent session is included.
       const chart = await yf.chart(sym, {
         period1: from,
-        period2: toDate,
+        period2: new Date(Date.now() + 86400_000).toISOString().slice(0, 10),
         interval: "1d",
       });
       const meta = (chart.meta?.currency as string | undefined) ?? "";
