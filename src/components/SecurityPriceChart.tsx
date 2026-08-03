@@ -144,7 +144,7 @@ export default function SecurityPriceChart({
       </div>
       <div style={{ width: "100%", height: 180 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: 4 }}>
+          <LineChart data={data} margin={{ top: 6, right: 30, bottom: 0, left: 4 }}>
             <XAxis
               dataKey="date"
               tick={{ fontSize: 10, fill: "#9A9A8E" }}
