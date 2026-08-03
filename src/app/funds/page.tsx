@@ -62,7 +62,7 @@ export default async function PublicFundsIndex() {
         under a formal thesis-and-review process.
       </p>
 
-      <div style={{ display: "grid", gap: 1, background: "#E5E5DE", border: "1px solid #E5E5DE" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 1, background: "#E5E5DE", border: "1px solid #E5E5DE" }}>
         {funds.map((f) => {
           const perf = computeFundPerformance(
             byFund.get(f.id) ?? [],
@@ -94,9 +94,6 @@ export default async function PublicFundsIndex() {
                       color: "#6B6B66",
                       lineHeight: 1.5,
                       fontFamily: "system-ui, sans-serif",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
                     }}
                   >
                     {f.strategyDescription ?? `${f.baseCurrency} equity strategy`}
