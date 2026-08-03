@@ -222,15 +222,17 @@ export async function POST(
 
   // ----- Determine execution price -----
   // Strategy:
-  //   1. Fetch live price from Yahoo (the active intraday provider).
-  //   2. If live is available, use it as the authoritative execution price.
+  //   1. Fetch the live price from Yahoo (the active intraday provider).
+  //   2. Fill ONLY if the security's market is actively trading (regular/pre/
+  //      post). If it's closed — or there's no live quote — refuse the trade
+  //      rather than fill at a stale close. This closes the look-ahead hole:
+  //      dealing on already-public news at a price that predates it.
   //   3. Validate against expectedPriceNative (what the user saw when they
   //      clicked Review). If divergence > 1%, reject and ask user to re-review.
-  //   4. If live is unavailable, fall back to last DB close price (and let the
-  //      user know via the audit notes).
+  //   4. Sanity-check the live price against the last stored close to catch a
+  //      pence/wrong-symbol/garbage feed value before it reaches the ledger.
   const executionDate = new Date();
   let priceNative: Decimal | null = null;
-  let priceSource: "live" | "db_fallback" = "db_fallback";
   let priceProviderLabel = "DB";
   let marketState: string = "UNKNOWN";
 
@@ -248,7 +250,6 @@ export async function POST(
       // earnings) at a pre-news price. See the reject below.
       if (marketState === "REGULAR" || marketState === "PRE" || marketState === "POST") {
         priceNative = new Decimal(liveQuote.price);
-        priceSource = "live";
         priceProviderLabel = activeProvider.displayLabel;
       }
     }
@@ -311,7 +312,7 @@ export async function POST(
       .orderBy(desc(pricesTable.date))
       .limit(1);
     const reference =
-      refRows.length > 0 && priceSource === "live" ? new Decimal(refRows[0].close) : null;
+      refRows.length > 0 ? new Decimal(refRows[0].close) : null;
     const sanity = checkPriceSanity(priceNative, reference);
     if (!sanity.ok) {
       return NextResponse.json(
