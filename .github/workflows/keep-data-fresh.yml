@@ -1,39 +1,88 @@
-# Reliable daily trigger for the FX / prices / NAV jobs.
+# Nightly refresh: FX rates -> prices -> NAV snapshot.
 #
-# Vercel's Hobby plan does not run scheduled cron jobs reliably, which is why the
-# stored prices went stale. This GitHub Actions schedule pings the same endpoints
-# every weekday after the close, so the data stays current regardless of Vercel.
+# GitHub Actions is the ONLY scheduler for this job. The vercel.json crons that
+# used to duplicate it were removed: Vercel's Hobby plan did not run them
+# reliably (the benchmark silently went stale for ~2 weeks), and having two
+# schedules 20 minutes apart made it impossible to reason about when anything
+# actually ran.
 #
-# SETUP (one-time): add a repository secret named CRON_SECRET
-#   GitHub repo → Settings → Secrets and variables → Actions → New repository
-#   secret → name: CRON_SECRET, value: <same value as your Vercel CRON_SECRET>.
+# WHY 22:40 UTC: late enough that every market has closed and reported (US
+# closes 20:00-21:00 UTC depending on DST) and the ECB has published the day's
+# FX; early enough that scheduler drift cannot push the run past midnight UTC.
+# That matters because a NAV snapshot is stamped with the UTC date at run time —
+# a run that slipped past 00:00 would file today's closes under tomorrow.
 #
-# The endpoints are idempotent, so this is harmless even if Vercel's own crons
-# also happen to fire.
+# STEP INDEPENDENCE: every step runs even if an earlier one failed, then a final
+# step fails the job if anything went wrong. Previously a failure in "prices"
+# skipped "NAV strike" entirely, so a prices hiccup silently cost that day's NAV
+# snapshot — and missed snapshots do NOT self-heal (the nightly job only ever
+# computes today; gaps need a manual /api/admin/compute-nav?from=YYYY-MM-DD).
+#
+# Requires the CRON_SECRET repository secret
+# (Settings -> Secrets and variables -> Actions). Without it every call 401s.
 name: Keep data fresh
 
 on:
   schedule:
-    # 22:40 UTC, Mon–Fri (after US close; ECB FX for the day is already published)
     - cron: "40 22 * * 1-5"
-  workflow_dispatch: {} # allow manual "Run workflow" from the Actions tab
+  workflow_dispatch: {}
+
+env:
+  BASE_URL: https://big-capital.vercel.app
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
       - name: FX rates
+        id: fx
         run: |
-          curl -fsS --max-time 120 \
+          code=$(curl -s -o /tmp/fx.json -w "%{http_code}" --max-time 120 \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://big-capital.vercel.app/api/cron/fx || echo "fx step failed (continuing)"
+            "$BASE_URL/api/cron/fx" || echo 000)
+          echo "status=$code" >> "$GITHUB_OUTPUT"
+          echo "FX -> HTTP $code"
+          head -c 500 /tmp/fx.json 2>/dev/null || true
+
       - name: Prices (quote + daily closes)
+        id: prices
+        if: always()
         run: |
-          curl -fsS --max-time 120 \
+          code=$(curl -s -o /tmp/prices.json -w "%{http_code}" --max-time 120 \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://big-capital.vercel.app/api/cron/prices
+            "$BASE_URL/api/cron/prices" || echo 000)
+          echo "status=$code" >> "$GITHUB_OUTPUT"
+          echo "PRICES -> HTTP $code"
+          head -c 500 /tmp/prices.json 2>/dev/null || true
+
       - name: NAV strike
+        id: nav
+        if: always()
         run: |
-          curl -fsS --max-time 120 \
+          code=$(curl -s -o /tmp/nav.json -w "%{http_code}" --max-time 120 \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://big-capital.vercel.app/api/cron/nav
+            "$BASE_URL/api/cron/nav" || echo 000)
+          echo "status=$code" >> "$GITHUB_OUTPUT"
+          echo "NAV -> HTTP $code"
+          head -c 500 /tmp/nav.json 2>/dev/null || true
+
+      # 2xx is success. 207 is a legitimate "partial" from these routes (some
+      # securities errored but the run completed) and must not fail the job.
+      - name: Report
+        if: always()
+        run: |
+          fx="${{ steps.fx.outputs.status }}"
+          prices="${{ steps.prices.outputs.status }}"
+          nav="${{ steps.nav.outputs.status }}"
+          echo "fx=$fx prices=$prices nav=$nav"
+          bad=0
+          for pair in "fx:$fx" "prices:$prices" "nav:$nav"; do
+            name="${pair%%:*}"; code="${pair##*:}"
+            case "$code" in
+              2*) ;;
+              401) echo "::error::$name returned 401 — the CRON_SECRET repository secret is missing or does not match Vercel."; bad=1 ;;
+              000) echo "::error::$name could not be reached (network error or timeout)."; bad=1 ;;
+              *)   echo "::error::$name returned HTTP $code."; bad=1 ;;
+            esac
+          done
+          exit $bad
