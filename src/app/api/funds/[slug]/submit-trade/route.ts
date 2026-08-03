@@ -37,6 +37,7 @@ import {
   securities as securitiesTable,
   prices as pricesTable,
   fundMembers,
+  pendingOrders,
 } from "@/db/schema";
 import { theses as thesesTable } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
@@ -258,19 +259,50 @@ export async function POST(
   }
 
   if (priceNative == null) {
-    // Refuse rather than fill outside the regular session. This closes the
-    // look-ahead exploit: dealing on already-public information at a price that
-    // predates it (e.g. after an exchange has closed for the day).
-    return NextResponse.json(
-      {
-        ok: false,
-        error:
-          marketState === "UNKNOWN"
-            ? `Couldn't get a live price for ${security.ticker}. Trades execute against a live quote during regular market hours — please try again shortly.`
-            : `${security.ticker}'s market isn't open for regular trading right now. Trades fill at the live price only during the regular session — this prevents dealing at a stale price when the market is shut.`,
-      },
-      { status: 409 }
-    );
+    // Market is shut (or in a pre/post window we don't treat as tradeable):
+    // queue the order to execute at that market's NEXT OPENING PRINT, the way a
+    // broker handles a market-on-open order. The submitter cannot know the fill
+    // price, so this closes the stale-price look-ahead hole while still letting
+    // someone act outside their exchange's hours (important for foreign lines).
+    //
+    // An UNKNOWN state means we simply couldn't reach the price feed — that is a
+    // transient error, NOT a closed market, and must be rejected rather than
+    // queued: queuing it during an active session could later fill at an opening
+    // print the submitter has already seen.
+    if (marketState === "UNKNOWN") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `Couldn't reach the price feed for ${security.ticker}. Please try again in a moment.`,
+        },
+        { status: 503 }
+      );
+    }
+
+    const queued = await db
+      .insert(pendingOrders)
+      .values({
+        fundId: fund.id,
+        securityId: security.id,
+        side: body.side,
+        quantity: new Decimal(body.shares).toString(),
+        submittedByUserId: user.id,
+        rationale: body.rationale,
+        thesisId: linkedThesis ? linkedThesis.id : null,
+        updateNote: body.updateNote ?? null,
+        softOverrideJustification: body.softOverrideJustification ?? null,
+        status: "pending",
+      })
+      .returning({ id: pendingOrders.id });
+
+    return NextResponse.json({
+      ok: true,
+      queued: true,
+      pendingOrderId: queued[0].id,
+      marketState,
+      message: `${security.ticker}'s market is closed. Your order is queued and will execute at the next opening price. You can cancel it any time before that market opens.`,
+      redirectTo: `/dashboard/funds/${slug}`,
+    });
   }
 
   // ----- Price reasonability check vs expected -----

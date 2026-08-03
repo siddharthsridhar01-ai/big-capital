@@ -1,0 +1,26 @@
+# Fills queued market-on-open orders shortly after each exchange opens.
+#
+# Exchanges open at different times around the clock (Tokyo ~00:00 UTC, Hong
+# Kong ~01:30, London ~08:00, New York ~13:30/14:30), so this runs frequently
+# rather than once a day. Each run fills only orders whose market has actually
+# opened; the rest simply wait.
+#
+# Requires the CRON_SECRET repository secret (same one used by keep-data-fresh).
+name: Fill queued orders
+
+on:
+  schedule:
+    # Every 30 minutes, Mon–Fri. GitHub schedules are best-effort, so the job is
+    # written to be idempotent and to retry anything still waiting on the next run.
+    - cron: "*/30 * * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  fill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fill pending orders
+        run: |
+          curl -fsS --max-time 180 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://big-capital.vercel.app/api/cron/fill-orders

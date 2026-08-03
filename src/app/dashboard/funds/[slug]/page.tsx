@@ -5,6 +5,7 @@ import {
   navSnapshots,
   transactions,
   securities as securitiesTable,
+  pendingOrders,
 } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
 import { eq, desc, and, inArray } from "drizzle-orm";
@@ -22,6 +23,7 @@ import LiveHoldingsTable from "@/components/LiveHoldingsTable";
 import LiveFundHeader from "@/components/LiveFundHeader";
 import ExposuresPanel from "@/components/ExposuresPanel";
 import ActivityThesisCell, { type ThesisOption } from "@/components/ActivityThesisCell";
+import PendingOrdersPanel from "@/components/PendingOrdersPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +128,23 @@ export default async function FundPage({
   // Previous close prices for held positions — for daily change display
   const heldSecurityIds = Array.from(liveState.positions.keys());
   const previousCloses = await loadPreviousClosePrices(heldSecurityIds);
+
+  // Queued market-on-open orders — submitted while the market was shut, will
+  // execute at that exchange's next opening price.
+  const pendingOrderRows = await db
+    .select({
+      id: pendingOrders.id,
+      side: pendingOrders.side,
+      quantity: pendingOrders.quantity,
+      submittedAt: pendingOrders.submittedAt,
+      rationale: pendingOrders.rationale,
+      ticker: securitiesTable.ticker,
+      securityName: securitiesTable.name,
+    })
+    .from(pendingOrders)
+    .leftJoin(securitiesTable, eq(securitiesTable.id, pendingOrders.securityId))
+    .where(and(eq(pendingOrders.fundId, fund.id), eq(pendingOrders.status, "pending")))
+    .orderBy(desc(pendingOrders.submittedAt));
 
   // Recent portfolio activity — buys, sells, shorts, covers, and dividends.
   const activityRows = await db
@@ -470,6 +489,20 @@ export default async function FundPage({
           }))}
         />
       )}
+
+      <PendingOrdersPanel
+        fundSlug={slug}
+        canManage={true}
+        orders={pendingOrderRows.map((o) => ({
+          id: o.id,
+          ticker: o.ticker ?? "—",
+          securityName: o.securityName ?? "",
+          side: o.side,
+          quantity: String(Math.round(Number(o.quantity))),
+          submittedAt: o.submittedAt.toISOString(),
+          rationale: o.rationale,
+        }))}
+      />
 
       {activityRows.length > 0 && (() => {
         const ccySym = (c: string) => (c === "GBP" ? "£" : c === "EUR" ? "€" : "$");
