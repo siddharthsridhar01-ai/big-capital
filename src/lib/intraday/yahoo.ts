@@ -83,9 +83,13 @@ function mapMarketState(state: string | undefined): IntradayQuote["marketState"]
   if (!state) return "UNKNOWN";
   const s = state.toUpperCase();
   if (s === "REGULAR") return "REGULAR";
-  if (s.startsWith("PRE")) return "PRE";
-  if (s.startsWith("POST")) return "POST";
+  // Exact-match the "fully closed" states BEFORE the pre/post prefix checks —
+  // PREPRE/POSTPOST mean the market is past its pre/post window (effectively
+  // closed, price frozen at the last close), and must not be treated as an
+  // active pre/post session.
   if (s === "CLOSED" || s === "PREPRE" || s === "POSTPOST") return "CLOSED";
+  if (s === "PRE") return "PRE";
+  if (s === "POST") return "POST";
   return "UNKNOWN";
 }
 

@@ -244,11 +244,11 @@ export async function POST(
     const liveQuote = quotes[0]?.quote;
     if (liveQuote?.price != null) {
       marketState = liveQuote.marketState;
-      // Only fill against an ACTIVE market (regular/pre/post). A CLOSED or
-      // unknown state means the "live" price is really a stale close — filling
-      // there would let someone trade on public news (e.g. after-hours
-      // earnings) at a pre-news price. See the reject below.
-      if (marketState === "REGULAR" || marketState === "PRE" || marketState === "POST") {
+      // Only fill during the REGULAR session, where the quote is a genuinely
+      // live, actively-traded price. Pre/post are unsafe: many exchanges (e.g.
+      // the LSE) have no real pre/post trading, so their "PRE"/"POST" quote is
+      // just the frozen last close — filling there is the stale-price exploit.
+      if (marketState === "REGULAR") {
         priceNative = new Decimal(liveQuote.price);
         priceProviderLabel = activeProvider.displayLabel;
       }
@@ -258,15 +258,16 @@ export async function POST(
   }
 
   if (priceNative == null) {
-    // Refuse rather than fill at a stale close. This closes the look-ahead
-    // exploit: trading on already-public information at a price that predates it.
+    // Refuse rather than fill outside the regular session. This closes the
+    // look-ahead exploit: dealing on already-public information at a price that
+    // predates it (e.g. after an exchange has closed for the day).
     return NextResponse.json(
       {
         ok: false,
         error:
-          marketState === "CLOSED"
-            ? `${security.ticker}'s market is closed right now. Trades fill against a live price while the market is open — this prevents dealing on overnight news at a stale price.`
-            : `Couldn't get a live price for ${security.ticker}. Trades execute against a live quote during market hours — please try again shortly.`,
+          marketState === "UNKNOWN"
+            ? `Couldn't get a live price for ${security.ticker}. Trades execute against a live quote during regular market hours — please try again shortly.`
+            : `${security.ticker}'s market isn't open for regular trading right now. Trades fill at the live price only during the regular session — this prevents dealing at a stale price when the market is shut.`,
       },
       { status: 409 }
     );

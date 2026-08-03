@@ -290,14 +290,11 @@ export default function TradeTicket(props: TradeTicketProps) {
     return serverSnapshotNative;
   }, [frozenPriceNative, inKeystrokePause, liveQuote, serverSnapshotNative]);
 
-  // Are we showing live data or the server snapshot? "Live" requires the
-  // market to be actively trading — after the close Yahoo still returns the
-  // closing price, which must not be labelled Live (and won't fill: submit-trade
-  // rejects when the market is shut).
-  const marketOpen =
-    liveQuote?.marketState === "REGULAR" ||
-    liveQuote?.marketState === "PRE" ||
-    liveQuote?.marketState === "POST";
+  // Are we showing live data or the server snapshot? "Live" (and tradeable)
+  // requires the REGULAR session — the only state with a genuinely live price.
+  // Pre/post are treated as closed (many exchanges have no real pre/post, so
+  // their quote is the frozen last close, and submit-trade rejects them).
+  const marketOpen = liveQuote?.marketState === "REGULAR";
   const isUsingLive = !frozenPriceNative && liveQuote?.price != null && marketOpen;
   const isMarketClosed =
     !frozenPriceNative && liveQuote?.price != null && !marketOpen;

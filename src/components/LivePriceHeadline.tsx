@@ -37,13 +37,11 @@ export default function LivePriceHeadline({
     return () => clearInterval(h);
   }, []);
 
-  // "Live" means the security's market is ACTIVELY trading. After the close
-  // Yahoo still returns a price (the close itself), so keying off price alone
-  // would mislabel a stale close as live. Gate on marketState instead.
-  const marketOpen =
-    live?.marketState === "REGULAR" ||
-    live?.marketState === "PRE" ||
-    live?.marketState === "POST";
+  // "Live" means the security's market is in its REGULAR trading session — the
+  // only state with a genuinely live, actively-traded price. Pre/post are
+  // treated as closed (many exchanges have no real pre/post, so their quote is
+  // just the frozen last close), matching the trade-execution gate.
+  const marketOpen = live?.marketState === "REGULAR";
   const isLive = marketOpen && live?.price != null;
 
   // When the market is shut, show OUR last recorded close (price + date from the
