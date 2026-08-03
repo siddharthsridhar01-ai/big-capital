@@ -86,6 +86,17 @@ export default function SecurityPriceChart({
     data.length > 1 &&
     new Date(data[0].date).getFullYear() !== new Date(data[data.length - 1].date).getFullYear();
 
+  // Evenly-spaced x-axis ticks: pick ~6 dates at constant index intervals across
+  // the visible window, so the axis spacing stays uniform even though trading
+  // days are unevenly spaced on the calendar (weekends/holidays gap out).
+  const xTicks = useMemo(() => {
+    if (data.length <= 2) return data.map((d) => d.date);
+    const n = Math.min(6, data.length);
+    const step = (data.length - 1) / (n - 1);
+    const idxs = Array.from({ length: n }, (_, i) => Math.round(i * step));
+    return Array.from(new Set(idxs)).map((i) => data[i].date);
+  }, [data]);
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -138,9 +149,10 @@ export default function SecurityPriceChart({
               dataKey="date"
               tick={{ fontSize: 10, fill: "#9A9A8E" }}
               tickFormatter={spansYears ? fmtMonthYear : fmtDayMonth}
+              ticks={xTicks}
+              interval={0}
               axisLine={{ stroke: "#E5E5DE" }}
               tickLine={false}
-              minTickGap={40}
             />
             <YAxis
               domain={[lo - pad, hi + pad]}
