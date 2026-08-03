@@ -1,0 +1,39 @@
+# Reliable daily trigger for the FX / prices / NAV jobs.
+#
+# Vercel's Hobby plan does not run scheduled cron jobs reliably, which is why the
+# stored prices went stale. This GitHub Actions schedule pings the same endpoints
+# every weekday after the close, so the data stays current regardless of Vercel.
+#
+# SETUP (one-time): add a repository secret named CRON_SECRET
+#   GitHub repo → Settings → Secrets and variables → Actions → New repository
+#   secret → name: CRON_SECRET, value: <same value as your Vercel CRON_SECRET>.
+#
+# The endpoints are idempotent, so this is harmless even if Vercel's own crons
+# also happen to fire.
+name: Keep data fresh
+
+on:
+  schedule:
+    # 22:40 UTC, Mon–Fri (after US close; ECB FX for the day is already published)
+    - cron: "40 22 * * 1-5"
+  workflow_dispatch: {} # allow manual "Run workflow" from the Actions tab
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: FX rates
+        run: |
+          curl -fsS --max-time 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://big-capital.vercel.app/api/cron/fx || echo "fx step failed (continuing)"
+      - name: Prices (quote + daily closes)
+        run: |
+          curl -fsS --max-time 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://big-capital.vercel.app/api/cron/prices
+      - name: NAV strike
+        run: |
+          curl -fsS --max-time 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://big-capital.vercel.app/api/cron/nav

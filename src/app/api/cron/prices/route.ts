@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runYahooEodIngest } from "@/workers/fetch-prices-yahoo";
-import { refreshBenchmarkPrices } from "@/workers/benchmark-prices";
+import { ingestDailyCloses } from "@/workers/daily-close-ingest";
 import { recordJobRun } from "@/lib/job-runs";
 
 export const maxDuration = 60;
@@ -12,23 +12,23 @@ export async function GET(req: NextRequest) {
   }
   const startedAt = new Date();
   try {
+    // Fast batched quote pass (existing).
     const result = await runYahooEodIngest();
 
-    // Benchmark proxies (FTAL.L etc.) aren't picked up by the EOD quote ingest
-    // above, so refresh them here over a short trailing window. Kept in its own
-    // try/catch: a benchmark hiccup must never fail the core price job. Runs
-    // before the NAV cron so compute-nav finds today's benchmark close.
-    let benchmark: unknown = null;
+    // Authoritative close pass: real daily closes for every priceable security
+    // (held, watchlist, benchmark) over a short trailing window, via the chart
+    // endpoint. Runs LAST so its true closes win on conflict, corrects any
+    // mid-session quote values, and self-heals a missed run. In its own
+    // try/catch so a hiccup can't fail the core job.
+    let eod: unknown = null;
     try {
-      const from = new Date(Date.now() - 8 * 86400_000)
+      const from = new Date(Date.now() - 10 * 86400_000)
         .toISOString()
         .slice(0, 10);
-      benchmark = await refreshBenchmarkPrices(from);
+      eod = await ingestDailyCloses(from, undefined, { concurrency: 5 });
     } catch (err) {
-      benchmark = {
-        error: err instanceof Error ? err.message : String(err),
-      };
-      console.error("Benchmark refresh failed (non-fatal):", err);
+      eod = { error: err instanceof Error ? err.message : String(err) };
+      console.error("Daily-close ingest failed (non-fatal):", err);
     }
 
     const status = result.errors.length > 0 ? 207 : 200;
@@ -36,11 +36,11 @@ export async function GET(req: NextRequest) {
       jobName: "prices",
       status: result.errors.length > 0 ? "partial" : "ok",
       startedAt,
-      summary: { ...result, benchmark },
+      summary: { ...result, eod },
       error: result.errors.length > 0 ? JSON.stringify(result.errors) : null,
     });
     return NextResponse.json(
-      { ok: result.errors.length === 0, ...result, benchmark },
+      { ok: result.errors.length === 0, ...result, eod },
       { status }
     );
   } catch (err) {
