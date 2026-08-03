@@ -76,7 +76,14 @@ export function exchangeToYahooSuffix(exchange: string): string {
  *   ("SHEL", "LSE") → "SHEL.L"
  */
 export function toYahooSymbol(ticker: string, exchange: string): string {
-  return ticker + exchangeToYahooSuffix(exchange);
+  const suffix = exchangeToYahooSuffix(exchange);
+  // US class shares: market convention writes Berkshire's B share as "BRK.B",
+  // but Yahoo uses a hyphen — "BRK-B". A dotted US ticker does not error, it
+  // returns an EMPTY quote, so the security silently never receives a price.
+  // Only rewrite for the un-suffixed (US) exchanges: on every other exchange the
+  // dot is the exchange suffix itself and must be left alone.
+  const base = suffix === "" ? ticker.replace(/\./g, "-") : ticker;
+  return base + suffix;
 }
 
 function mapMarketState(state: string | undefined): IntradayQuote["marketState"] {
