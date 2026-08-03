@@ -41,6 +41,12 @@ export interface YahooPriceResult {
   skipped: { noQuote: number; unsupportedCurrency: number };
   errors: Array<{ symbol: string; message: string }>;
   sample: Array<{ ticker: string; close: string; currency: string }>;
+  /**
+   * Distinct security rows that resolve to the same Yahoo symbol. Not an error
+   * (we now price all of them), but it almost always means the same company was
+   * added to `securities` twice, so it is surfaced for cleanup.
+   */
+  duplicateSymbols: Array<{ symbol: string; tickers: string[]; count: number }>;
 }
 
 export async function runYahooEodIngest(dateOverride?: string): Promise<YahooPriceResult> {
@@ -50,6 +56,7 @@ export async function runYahooEodIngest(dateOverride?: string): Promise<YahooPri
     skipped: { noQuote: 0, unsupportedCurrency: 0 },
     errors: [],
     sample: [],
+    duplicateSymbols: [],
   };
 
   const targets = await db
@@ -65,12 +72,34 @@ export async function runYahooEodIngest(dateOverride?: string): Promise<YahooPri
   result.securitiesRequested = targets.length;
   if (targets.length === 0) return result;
 
-  const symbols: string[] = [];
-  const symbolToSec = new Map<string, (typeof targets)[number]>();
+  // Two different security rows can resolve to the SAME Yahoo symbol (the same
+  // company entered twice, or a ticker/exchange pair that normalises
+  // identically). The previous version pushed the symbol once per security but
+  // kept only the LAST security in the lookup map, so each duplicate produced an
+  // extra upsert row carrying the same securityId. `prices` is keyed on
+  // (security_id, date), so Postgres rejected the whole statement with
+  // "ON CONFLICT DO UPDATE command cannot affect row a second time" — and the
+  // other security silently never received a price at all.
+  //
+  // Group by symbol instead: request each symbol once, then fan its quote out to
+  // every security that maps to it.
+  const symbolToSecs = new Map<string, Array<(typeof targets)[number]>>();
   for (const s of targets) {
     const sym = toYahooSymbol(s.ticker, s.exchange);
-    symbols.push(sym);
-    symbolToSec.set(sym, s);
+    const existing = symbolToSecs.get(sym);
+    if (existing) existing.push(s);
+    else symbolToSecs.set(sym, [s]);
+  }
+  const symbols = [...symbolToSecs.keys()];
+
+  for (const [sym, secs] of symbolToSecs) {
+    if (secs.length > 1) {
+      result.duplicateSymbols.push({
+        symbol: sym,
+        tickers: secs.map((s) => s.ticker),
+        count: secs.length,
+      });
+    }
   }
 
   let quotes: Array<Awaited<ReturnType<typeof yahooProvider.fetchQuotes>>[number]>;
@@ -86,27 +115,36 @@ export async function runYahooEodIngest(dateOverride?: string): Promise<YahooPri
 
   quotes.forEach((q, i) => {
     const sym = symbols[i];
-    const sec = symbolToSec.get(sym);
-    if (!sec) return;
+    const secs = symbolToSecs.get(sym);
+    if (!secs || secs.length === 0) return;
     if (!q || q.price == null || !Number.isFinite(q.price)) {
-      result.skipped.noQuote += 1;
+      // Count every security that was waiting on this symbol, not just one.
+      result.skipped.noQuote += secs.length;
       return;
     }
-    const ccy = resolvePriceCurrency(q.currency, sec.currency);
-    if (!ccy) {
-      result.skipped.unsupportedCurrency += 1;
-      return;
-    }
-    toUpsert.push({ securityId: sec.id, date, closePrice: q.price.toString(), currency: ccy, source: "yahoo" });
-    if (result.sample.length < 8) {
-      result.sample.push({ ticker: sec.ticker, close: q.price.toString(), currency: ccy });
+    for (const sec of secs) {
+      const ccy = resolvePriceCurrency(q.currency, sec.currency);
+      if (!ccy) {
+        result.skipped.unsupportedCurrency += 1;
+        continue;
+      }
+      toUpsert.push({ securityId: sec.id, date, closePrice: q.price.toString(), currency: ccy, source: "yahoo" });
+      if (result.sample.length < 8) {
+        result.sample.push({ ticker: sec.ticker, close: q.price.toString(), currency: ccy });
+      }
     }
   });
 
-  if (toUpsert.length > 0) {
+  // Belt and braces: a single INSERT must never contain two rows sharing the
+  // primary key (security_id, date), whatever produced them. Last one wins.
+  const deduped = [
+    ...new Map(toUpsert.map((r) => [`${r.securityId}|${r.date}`, r])).values(),
+  ];
+
+  if (deduped.length > 0) {
     await db
       .insert(prices)
-      .values(toUpsert)
+      .values(deduped)
       .onConflictDoUpdate({
         target: [prices.securityId, prices.date],
         set: {
@@ -115,7 +153,7 @@ export async function runYahooEodIngest(dateOverride?: string): Promise<YahooPri
           source: sql`excluded.source`,
         },
       });
-    result.pricesUpserted = toUpsert.length;
+    result.pricesUpserted = deduped.length;
   }
 
   return result;
