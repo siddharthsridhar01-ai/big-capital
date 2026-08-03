@@ -14,6 +14,8 @@ import { db } from "@/db/client";
 import { prices, securities } from "@/db/schema";
 import { and, eq, ne, or, sql } from "drizzle-orm";
 import { toYahooSymbol } from "@/lib/intraday/yahoo";
+import { getQuotes } from "@/lib/intraday/cache";
+import { activeProvider } from "@/lib/intraday/provider";
 import YahooFinance from "yahoo-finance2";
 
 const yf = new YahooFinance();
@@ -44,10 +46,12 @@ export interface DailyCloseIngestResult {
 export async function ingestDailyCloses(
   from: string,
   to?: string,
-  opts?: { concurrency?: number }
+  opts?: { concurrency?: number; finalisedOnly?: boolean }
 ): Promise<DailyCloseIngestResult> {
   const toDate = to ?? new Date().toISOString().slice(0, 10);
   const concurrency = opts?.concurrency ?? 5;
+  const finalisedOnly = opts?.finalisedOnly ?? false;
+  const todayUtc = new Date().toISOString().slice(0, 10);
 
   // Every priceable security: a real exchange (not the synthetic "INDEX" cash
   // hurdle), and either active (held/watchlist) or a benchmark proxy.
@@ -65,6 +69,27 @@ export async function ingestDailyCloses(
         or(eq(securities.isActive, true), eq(securities.isBenchmark, true))
       )
     );
+
+  // When only finalised sessions should be stored, we need each security's
+  // market state: a market that is still trading has an IN-PROGRESS bar, and
+  // storing that as the day's "close" would be wrong. Batched into one call.
+  const stateBySecurity = new Map<string, string>();
+  if (finalisedOnly && secs.length > 0) {
+    try {
+      const quotes = await getQuotes(
+        activeProvider,
+        secs.map((s2) => ({
+          securityId: s2.id,
+          symbol: toYahooSymbol(s2.ticker, s2.exchange),
+        }))
+      );
+      for (const q of quotes) {
+        if (q.quote?.marketState) stateBySecurity.set(q.securityId, q.quote.marketState);
+      }
+    } catch (err) {
+      console.error("[daily-close-ingest] market-state batch failed:", err);
+    }
+  }
 
   const result: DailyCloseIngestResult = {
     from,
@@ -99,10 +124,16 @@ export async function ingestDailyCloses(
         currency: StoreCurrency;
         source: string;
       }> = [];
+      // If this market is still in its session, today's bar is in progress —
+      // exclude it so a mid-session price never gets recorded as the close.
+      const st = stateBySecurity.get(sec.id);
+      const skipToday = finalisedOnly && (st === "REGULAR" || st === "PRE");
+
       for (const q of chart.quotes ?? []) {
         const close = q.close;
         if (close == null || !Number.isFinite(close) || !q.date) continue;
         const d = new Date(q.date).toISOString().slice(0, 10);
+        if (skipToday && d === todayUtc) continue;
         const price = isPence ? close / 100 : close;
         rows.push({
           securityId: sec.id,

@@ -1229,6 +1229,7 @@ export default function TradeTicket(props: TradeTicketProps) {
           size={size}
           projection={projection}
           priceNative={priceNative}
+          isMarketClosed={isMarketClosed}
           rationale={rationale}
           uploadedMemo={uploadedMemo}
           softViolations={constraintCheck?.softViolations ?? []}
@@ -1710,7 +1711,7 @@ function LivePriceStatus({
     dotColor = "#8A6D1F";
     label = (
       <>
-        Market closed · last close <strong style={{ fontWeight: 600 }}>{sym}{priceNative?.toFixed(2) ?? "—"}</strong> · trades execute during market hours
+        Market closed · orders queue and fill at the <strong style={{ fontWeight: 600 }}>next opening price</strong> · last close {sym}{priceNative?.toFixed(2) ?? "—"} shown for reference only
       </>
     );
   } else if (isUsingFallback) {
@@ -2110,6 +2111,7 @@ function ConfirmModal({
   size,
   projection,
   priceNative,
+  isMarketClosed,
   rationale,
   uploadedMemo,
   softViolations,
@@ -2120,6 +2122,7 @@ function ConfirmModal({
   fundSlug,
 }: {
   onCancel: () => void;
+  isMarketClosed: boolean;
   fund: TradeTicketProps["fund"];
   security: TradeTicketProps["security"];
   side: Side;
@@ -2220,7 +2223,7 @@ function ConfirmModal({
               fontWeight: 500,
             }}
           >
-            Confirm trade
+            {isMarketClosed ? "Queue order · fills at next open" : "Confirm trade"}
           </div>
           <div
             style={{
@@ -2248,22 +2251,41 @@ function ConfirmModal({
           <ProjectionTable>
             <ExecRow
               label="At price"
-              value={fmtMoney(priceNative ?? new Decimal(0), security.currency)}
+              value={
+                isMarketClosed
+                  ? "Next opening price"
+                  : fmtMoney(priceNative ?? new Decimal(0), security.currency)
+              }
             />
             <ExecRow
-              label="Notional"
+              label={isMarketClosed ? "Notional (est.)" : "Notional"}
               value={fmtMoney(projection.tradeNotionalBase, fund.baseCurrency)}
             />
             <ExecRow
-              label={`Fee (${fund.tradingFeesBps} bps)`}
+              label={`Fee (${fund.tradingFeesBps} bps)${isMarketClosed ? " est." : ""}`}
               value={fmtMoney(projection.feeBase, fund.baseCurrency)}
             />
             <ExecRow
-              label="Cash impact"
+              label={isMarketClosed ? "Cash impact (est.)" : "Cash impact"}
               value={`${projection.totalCashImpact.isNegative() ? "−" : "+"}${fmtMoney(projection.totalCashImpact, fund.baseCurrency)}`}
               emphasis
             />
           </ProjectionTable>
+          {isMarketClosed && (
+            <div
+              style={{
+                fontSize: 11.5,
+                color: "#8A6D1F",
+                marginTop: 8,
+                lineHeight: 1.5,
+              }}
+            >
+              {security.ticker}&apos;s market is closed. This order will be queued and
+              executed at the exchange&apos;s next opening price — the figures above are
+              estimates based on the last close ({fmtMoney(priceNative ?? new Decimal(0), security.currency)}),
+              not your fill price. You can cancel any time before that market opens.
+            </div>
+          )}
 
           <div style={{ marginTop: 16 }}>
             <div
@@ -2472,7 +2494,11 @@ function ConfirmModal({
               cursor: submitting ? "wait" : "pointer",
             }}
           >
-            {submitting ? "Submitting…" : "Confirm and submit"}
+            {submitting
+              ? "Submitting…"
+              : isMarketClosed
+                ? "Queue for next open"
+                : "Confirm and submit"}
           </button>
         </div>
       </div>
