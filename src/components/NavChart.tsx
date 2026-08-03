@@ -86,7 +86,6 @@ export default function NavChart({
   startingNav,
   inceptionDate,
   points,
-  liveNav,
   benchmarkName = null,
 }: NavChartProps) {
   const ageDays = fundAgeDays(inceptionDate);
@@ -96,18 +95,10 @@ export default function NavChart({
   const defaultRange: RangeKey = ageDays < 365 ? "ALL" : "1Y";
   const [activeRange, setActiveRange] = useState<RangeKey>(defaultRange);
 
-  // Full data series with today/live point appended
-  const fullData = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const result = [...points];
-    if (liveNav !== undefined) {
-      const last = result[result.length - 1];
-      if (!last || last.date !== today) {
-        result.push({ date: today, nav: liveNav, event: "Live" });
-      }
-    }
-    return result;
-  }, [points, liveNav]);
+  // Full NAV series — official struck closes only. The headline figure and the
+  // chart line both reflect the last close (the fund's valuation point); live
+  // intraday marks are for monitoring elsewhere, not the official NAV.
+  const fullData = useMemo(() => [...points], [points]);
 
   // Filter by selected range
   const data = useMemo(() => {
@@ -190,12 +181,10 @@ export default function NavChart({
       : activeRange === "YTD"
         ? "year to date"
         : `over ${activeRangeOption?.label}`;
-  const periodHeaderLabel =
-    activeRange === "ALL"
-      ? "NAV since inception"
-      : activeRange === "YTD"
-        ? "NAV (year to date)"
-        : `NAV (last ${activeRangeOption?.label})`;
+  // The headline number is the fund's last official close — a fixed label, not
+  // tied to the chart range toggle (the toggle only reframes the period return
+  // and the chart window below).
+  const periodHeaderLabel = "NAV · last close";
 
   const renderTooltip = (o: { active?: boolean; payload?: Array<{ dataKey?: string; value?: number }>; label?: string }) => {
     if (!o.active || !o.payload || o.payload.length === 0) return null;
