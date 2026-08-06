@@ -9,8 +9,8 @@
  *   5. Compute benchmark daily return for the same period
  *   6. Upsert into nav_snapshots
  *
- * Schedule: weekdays at 23:00 UTC (after price + FX ingest).
- * Vercel cron: 0 23 * * 1-5
+ * Schedule: weekdays at 22:40 UTC via GitHub Actions (after price + FX ingest).
+ * The vercel.json crons were removed — GitHub Actions is the only scheduler.
  *
  * Idempotency: ON CONFLICT updates allow re-running for any date.
  * Backfill: pass a `from` date to recompute a range.
@@ -32,7 +32,7 @@ import {
   type Currency,
 } from "../lib/performance";
 import { seedOpeningCash } from "../lib/holdings-reconstruction";
-import { sql, eq, and, lte, gte } from "drizzle-orm";
+import { sql, eq, and, lte, gte, lt, desc } from "drizzle-orm";
 import Decimal from "decimal.js";
 
 // Synthetic cash-hurdle benchmarks for absolute-return funds (market-neutral,
@@ -117,7 +117,28 @@ export async function runNavSnapshot(
       executedAt: t.executedAt,
     }));
 
-    let previousNav: Decimal | null = null;
+    // Seed the prior NAV from the most recent snapshot STRICTLY BEFORE the first
+    // date we are about to compute.
+    //
+    // Without this, `previousNav` starts null and the first day of every run has
+    // no baseline, so its dailyReturn is stored as null. The nightly cron computes
+    // exactly one day (fromDate defaults to targetDate), so EVERY nightly snapshot
+    // was landing with dailyReturn = null. timeWeightedReturn() skips nulls
+    // silently, so the public factsheet's cumulative return, volatility and Sharpe
+    // all under-reported — while the dashboard, which uses a simple
+    // (nav / startingNav - 1), showed the true figure. Benchmark returns were
+    // unaffected because they derive from benchmark prices, not previousNav, which
+    // is why only the fund line disagreed.
+    const firstDate = fundDates[0];
+    const priorSnapshot = await db
+      .select({ nav: navSnapshots.nav })
+      .from(navSnapshots)
+      .where(and(eq(navSnapshots.fundId, fund.id), lt(navSnapshots.date, firstDate)))
+      .orderBy(desc(navSnapshots.date))
+      .limit(1);
+
+    let previousNav: Decimal | null =
+      priorSnapshot.length > 0 ? new Decimal(priorSnapshot[0].nav) : null;
 
     // Opening capital (funds.startingNav) is the fund's initial cash, not a
     // ledger transaction — seed it into base-currency cash unless the ledger
