@@ -36,3 +36,7 @@ Thumbs.db
 
 # Drizzle
 drizzle/meta/_journal.json.bak
+
+# Any env file, including backups
+.env*
+!.env.example

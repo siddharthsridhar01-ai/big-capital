@@ -1,21 +1,31 @@
 /**
- * Refuses destructive database commands unless the target is explicitly dev.
+ * Loads .env.local, refuses to touch production, then runs the wrapped command.
  *
- * Why: local tooling reads DATABASE_URL from .env.local. While dev and prod
- * share one database, `npm run db:push`, `db:migrate` and `db:seed` all write
- * straight to live student data with no warning — a stray push can drop columns
- * holding the funds' entire track record.
+ * Two problems, one script:
  *
- * How: .env.local must declare DB_ENV. Destructive commands run only when
- * DB_ENV=dev. Pointing at production is still possible, but has to be
- * deliberate: ALLOW_PROD_DB=1 npm run db:push
+ * 1. ENV LOADING. Next.js reads .env.local automatically, but drizzle-kit and
+ *    tsx are standalone binaries and do not. `npm run db:push` and `db:seed`
+ *    therefore failed with "DATABASE_URL not set" even though the variable was
+ *    sitting in .env.local. This loads that file into the environment before
+ *    handing off. Variables already set in the real environment win, so a
+ *    one-off `$env:DATABASE_URL=...` override still works.
  *
- * Vercel never runs these scripts, so production is unaffected either way.
+ * 2. PRODUCTION SAFETY. Local tooling used to point at the live database, so a
+ *    stray push could drop columns holding the funds' entire track record.
+ *    Destructive commands now run only when DB_ENV=dev.
+ *
+ * Usage (see package.json):
+ *   node scripts/db-guard.mjs drizzle-kit push
+ *   node scripts/db-guard.mjs tsx src/db/seed.ts
+ *
+ * Deliberate production access:
+ *   $env:ALLOW_PROD_DB=1; npm run db:push
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { spawn } from "node:child_process";
 
-/** Minimal .env parser — avoids a dependency just to read two keys. */
+/** Minimal .env parser — avoids a dependency just to read a few keys. */
 function readEnvFile(file) {
   const out = {};
   if (!existsSync(file)) return out;
@@ -37,10 +47,24 @@ function readEnvFile(file) {
   return out;
 }
 
-const fileEnv = readEnvFile(resolve(process.cwd(), ".env.local"));
-const dbEnv = process.env.DB_ENV ?? fileEnv.DB_ENV;
-const databaseUrl = process.env.DATABASE_URL ?? fileEnv.DATABASE_URL ?? "";
+const envPath = resolve(process.cwd(), ".env.local");
+
+if (!existsSync(envPath)) {
+  console.error(`\u2716 No .env.local found at ${envPath}`);
+  process.exit(1);
+}
+
+const fileEnv = readEnvFile(envPath);
+
+// Real environment variables take precedence over the file.
+for (const [key, value] of Object.entries(fileEnv)) {
+  if (process.env[key] === undefined) process.env[key] = value;
+}
+
+const dbEnv = process.env.DB_ENV;
+const databaseUrl = process.env.DATABASE_URL ?? "";
 const override = process.env.ALLOW_PROD_DB === "1";
+const command = process.argv.slice(2);
 
 let host = "(unparseable)";
 try {
@@ -49,20 +73,20 @@ try {
   /* leave placeholder */
 }
 
-const command = process.argv.slice(2).join(" ") || "this command";
+if (!databaseUrl) {
+  console.error(`
+\u2716 DATABASE_URL is not set.
 
-if (dbEnv === "dev") {
-  console.log(`✓ DB_ENV=dev — target ${host}`);
-  process.exit(0);
+  Looked in: ${envPath}
+  Add a line such as:
+      DATABASE_URL=postgresql://postgres.<ref>:<password>@<host>:6543/postgres
+`);
+  process.exit(1);
 }
 
-if (override) {
-  console.warn(`⚠ ALLOW_PROD_DB=1 — running ${command} against ${host}`);
-  process.exit(0);
-}
-
-console.error(`
-✖ Refusing to run ${command}.
+if (dbEnv !== "dev" && !override) {
+  console.error(`
+\u2716 Refusing to run: ${command.join(" ") || "(no command)"}
 
   Target database : ${host}
   DB_ENV          : ${dbEnv ?? "(not set)"}
@@ -73,7 +97,29 @@ console.error(`
   If this is your DEV database, add to .env.local:
       DB_ENV=dev
 
-  If you really do mean production (rare — prefer the admin HTTP routes):
-      $env:ALLOW_PROD_DB=1; npm run ${process.argv[2] ?? "db:push"}
+  If you really do mean production (rare - prefer the admin HTTP routes):
+      $env:ALLOW_PROD_DB=1; npm run <script>
 `);
-process.exit(1);
+  process.exit(1);
+}
+
+console.log(
+  override && dbEnv !== "dev"
+    ? `\u26A0 ALLOW_PROD_DB=1 - target ${host}`
+    : `\u2713 DB_ENV=dev - target ${host}`
+);
+
+if (command.length === 0) process.exit(0);
+
+// shell:true so node_modules/.bin entries (drizzle-kit, tsx) resolve; npm run
+// has already put that directory on PATH.
+const child = spawn(command.join(" "), {
+  stdio: "inherit",
+  shell: true,
+  env: process.env,
+});
+child.on("exit", (code) => process.exit(code ?? 1));
+child.on("error", (err) => {
+  console.error(`\u2716 Failed to start command: ${err.message}`);
+  process.exit(1);
+});
