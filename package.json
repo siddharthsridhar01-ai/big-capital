@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "BIG Capital — student fund portfolio management and public factsheet platform",
+  "description": "BIG Capital \u2014 student fund portfolio management and public factsheet platform",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,12 +13,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts",
-    "db:seed": "tsx src/db/seed.ts",
+    "db:migrate": "node scripts/db-guard.mjs db:migrate && tsx src/db/migrate.ts",
+    "db:seed": "node scripts/db-guard.mjs db:seed && tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "worker:prices": "tsx src/workers/fetch-prices.ts",
     "worker:nav": "tsx src/workers/compute-nav.ts",
-    "worker:fx": "tsx src/workers/fetch-fx.ts"
+    "worker:fx": "tsx src/workers/fetch-fx.ts",
+    "db:push": "node scripts/db-guard.mjs db:push && drizzle-kit push"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.3",
