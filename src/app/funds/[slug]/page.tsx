@@ -250,7 +250,17 @@ export default async function PublicFundPage({ params }: PageProps) {
           value={perf.sharpe != null ? perf.sharpe.toFixed(2) : "—"}
           sub={perf.isAnnualised ? "annualised" : "needs 1 yr"}
         />
-        <Stat label="Holdings" value="—" sub="disclosed on lag" />
+        {/* Was a hardcoded "Holdings —" card, which could never show a value: the
+            live holdings count is withheld (it leaks position-building), and the
+            lagged count is already shown under Characteristics. Max drawdown is a
+            genuine factsheet metric, derives from the NAV series that is already
+            published daily, and discloses nothing that isn't public. */}
+        <Stat
+          label="Max drawdown"
+          value={maxDd == null ? "—" : `−${(maxDd * 100).toFixed(1)}%`}
+          valueColor={maxDd != null && maxDd > 0 ? "#7A1F1F" : "#00183A"}
+          sub="peak to trough"
+        />
       </div>
 
       {/* Performance chart */}
