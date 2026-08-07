@@ -65,9 +65,9 @@ function toRows(limits: LimitUtilisation[]): Row[] {
       label: isCashPair ? "Cash" : l.label,
       detail: isCashPair ? undefined : l.detail,
       value: isCashPair
-        ? `${fmt(l.current, true)} · ${fmt(floor!.limit, true)}–${fmt(l.limit, true)}`
-        : `${fmt(l.current, l.isPct)} · max ${fmt(l.limit, l.isPct)}`,
-      status: breached ? "breach" : l.exempt === "ramp-up" ? "ramp-up" : `${Math.round(util * 100)}%`,
+        ? `${fmt(l.current, true)} / ${fmt(floor!.limit, true)}–${fmt(l.limit, true)}`
+        : `${fmt(l.current, l.isPct)} / ${fmt(l.limit, l.isPct)}`,
+      status: breached ? "Breach" : l.exempt === "ramp-up" ? "Ramp-up" : `${Math.round(util * 100)}%`,
       utilisation: util,
       colour,
       breached,
@@ -91,7 +91,7 @@ export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
             Mandate
           </span>
           <span style={{ ...numeric, fontSize: 11, color: data.breachCount > 0 ? BAD : MUTED }}>
-            {data.breachCount === 0 ? "within limits" : `${data.breachCount} breach`}
+            {data.breachCount === 0 ? "Within limits" : `${data.breachCount} breach${data.breachCount === 1 ? "" : "es"}`}
           </span>
         </div>
 
@@ -121,11 +121,9 @@ export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
               {r.detail ? <span style={{ color: MUTED }}> · {r.detail}</span> : null}
             </span>
 
-            <div style={{ flex: "1 1 auto", maxWidth: 280, height: 3, background: TRACK, borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ flex: "1 1 auto", height: 4, background: TRACK, borderRadius: 2, overflow: "hidden" }}>
               <div style={{ width: `${Math.max(Math.min(r.utilisation, 1) * 100, 1)}%`, height: "100%", background: r.colour }} />
             </div>
-
-            <span style={{ flex: 1 }} />
 
             <span style={{ ...numeric, flex: "0 0 150px", textAlign: "right", fontSize: 11, color: r.breached ? BAD : MUTED, whiteSpace: "nowrap" }}>
               {r.value}
