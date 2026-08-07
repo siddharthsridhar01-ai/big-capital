@@ -25,10 +25,11 @@ function getClient() {
   if (!url) throw new Error("DATABASE_URL not set");
   const client = postgres(url, {
     // Dev used to be capped at 1 connection, which serialised every query on a
-    // page and could deadlock: any code path holding the single connection while
-    // awaiting another query waits on itself forever. Invisible while the dev
-    // database was empty. 5 matches production.
-    max: 5,
+    // page. That was invisible while the dev database was empty, but once it
+    // held real price history the fund pages took tens of seconds — each query
+    // waiting for the previous one, over a ~35ms round trip to Supabase in
+    // Ireland. 5 matches production and lets a page fan out.
+    max: process.env.NODE_ENV === "production" ? 5 : 5,
     idle_timeout: 30,
     connect_timeout: 10,
   });

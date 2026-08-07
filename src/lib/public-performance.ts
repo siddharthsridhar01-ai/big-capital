@@ -152,11 +152,28 @@ export function computePeriodReturns(snaps: SnapshotRow[]): PeriodReturns {
     return { oneMonth: null, threeMonth: null, sixMonth: null, ytd: null, sinceInception: null };
   }
   const asOf = snaps[snaps.length - 1].date;
+  const firstDate = snaps[0].date;
   const prevYearEnd = `${Number(asOf.slice(0, 4)) - 1}-12-31`;
+
+  // A trailing period the fund has not lived through is not a return — it is
+  // missing data. Without this, a two-month-old fund reported the SAME number
+  // for 3 months, 6 months and since inception, because the window simply
+  // caught every snapshot that existed. Showing "+3.9% over 6 months" for a
+  // fund that is eight weeks old overstates its track record. Sharpe already
+  // withholds itself until there is a year of history; these now match.
+  //
+  // YTD is deliberately exempt: a fund launched mid-year legitimately reports
+  // year-to-date from launch, and that is standard factsheet practice.
+  const trailing = (months: number): number | null => {
+    const startExclusive = subMonths(asOf, months);
+    if (firstDate > startExclusive) return null; // fund younger than the window
+    return periodReturn(snaps, startExclusive, asOf);
+  };
+
   return {
-    oneMonth: periodReturn(snaps, subMonths(asOf, 1), asOf),
-    threeMonth: periodReturn(snaps, subMonths(asOf, 3), asOf),
-    sixMonth: periodReturn(snaps, subMonths(asOf, 6), asOf),
+    oneMonth: trailing(1),
+    threeMonth: trailing(3),
+    sixMonth: trailing(6),
     ytd: periodReturn(snaps, prevYearEnd, asOf),
     sinceInception: periodReturn(snaps, "0000-01-01", asOf),
   };
