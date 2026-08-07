@@ -20,7 +20,8 @@
     "worker:fx": "tsx src/workers/fetch-fx.ts",
     "db:push": "node scripts/db-guard.mjs drizzle-kit push",
     "dev:seed-trades": "node scripts/db-guard.mjs node scripts/seed-dev-trades.mjs",
-    "dev:seed-nav": "node scripts/db-guard.mjs node scripts/seed-dev-nav.mjs"
+    "dev:seed-nav": "node scripts/db-guard.mjs node scripts/seed-dev-nav.mjs",
+    "limits": "node scripts/db-guard.mjs tsx scripts/show-limits.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.3",

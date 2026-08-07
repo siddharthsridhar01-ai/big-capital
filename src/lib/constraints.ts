@@ -427,3 +427,189 @@ export function checkTrade(
     softViolations: soft,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Standing-book utilisation (for the PM dashboard "Limits" panel)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the CURRENT book sits against each limit, whether or not it breaches.
+ *
+ * checkTrade() answers "may I do this trade?" and only reports constraints that
+ * are violated. A PM also needs the standing picture — how close each limit is
+ * before they act — otherwise a fund can sit off-mandate indefinitely and only
+ * discover it when a trade is blocked.
+ *
+ * Shares positionValuesBase()/convertToBase() with checkTrade so weights and FX
+ * are computed identically. It deliberately does NOT re-derive the thresholds:
+ * both read the same `constraints` rows.
+ */
+export interface LimitUtilisation {
+  constraintType: ConstraintType;
+  isHard: boolean;
+  /** Human label, e.g. "Largest position". */
+  label: string;
+  /** What the book is at now, as a fraction (0.0603) or a count (9). */
+  current: number;
+  /** The configured limit, same units as `current`. */
+  limit: number;
+  /** current/limit, clamped to 1 for bar rendering. Null for boolean rules. */
+  utilisation: number | null;
+  /** True when the limit is exceeded (or, for min_cash_pct, undershot). */
+  breached: boolean;
+  /** Formatted as a percentage rather than a raw count. */
+  isPct: boolean;
+  /** e.g. the ticker driving `max_position_pct`. */
+  detail?: string;
+}
+
+export function evaluateBookLimits(
+  constraints: FundConstraint[],
+  ctx: PortfolioContext,
+  prices: Map<string, Decimal>
+): LimitUtilisation[] {
+  const values = positionValuesBase(ctx.positions, prices, ctx);
+
+  let gross = new Decimal(0);
+  for (const v of values.values()) gross = gross.plus(v.abs());
+
+  let cashBase = new Decimal(0);
+  for (const [ccy, amt] of ctx.cashByCurrency) {
+    cashBase = cashBase.plus(convertToBase(amt, ccy, ctx.baseCurrency, ctx.date, ctx.fxRates));
+  }
+
+  const nav = ctx.navBase.isZero() ? new Decimal(1) : ctx.navBase;
+  const out: LimitUtilisation[] = [];
+
+  const push = (
+    o: Omit<LimitUtilisation, "utilisation"> & { utilisation?: number | null }
+  ) => {
+    const util =
+      o.utilisation !== undefined
+        ? o.utilisation
+        : o.limit === 0
+          ? null
+          : Math.min(o.current / o.limit, 1);
+    out.push({ ...o, utilisation: util });
+  };
+
+  for (const c of constraints) {
+    const num = typeof c.value === "number" ? c.value : Number(c.value);
+
+    switch (c.constraintType) {
+      case "max_position_pct": {
+        let topId: string | null = null;
+        let top = new Decimal(0);
+        for (const [id, v] of values) {
+          const w = v.abs().dividedBy(nav);
+          if (w.greaterThan(top)) {
+            top = w;
+            topId = id;
+          }
+        }
+        push({
+          constraintType: c.constraintType,
+          isHard: c.isHard,
+          label: "Largest position",
+          current: top.toNumber(),
+          limit: num,
+          breached: top.toNumber() > num,
+          isPct: true,
+          detail: topId ? (ctx.securityMeta.get(topId)?.ticker ?? undefined) : undefined,
+        });
+        break;
+      }
+      case "max_cash_pct":
+      case "min_cash_pct": {
+        const pct = cashBase.dividedBy(nav).toNumber();
+        const isMin = c.constraintType === "min_cash_pct";
+        push({
+          constraintType: c.constraintType,
+          isHard: c.isHard,
+          label: isMin ? "Cash floor" : "Cash",
+          current: pct,
+          limit: num,
+          breached: isMin ? pct < num : pct > num,
+          isPct: true,
+          utilisation: isMin ? null : num === 0 ? null : Math.min(pct / num, 1),
+        });
+        break;
+      }
+      case "max_single_sector_pct": {
+        const bySector = new Map<string, Decimal>();
+        for (const [id, v] of values) {
+          const sector = ctx.securityMeta.get(id)?.sector ?? "Unclassified";
+          bySector.set(sector, (bySector.get(sector) ?? new Decimal(0)).plus(v.abs()));
+        }
+        let topSector: string | null = null;
+        let top = new Decimal(0);
+        for (const [s, v] of bySector) {
+          const w = v.dividedBy(nav);
+          if (w.greaterThan(top)) {
+            top = w;
+            topSector = s;
+          }
+        }
+        push({
+          constraintType: c.constraintType,
+          isHard: c.isHard,
+          label: "Largest sector",
+          current: top.toNumber(),
+          limit: num,
+          breached: top.toNumber() > num,
+          isPct: true,
+          detail: topSector ?? undefined,
+        });
+        break;
+      }
+      case "max_position_count": {
+        let n = 0;
+        for (const p of ctx.positions.values()) if (!p.quantity.isZero()) n += 1;
+        push({
+          constraintType: c.constraintType,
+          isHard: c.isHard,
+          label: "Positions",
+          current: n,
+          limit: num,
+          breached: n > num,
+          isPct: false,
+        });
+        break;
+      }
+      case "max_gross_exposure": {
+        const g = gross.dividedBy(nav).toNumber();
+        push({
+          constraintType: c.constraintType,
+          isHard: c.isHard,
+          label: "Gross exposure",
+          current: g,
+          limit: num,
+          breached: g > num,
+          isPct: true,
+        });
+        break;
+      }
+      case "max_net_exposure": {
+        let net = new Decimal(0);
+        for (const v of values.values()) net = net.plus(v);
+        const n = net.dividedBy(nav).abs().toNumber();
+        push({
+          constraintType: c.constraintType,
+          isHard: c.isHard,
+          label: "Net exposure",
+          current: n,
+          limit: num,
+          breached: n > num,
+          isPct: true,
+        });
+        break;
+      }
+      default:
+        // universe_only / long_only are boolean rules with no utilisation; they
+        // are enforced at trade time and shown as pills, not bars.
+        break;
+    }
+  }
+
+  return out;
+}
