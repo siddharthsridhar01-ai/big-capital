@@ -49,6 +49,37 @@ const CANDIDATES: Record<string, { benchmarkName: string; baseCurrency: "GBP" | 
       { symbol: "SWDA.L", ticker: "SWDA", exchange: "LSE", label: "iShares Core MSCI World UCITS ETF (Acc), GBP line — currency fallback only" },
     ],
   },
+  // Rules-based, long-only, diversified across US large caps. The S&P 500 is the
+  // universe it selects from, so it is the benchmark that actually asks whether
+  // the factor model beat simply owning the market.
+  "systematic-equity": {
+    benchmarkName: "S&P 500 (total-return proxy)",
+    baseCurrency: "USD",
+    options: [
+      { symbol: "CSPX.L", ticker: "CSPX", exchange: "LSE", label: "iShares Core S&P 500 UCITS ETF (Acc), USD line" },
+      { symbol: "VUAG.L", ticker: "VUAG", exchange: "LSE", label: "Vanguard S&P 500 UCITS ETF (Acc)" },
+      { symbol: "SPY", ticker: "SPY", exchange: "NYSEARCA", label: "SPDR S&P 500 ETF Trust — distributing, price-return fallback" },
+    ],
+  },
+  // Moved OFF the cash hurdle. This fund runs a deliberate net-long bias, and a
+  // book that is 80% net long beats cash in any rising market without exercising
+  // any skill — the hurdle flattered it. Measuring against the index it draws
+  // from asks the harder and more useful question: did the stock selection and
+  // the shorts add value over simply owning the market?
+  //
+  // The trade-off is the mirror image: a hedged book will lag a straight index
+  // in a strong bull run, which is the honest cost of hedging rather than a
+  // failure. A blended 50/50 index-and-cash benchmark would split the
+  // difference, but needs a weight on the fund record and is worth doing only if
+  // this proves too punishing in practice.
+  "long-short": {
+    benchmarkName: "S&P 500 (total-return proxy)",
+    baseCurrency: "USD",
+    options: [
+      { symbol: "CSPX.L", ticker: "CSPX", exchange: "LSE", label: "iShares Core S&P 500 UCITS ETF (Acc), USD line" },
+      { symbol: "VUAG.L", ticker: "VUAG", exchange: "LSE", label: "Vanguard S&P 500 UCITS ETF (Acc)" },
+    ],
+  },
 };
 
 export async function GET(req: NextRequest) {
