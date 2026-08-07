@@ -12,7 +12,7 @@
 
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { currentUser } from "@clerk/nextjs/server";
 
 export interface BigCapUser {
@@ -28,14 +28,26 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
   const clerkUser = await currentUser();
   if (!clerkUser) return null;
 
-  const email = clerkUser.emailAddresses[0]?.emailAddress;
-  if (!email) return null;
+  // A person may hold several verified addresses on their Clerk account — most
+  // here have an LSE address and a personal one. Matching only the first meant
+  // signing in with the "wrong" one silently created a SECOND row, as an
+  // analyst, with no fund membership. Match on any of them so either address
+  // resolves to the same person.
+  const addresses = clerkUser.emailAddresses
+    .map((e) => e.emailAddress)
+    .filter((e): e is string => Boolean(e));
+  if (addresses.length === 0) return null;
 
-  // Check if user exists first (the happy path on every page load after first sign-in)
+  // Primary address, used only when creating a row for someone genuinely new.
+  const email =
+    clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)?.emailAddress ??
+    addresses[0];
+
+  // Happy path on every page load after first sign-in.
   const existing = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(inArray(users.email, addresses))
     .limit(1);
 
   if (existing.length > 0) {
