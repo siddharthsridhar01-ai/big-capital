@@ -42,6 +42,11 @@ const CASH_HURDLE_TICKERS = new Set(["SOFR_CASH", "SONIA_CASH"]);
 const CASH_HURDLE_ANNUAL_RATE = 0.043;
 const CASH_HURDLE_DAILY_RATE = new Decimal(CASH_HURDLE_ANNUAL_RATE).dividedBy(252);
 
+/** Drizzle returns `date` columns as either a string or a Date depending on driver. */
+function ymdOf(v: unknown): string {
+  return v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
+}
+
 export interface NavSnapshotResult {
   fundsProcessed: number;
   daysComputed: number;
@@ -294,7 +299,16 @@ export async function runNavSnapshot(
         // Benchmark return for the same period
         let benchmarkDailyReturn: string | null = null;
         let benchmarkValue: string | null = null;
-        if (fund.benchmarkSecurityId) {
+        // On the inception date there is no prior day inside the fund's life, so
+        // no return has been earned yet — by anyone. The fund's own dailyReturn
+        // is already null here (previousNav is null). The benchmark was not:
+        // it ratioed against the last close BEFORE inception, so the rebased
+        // benchmark line started a day's move away from startingNav while the
+        // fund line started exactly on it. Suppressing it makes both lines begin
+        // together at the fund's opening capital, which is what "rebased to
+        // £100,000" should mean.
+        const isInceptionDate = date === ymdOf(fund.inceptionDate);
+        if (fund.benchmarkSecurityId && !isInceptionDate) {
           if (fund.benchmarkTicker && CASH_HURDLE_TICKERS.has(fund.benchmarkTicker)) {
             // Synthetic cash hurdle (e.g. SOFR/SONIA): no market price to ratio,
             // so accrue a flat daily rate. This lets absolute-return funds

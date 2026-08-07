@@ -18,7 +18,9 @@
     "db:studio": "node scripts/db-guard.mjs drizzle-kit studio",
     "worker:nav": "tsx src/workers/compute-nav.ts",
     "worker:fx": "tsx src/workers/fetch-fx.ts",
-    "db:push": "node scripts/db-guard.mjs drizzle-kit push"
+    "db:push": "node scripts/db-guard.mjs drizzle-kit push",
+    "dev:seed-trades": "node scripts/db-guard.mjs node scripts/seed-dev-trades.mjs",
+    "dev:seed-nav": "node scripts/db-guard.mjs node scripts/seed-dev-nav.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.3",

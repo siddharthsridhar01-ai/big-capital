@@ -58,14 +58,23 @@ export async function refreshBenchmarkPrices(
       const isPence = meta === "GBp" || meta === "GBX";
       const storeCurrency = (isPence ? "GBP" : sec.currency) as StoreCurrency;
 
-      // Yahoo also reports the session state on the chart meta. If this market
-      // is still trading, today's bar is IN PROGRESS — its "close" is just the
-      // last print so far. Recording that as a close puts an intraday value in
-      // the benchmark series, and NAV then strikes against it, producing a
-      // point on the public chart that looks like a finished day but isn't.
-      // Mirrors the same guard in daily-close-ingest.
-      const marketState = (chart.meta as { marketState?: string } | undefined)?.marketState;
-      const skipToday = marketState === "REGULAR" || marketState === "PRE";
+      // Whether today's bar is finished. NOTE: chart.meta does NOT carry
+      // marketState — daily-close-ingest deliberately makes a separate quote
+      // call for exactly this reason. Reading it off the chart silently yields
+      // undefined, which is how an in-progress bar got stored as a close.
+      //
+      // Conservative: skip today unless the market is positively known to have
+      // finished. The caller passes a date window, so the next run picks up
+      // today's real close once it exists.
+      let marketState;
+      try {
+        const q = await yf.quote(sym, undefined, { validateResult: false });
+        marketState = (q as { marketState?: string } | undefined)?.marketState;
+      } catch {
+        /* leave undefined -> treated as "still open" */
+      }
+      const skipToday =
+        marketState === undefined || marketState === "REGULAR" || marketState === "PRE";
       const todayUtc = new Date().toISOString().slice(0, 10);
 
       if (storeCurrency !== "GBP" && storeCurrency !== "USD" && storeCurrency !== "EUR") {

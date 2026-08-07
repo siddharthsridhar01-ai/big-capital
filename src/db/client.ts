@@ -24,7 +24,11 @@ function getClient() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL not set");
   const client = postgres(url, {
-    max: process.env.NODE_ENV === "production" ? 5 : 1,
+    // Dev used to be capped at 1 connection, which serialised every query on a
+    // page and could deadlock: any code path holding the single connection while
+    // awaiting another query waits on itself forever. Invisible while the dev
+    // database was empty. 5 matches production.
+    max: 5,
     idle_timeout: 30,
     connect_timeout: 10,
   });

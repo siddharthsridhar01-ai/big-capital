@@ -31,7 +31,13 @@ export async function GET(req: NextRequest) {
     .slice(0, 10);
   const from = url.searchParams.get("from") ?? oneYearAgo;
 
-  const result = await ingestDailyCloses(from, undefined, { concurrency: 6 });
+  // finalisedOnly: today's bar is still IN PROGRESS while a market is open, and
+  // storing it as a close puts an intraday price into the series that NAV then
+  // strikes against. The flag defaults to false, so it must be passed explicitly.
+  const result = await ingestDailyCloses(from, undefined, {
+    concurrency: 6,
+    finalisedOnly: true,
+  });
 
   return NextResponse.json({ ok: result.errors === 0, ...result });
 }
