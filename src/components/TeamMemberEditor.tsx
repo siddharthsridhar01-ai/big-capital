@@ -129,17 +129,17 @@ export default function TeamMemberEditor({
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 16, marginBottom: 16 }}>
         <div>
-          <label style={LABEL}>LinkedIn URL <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}>— optional</span></label>
+          <label style={LABEL}>LinkedIn URL <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}>(optional)</span></label>
           <input type="url" value={linkedinUrl} onChange={(e) => setLinkedinUrl(e.target.value)} style={INPUT} placeholder="https://linkedin.com/in/…" />
         </div>
         <div>
-          <label style={LABEL}>Grad year <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}>— optional</span></label>
+          <label style={LABEL}>Grad year <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}>(optional)</span></label>
           <input type="number" value={graduationYear} onChange={(e) => setGraduationYear(e.target.value)} style={INPUT} placeholder="2027" />
         </div>
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <label style={LABEL}>Headshot <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}>— optional, image under 5 MB</span></label>
+        <label style={LABEL}>Headshot <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}>(optional, image under 5 MB)</span></label>
         <input type="file" accept="image/*" onChange={(e) => setHeadshot(e.target.files?.[0] ?? null)} style={{ fontSize: 13, fontFamily: "system-ui, sans-serif" }} />
         {isEdit && initial?.hasHeadshot && !headshot ? (
           <label style={{ display: "block", fontSize: 12, color: "#6B6B66", marginTop: 8 }}>

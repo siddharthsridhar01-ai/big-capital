@@ -321,7 +321,7 @@ export default function NavChart({
               }}
               title={
                 isDisabled
-                  ? `Fund is ${ageDays} days old — not enough history for this range`
+                  ? `Fund is ${ageDays} days old, not enough history for this range`
                   : undefined
               }
             >

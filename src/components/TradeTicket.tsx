@@ -594,7 +594,7 @@ export default function TradeTicket(props: TradeTicketProps) {
           required: true,
         };
       }
-      // Legacy holding with no thesis — optionally create one, else proceed.
+      // Legacy holding with no thesis (optional)ly create one, else proceed.
       if (addNoThesisChoice === "create") {
         return {
           mode: "create",
@@ -666,7 +666,7 @@ export default function TradeTicket(props: TradeTicketProps) {
   const validation = useMemo(() => {
     const errors: string[] = [];
     if (!priceBase || priceBase.isZero()) {
-      errors.push("No price available — cannot construct trade");
+      errors.push("No price available, cannot construct trade");
     }
     if (!size || size.shares.isZero()) {
       errors.push("Enter at least 1 share");
@@ -691,7 +691,7 @@ export default function TradeTicket(props: TradeTicketProps) {
       size.shares.greaterThan(currentQty.abs())
     ) {
       errors.push(
-        `Cannot ${side} ${fmtShares(size.shares)} shares — current position is only ${fmtShares(currentQty.abs())} shares`
+        `Cannot ${side} ${fmtShares(size.shares)} shares. Current position is only ${fmtShares(currentQty.abs())} shares`
       );
     }
     // Hard constraint violations
@@ -767,7 +767,7 @@ export default function TradeTicket(props: TradeTicketProps) {
   const sideDisabledReason: Record<Side, string | null> = {
     buy: null,
     sell: !isCurrentlyLong
-      ? "You don't own this position — use SHORT to bet against it"
+      ? "You don't own this position. Use SHORT to bet against it"
       : null,
     short: null,
     cover: !isCurrentlyShort
@@ -1089,7 +1089,7 @@ export default function TradeTicket(props: TradeTicketProps) {
             >
               Rationale (required, min 50 chars){" "}
               <span style={{ color: "#9A9A8E", fontWeight: 400 }}>
-                — {rationale.length}/50 — a brief paraphrase of why you&rsquo;re
+                {rationale.length}/50. A brief paraphrase of why you&rsquo;re
                 placing this specific trade
               </span>
             </label>
@@ -1117,7 +1117,7 @@ export default function TradeTicket(props: TradeTicketProps) {
             >
               Per-trade attachment (PDF){" "}
               <span style={{ color: "#9A9A8E" }}>
-                — optional, subordinate to the thesis memo above
+                (optional), subordinate to the thesis memo above
               </span>
             </label>
             <MemoUploader
@@ -1449,7 +1449,7 @@ function MemoUploader({
     }
     if (file.size > 10 * 1024 * 1024) {
       setUploadError(
-        `File too large — max 10 MB (got ${(file.size / 1024 / 1024).toFixed(1)} MB)`
+        `File too large. Max 10 MB (got ${(file.size / 1024 / 1024).toFixed(1)} MB)`
       );
       return;
     }
@@ -2726,7 +2726,7 @@ function ThesisPicker(props: ThesisPickerProps) {
       {/* TARGETS (optional) */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div>
-          <span style={subLabel}>Target weight (%) — optional</span>
+          <span style={subLabel}>Target weight (%) (optional)</span>
           <input
             type="number"
             value={targetWeightPct}
@@ -2740,7 +2740,7 @@ function ThesisPicker(props: ThesisPickerProps) {
         </div>
         <div>
           <span style={subLabel}>
-            Target price ({currencySymbol}) — optional
+            Target price ({currencySymbol}) (optional)
           </span>
           <input
             type="number"
@@ -2786,7 +2786,7 @@ function ThesisPicker(props: ThesisPickerProps) {
 
       {/* MEMO PDF (optional) */}
       <div>
-        <span style={subLabel}>Thesis memo PDF — optional</span>
+        <span style={subLabel}>Thesis memo PDF (optional)</span>
         <div
           style={{
             border: "1px dashed #D9D9D2",
@@ -3008,7 +3008,7 @@ function ThesisPicker(props: ThesisPickerProps) {
           )}
           {thesisCard(linkedThesis)}
           <div style={{ marginTop: 14 }}>
-            <span style={subLabel}>Update note — optional</span>
+            <span style={subLabel}>Update note (optional)</span>
             <textarea
               value={updateNote}
               onChange={(e) => setUpdateNote(e.target.value)}

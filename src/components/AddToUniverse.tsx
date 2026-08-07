@@ -36,14 +36,14 @@ export default function AddToUniverse({ fundSlug, mandateHint }: { fundSlug: str
         const days = typeof data.daysStored === "number" && data.daysStored > 0 ? ` Loaded ${data.daysStored} days of price history.` : "";
         setResult({
           kind: "success",
-          msg: `Added ${sec.ticker} — ${sec.name} (${sec.exchange}, ${sec.currency})${sec.type === "ETF" ? " · ETF" : ""}.${days}`,
+          msg: `Added ${sec.ticker}: ${sec.name} (${sec.exchange}, ${sec.currency})${sec.type === "ETF" ? " · ETF" : ""}.${days}`,
           warning: data.warning,
         });
         setSymbol("");
         router.refresh();
       }
     } catch {
-      setResult({ kind: "error", msg: "Network error — please try again." });
+      setResult({ kind: "error", msg: "Network error. Please try again." });
     } finally {
       setBusy(false);
     }
@@ -67,9 +67,9 @@ export default function AddToUniverse({ fundSlug, mandateHint }: { fundSlug: str
         Add to watchlist
       </div>
       <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66", marginBottom: 12, lineHeight: 1.5 }}>
-        Enter the exact ticker as listed on Yahoo Finance — including the exchange suffix for non-US names
+        Enter the exact ticker as listed on Yahoo Finance, including the exchange suffix for non-US names
         (e.g. <code>AAPL</code>, <code>AZN.L</code>, <code>7203.T</code>, <code>2330.TW</code>). It&apos;s
-        validated live and added to this fund&apos;s watchlist. Single-name equities only — no ETFs or funds.
+        validated live and added to this fund&apos;s watchlist. Single-name equities only. No ETFs or funds.
         {mandateHint && (
           <span style={{ display: "block", marginTop: 6, color: "#8A6D1F" }}>Mandate: {mandateHint}</span>
         )}

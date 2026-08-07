@@ -238,8 +238,8 @@ export default function SearchModal() {
                 onKeyDown={handleInputKey}
                 placeholder={
                   fundSlug
-                    ? "Search this fund's universe — ticker, name, or ISIN"
-                    : "Search securities — ticker, name, or ISIN"
+                    ? "Search this fund's universe by ticker, name, or ISIN"
+                    : "Search securities by ticker, name, or ISIN"
                 }
                 style={{
                   flex: 1,

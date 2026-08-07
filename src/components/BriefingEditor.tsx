@@ -108,7 +108,7 @@ export default function BriefingEditor({
     <div style={{ marginBottom: 18 }}>
       <label style={LABEL}>
         {label}
-        {optional ? <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}> — optional</span> : null}
+        {optional ? <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}> (optional)</span> : null}
       </label>
       <textarea value={value} onChange={(e) => set(e.target.value)} rows={rows} style={{ ...INPUT, resize: "vertical" }} />
     </div>
@@ -123,7 +123,7 @@ export default function BriefingEditor({
         </div>
         <div>
           <label style={LABEL}>Title</label>
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. May 2026 — Monthly commentary" style={INPUT} />
+          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. May 2026 monthly commentary" style={INPUT} />
         </div>
       </div>
 

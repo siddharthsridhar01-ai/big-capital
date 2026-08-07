@@ -83,7 +83,7 @@ export default function EditTradeForm({ fundSlug, txnId, tradeLabel, initial }: 
       >
         {tradeLabel}
         <span style={{ color: "#9A9A8E", marginLeft: 8 }}>
-          — shares, price and date can&rsquo;t be changed (they&rsquo;re the trade record)
+          Shares, price and date can&rsquo;t be changed (they&rsquo;re the trade record)
         </span>
       </div>
 

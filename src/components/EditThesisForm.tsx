@@ -204,7 +204,7 @@ export default function EditThesisForm({
         <div style={SECTION_HEADER}>Memo PDF (optional)</div>
         {initial.memoFilename && !memoFile && (
           <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66", marginBottom: 8 }}>
-            Current: <span style={{ color: "#00183A" }}>{initial.memoFilename}</span> — uploading a new file replaces it.
+            Current: <span style={{ color: "#00183A" }}>{initial.memoFilename}</span>. Uploading a new file replaces it.
           </div>
         )}
         <input

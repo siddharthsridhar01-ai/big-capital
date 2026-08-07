@@ -140,7 +140,7 @@ export default function EditThesisUpdateForm({ fundSlug, thesisId, updateId, cur
         <div style={SECTION_HEADER}>Attachment PDF <span style={{ color: "#9A9A8E" }}>(optional)</span></div>
         {initial.attachmentFilename && !file && (
           <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66", marginBottom: 8 }}>
-            Current: <span style={{ color: "#00183A" }}>{initial.attachmentFilename}</span> — uploading a new file replaces it.
+            Current: <span style={{ color: "#00183A" }}>{initial.attachmentFilename}</span>. Uploading a new file replaces it.
           </div>
         )}
         <input type="file" accept="application/pdf,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66" }} />

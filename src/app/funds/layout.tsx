@@ -87,7 +87,7 @@ export default function PublicFundsLayout({
           }}
         >
           BIG Capital is a student-run investment society. All portfolios are
-          paper-traded for educational purposes — no client capital is managed
+          paper-traded for educational purposes. No client capital is managed
           and no figures represent real money. Holdings are disclosed on a lag
           and all performance is simulated. Nothing on this site is investment
           advice or an offer of any kind.

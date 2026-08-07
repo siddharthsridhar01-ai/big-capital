@@ -519,7 +519,7 @@ export default function NewThesisForm({
             lineHeight: 1.5,
           }}
         >
-          Long-form memo — full thesis write-up, scenarios, financials. The
+          Long-form memo: full thesis write-up, scenarios, financials. The
           summary above is what surfaces in lists; the PDF is for the deep
           dive.
         </div>

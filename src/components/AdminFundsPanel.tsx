@@ -153,7 +153,7 @@ export default function AdminFundsPanel({ funds }: { funds: Fund[] }) {
       >
         Reset wipes all transactions, positions, and attachments for the fund
         and returns it to inception state. Use during testing. Once the fund
-        is live with real PM trades, this destroys audit history — be careful.
+        is live with real PM trades, this destroys audit history. Be careful.
       </div>
     </div>
   );

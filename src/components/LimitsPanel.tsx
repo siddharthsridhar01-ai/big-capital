@@ -148,7 +148,7 @@ export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
 
         {hasExempt ? (
           <div style={{ fontSize: 10, color: MUTED, paddingTop: 10 }}>
-            N/A — cash limits apply from {RAMP_UP_DAYS} days after inception.
+            Cash limits apply from {RAMP_UP_DAYS} days after inception.
           </div>
         ) : null}
       </div>

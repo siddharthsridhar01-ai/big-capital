@@ -145,14 +145,14 @@ export default function PostMortemForm({
             <span style={{ ...numeric, color: "#00183A" }}>
               {realisedPnlDisplay}
             </span>{" "}
-            (outcome pre-selected from this — adjust if needed).
+            (outcome pre-selected from this; adjust if needed).
           </div>
         ) : null}
       </div>
 
       {/* REALISED RETURN */}
       <div style={{ marginBottom: 22 }}>
-        <label style={LABEL}>Realised return (%) — optional</label>
+        <label style={LABEL}>Realised return (%) (optional)</label>
         <input
           type="number"
           value={realisedReturnPct}
@@ -177,7 +177,7 @@ export default function PostMortemForm({
         }}
       >
         <div>
-          <label style={LABEL}>What worked — optional</label>
+          <label style={LABEL}>What worked (optional)</label>
           <textarea
             value={whatWorked}
             onChange={(e) => setWhatWorked(e.target.value)}
@@ -187,7 +187,7 @@ export default function PostMortemForm({
           />
         </div>
         <div>
-          <label style={LABEL}>What didn&rsquo;t — optional</label>
+          <label style={LABEL}>What didn&rsquo;t (optional)</label>
           <textarea
             value={whatDidntWork}
             onChange={(e) => setWhatDidntWork(e.target.value)}
@@ -212,7 +212,7 @@ export default function PostMortemForm({
 
       {/* ATTACHMENT */}
       <div style={{ marginBottom: 22 }}>
-        <div style={SECTION_HEADER}>Attachment PDF — optional</div>
+        <div style={SECTION_HEADER}>Attachment PDF (optional)</div>
         <div
           style={{
             border: "1px dashed #D9D9D2",

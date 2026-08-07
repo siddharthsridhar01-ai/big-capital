@@ -131,7 +131,7 @@ export default function ThesisUpdateForm({
       </div>
 
       <div style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: "#9A9A8E", marginBottom: 10 }}>
-        Revisions — optional
+        Revisions (optional)
       </div>
 
       {/* CONVICTION */}
@@ -167,7 +167,7 @@ export default function ThesisUpdateForm({
       {/* TARGETS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div>
-          <label style={LABEL}>Target weight (%) — optimal size</label>
+          <label style={LABEL}>Target weight (%), optimal size</label>
           <input
             type="number"
             value={targetWeightPct}
@@ -195,7 +195,7 @@ export default function ThesisUpdateForm({
 
       {/* PDF */}
       <div style={{ marginBottom: 16 }}>
-        <label style={LABEL}>Attach PDF — optional</label>
+        <label style={LABEL}>Attach PDF (optional)</label>
         <div style={{ border: "1px dashed #D9D9D2", padding: "12px", background: "#FAFAF7", textAlign: "center", color: "#6B6B66", fontSize: 12 }}>
           {attachment ? (
             <div>
