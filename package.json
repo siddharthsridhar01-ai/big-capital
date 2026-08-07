@@ -16,7 +16,6 @@
     "db:migrate": "node scripts/db-guard.mjs tsx src/db/migrate.ts",
     "db:seed": "node scripts/db-guard.mjs tsx src/db/seed.ts",
     "db:studio": "node scripts/db-guard.mjs drizzle-kit studio",
-    "worker:prices": "tsx src/workers/fetch-prices.ts",
     "worker:nav": "tsx src/workers/compute-nav.ts",
     "worker:fx": "tsx src/workers/fetch-fx.ts",
     "db:push": "node scripts/db-guard.mjs drizzle-kit push"
