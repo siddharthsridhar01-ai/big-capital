@@ -14,7 +14,7 @@
 
 import { serif, numeric } from "@/lib/typography";
 import type { BookLimitsResult } from "@/lib/book-limits";
-import type { LimitUtilisation } from "@/lib/constraints";
+import { RAMP_UP_DAYS, type LimitUtilisation } from "@/lib/constraints";
 
 /** Amber from 80% of limit. A convention, not a standard — one number, one place. */
 const WARN_AT = 0.8;
@@ -67,7 +67,7 @@ function toRows(limits: LimitUtilisation[]): Row[] {
       value: isCashPair
         ? `${fmt(l.current, true)} / ${fmt(floor!.limit, true)}–${fmt(l.limit, true)}`
         : `${fmt(l.current, l.isPct)} / ${fmt(l.limit, l.isPct)}`,
-      status: breached ? "Breach" : l.exempt === "ramp-up" ? "Ramp-up" : `${Math.round(util * 100)}%`,
+      status: breached ? "Breach" : l.exempt === "ramp-up" ? "N/A" : `${Math.round(util * 100)}%`,
       utilisation: util,
       colour,
       breached,
@@ -80,6 +80,7 @@ function toRows(limits: LimitUtilisation[]): Row[] {
 export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
   const rows = toRows(data.limits);
   if (rows.length === 0 && data.hardRules.length === 0) return null;
+  const hasExempt = data.limits.some((l) => l.exempt === "ramp-up");
 
   return (
     <div style={{ marginTop: 28, marginBottom: 36 }}>
@@ -142,6 +143,12 @@ export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
                 {h.label}
               </span>
             ))}
+          </div>
+        ) : null}
+
+        {hasExempt ? (
+          <div style={{ fontSize: 10, color: MUTED, paddingTop: 10 }}>
+            N/A — cash limits apply from {RAMP_UP_DAYS} days after inception.
           </div>
         ) : null}
       </div>
