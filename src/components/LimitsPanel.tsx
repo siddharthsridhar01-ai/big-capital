@@ -1,33 +1,29 @@
 /**
  * Limits panel for the fund dashboard.
  *
- * Answers the question the rest of the dashboard doesn't: is this book on
- * mandate right now? `checkTrade` only speaks when a PM tries to trade, so
- * without this a fund can sit off-mandate indefinitely and only find out when a
- * trade is blocked.
+ * Answers what the rest of the dashboard doesn't: is this book on mandate right
+ * now? checkTrade() only speaks when a PM tries to trade, so without this a fund
+ * can sit off-mandate indefinitely and only find out when a trade is blocked.
  *
- * Bars show utilisation, not raw value, so the eye lands on the tight ones. A
- * breach clamps the bar at full rather than overflowing — the number carries the
- * magnitude; a bar three times its container just distorts the row.
+ * One line per limit — label, bar, value, status — so a full mandate fits in a
+ * glance without scrolling. Rows sort by utilisation, tightest first: the limit
+ * closest to binding is the one that matters before the next trade.
  *
  * Server component — pure presentation of loadBookLimits() output.
  */
 
 import { serif, numeric } from "@/lib/typography";
 import type { BookLimitsResult } from "@/lib/book-limits";
+import type { LimitUtilisation } from "@/lib/constraints";
 
-/**
- * Amber from 80% of the limit. A convention rather than a standard — PMs learn
- * to read the colour, so it is deliberately one number in one place.
- */
+/** Amber from 80% of limit. A convention, not a standard — one number, one place. */
 const WARN_AT = 0.8;
 
 const INK = "#00183A";
 const MUTED = "#9A9A8E";
-const LABEL = "#6B6B66";
-const RULE = "#ECEBE4";
-const TRACK = "#F1EFE8";
-const OK = "#1F5C3A";
+const RULE = "#E5E5DE";
+const TRACK = "#F0EFEA";
+const OK = "#2F5D45";
 const WARN = "#8A6D1F";
 const BAD = "#7A1F1F";
 
@@ -35,80 +31,119 @@ function fmt(v: number, isPct: boolean) {
   return isPct ? `${(v * 100).toFixed(1)}%` : String(Math.round(v));
 }
 
+interface Row {
+  key: string;
+  label: string;
+  detail?: string;
+  value: string;
+  status: string;
+  utilisation: number;
+  colour: string;
+  breached: boolean;
+}
+
+/**
+ * A cash floor and a cash ceiling measure the same thing against two bounds.
+ * Shown separately they printed the same percentage twice, and the floor drew a
+ * bar reading "3% used" when the floor was in fact comfortably satisfied.
+ */
+function toRows(limits: LimitUtilisation[]): Row[] {
+  const floor = limits.find((l) => l.constraintType === "min_cash_pct");
+  const ceiling = limits.find((l) => l.constraintType === "max_cash_pct");
+  const rows: Row[] = [];
+
+  for (const l of limits) {
+    if (l.constraintType === "min_cash_pct" && ceiling) continue;
+
+    const isCashPair = l.constraintType === "max_cash_pct" && floor;
+    const breached = isCashPair ? l.breached || floor!.breached : l.breached;
+    const util = l.utilisation ?? 0;
+    const colour = breached ? BAD : l.exempt ? MUTED : util >= WARN_AT ? WARN : OK;
+
+    rows.push({
+      key: l.constraintType,
+      label: isCashPair ? "Cash" : l.label,
+      detail: isCashPair ? undefined : l.detail,
+      value: isCashPair
+        ? `${fmt(l.current, true)} · ${fmt(floor!.limit, true)}–${fmt(l.limit, true)}`
+        : `${fmt(l.current, l.isPct)} · max ${fmt(l.limit, l.isPct)}`,
+      status: breached ? "breach" : l.exempt === "ramp-up" ? "ramp-up" : `${Math.round(util * 100)}%`,
+      utilisation: util,
+      colour,
+      breached,
+    });
+  }
+
+  return rows.sort((a, b) => b.utilisation - a.utilisation);
+}
+
 export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
-  if (data.limits.length === 0 && data.hardRules.length === 0) return null;
+  const rows = toRows(data.limits);
+  if (rows.length === 0 && data.hardRules.length === 0) return null;
 
   return (
-    <div style={{ marginTop: 24 }}>
+    <div style={{ marginTop: 28, marginBottom: 36 }}>
       <h2 style={{ ...serif, fontSize: 18, color: INK, margin: "0 0 10px" }}>Limits</h2>
 
       <div style={{ background: "white", border: `1px solid ${RULE}`, padding: "14px 18px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: MUTED }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+          <span style={{ fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: MUTED }}>
             Mandate
           </span>
-          <span style={{ fontSize: 10, color: data.breachCount > 0 ? BAD : MUTED }}>
-            {data.breachCount === 0
-              ? "within limits"
-              : `${data.breachCount} breach${data.breachCount === 1 ? "" : "es"}`}
+          <span style={{ ...numeric, fontSize: 11, color: data.breachCount > 0 ? BAD : MUTED }}>
+            {data.breachCount === 0 ? "within limits" : `${data.breachCount} breach`}
           </span>
         </div>
 
-        {data.limits.map((l, i) => {
-          const util = l.utilisation ?? 0;
-          const colour = l.breached ? BAD : util >= WARN_AT ? WARN : OK;
-          const pctOfLimit = l.utilisation == null ? null : Math.round(l.utilisation * 100);
-
-          return (
-            <div
-              key={l.constraintType}
+        {rows.map((r, i) => (
+          <div
+            key={r.key}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              padding: "8px 0",
+              borderTop: i === 0 ? `1px solid ${RULE}` : "none",
+              borderBottom: `1px solid ${RULE}`,
+            }}
+          >
+            <span
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "9px 0",
-                borderBottom: i < data.limits.length - 1 ? `1px solid ${RULE}` : "none",
+                flex: "0 0 190px",
+                fontSize: 12,
+                color: INK,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
             >
-              <span style={{ flex: "0 0 150px", fontSize: 13, color: INK }}>
-                {l.label}
-                {l.detail ? <span style={{ color: MUTED }}> · {l.detail}</span> : null}
-              </span>
+              {r.label}
+              {r.detail ? <span style={{ color: MUTED }}> · {r.detail}</span> : null}
+            </span>
 
-              <div style={{ flex: 1, height: 5, background: TRACK, minWidth: 40 }}>
-                <div style={{ width: `${Math.max(util * 100, 1)}%`, height: "100%", background: colour }} />
-              </div>
-
-              <span style={{ ...numeric, flex: "0 0 110px", textAlign: "right", fontSize: 12, color: l.breached ? BAD : INK }}>
-                {fmt(l.current, l.isPct)} / {fmt(l.limit, l.isPct)}
-              </span>
-
-              <span style={{ flex: "0 0 74px", textAlign: "right", fontSize: 10, color: l.breached ? BAD : l.exempt ? MUTED : colour }}>
-                {l.breached ? "breach" : l.exempt === "ramp-up" ? "ramp-up" : pctOfLimit != null ? `${pctOfLimit}%` : ""}
-              </span>
+            <div style={{ flex: "1 1 auto", maxWidth: 280, height: 3, background: TRACK, borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ width: `${Math.max(Math.min(r.utilisation, 1) * 100, 1)}%`, height: "100%", background: r.colour }} />
             </div>
-          );
-        })}
+
+            <span style={{ flex: 1 }} />
+
+            <span style={{ ...numeric, flex: "0 0 150px", textAlign: "right", fontSize: 11, color: r.breached ? BAD : MUTED, whiteSpace: "nowrap" }}>
+              {r.value}
+            </span>
+
+            <span style={{ ...numeric, flex: "0 0 62px", textAlign: "right", fontSize: 11, color: r.colour }}>
+              {r.status}
+            </span>
+          </div>
+        ))}
 
         {data.hardRules.length > 0 ? (
-          <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 12 }}>
-            {data.hardRules.map((r) => (
-              <span
-                key={r.constraintType}
-                style={{ fontSize: 10, padding: "3px 9px", background: "#EEF3EF", color: OK }}
-              >
-                {r.label}
+          <div style={{ display: "flex", gap: 6, paddingTop: 12 }}>
+            {data.hardRules.map((h) => (
+              <span key={h.constraintType} style={{ fontSize: 10, color: MUTED, border: `1px solid ${RULE}`, padding: "2px 8px" }}>
+                {h.label}
               </span>
             ))}
-            <span style={{ flex: 1 }} />
-            <span style={{ fontSize: 10, color: MUTED }}>enforced at trade</span>
-          </div>
-        ) : null}
-
-        {data.limits.some((l) => l.exempt === "ramp-up") ? (
-          <div style={{ fontSize: 10, color: MUTED, marginTop: 10, lineHeight: 1.5 }}>
-            Cash limits don&rsquo;t bind while the fund is still building its book. Concentration
-            limits apply from day one.
           </div>
         ) : null}
       </div>
