@@ -189,18 +189,45 @@ export async function runNavSnapshot(
                 .orderBy(sql`${prices.date} DESC`)
             : [];
 
-        // A NAV for date D must be struck from D's own closes. The price query
-        // below is "latest close on or before D", which is right for a security
-        // that simply did not trade that day — but it also means that asking for
-        // TODAY mid-session silently reuses YESTERDAY's close and stamps it as
-        // today's NAV. That fabricates a point on the public chart that looks
-        // like a real close.
+        // A NAV for date D must be struck from D's own CLOSES.
         //
-        // So require evidence that this trading day's data has actually landed:
-        // at least one price row dated exactly D among the securities this fund
-        // cares about. A fund holding only cash and having no benchmark has
-        // nothing to check, and is allowed through.
-        if (allSecIds.length > 0 && !priceRows.some((r) => r.date === date && allSecIds.includes(r.securityId))) {
+        // Two traps this avoids:
+        //
+        //  1. The price query below is "latest close on or before D", which is
+        //     right for a security that did not trade that day — but it also
+        //     means asking for TODAY mid-session silently reuses YESTERDAY's
+        //     close and stamps it as today's NAV, fabricating a point on the
+        //     public chart that looks like a real close.
+        //
+        //  2. The legacy quote pass (fetch-prices-yahoo) writes rows dated TODAY
+        //     from a LIVE mid-session quote, tagged source "yahoo". Those are not
+        //     closes, so merely finding a row dated D proves nothing. Only the
+        //     chart-based ingests ("yahoo-eod", "yahoo-backfill") write real
+        //     closes.
+        //
+        // Evidence that D is finished: the fund's benchmark has a close for D.
+        // The benchmark tracks the fund's home market, so its close is exactly
+        // the "this market has finished trading" signal. Funds benchmarked to a
+        // synthetic cash hurdle (SOFR_CASH/SONIA_CASH) have no price rows at
+        // all, so fall back to the held securities; a pure-cash fund with no
+        // usable benchmark has nothing to wait for and is allowed through.
+        const CLOSE_SOURCES = new Set(["yahoo-eod", "yahoo-backfill"]);
+        const benchmarkIsSynthetic =
+          !fund.benchmarkTicker || CASH_HURDLE_TICKERS.has(fund.benchmarkTicker);
+        const evidenceIds =
+          !benchmarkIsSynthetic && fund.benchmarkSecurityId
+            ? [fund.benchmarkSecurityId]
+            : securityIds;
+
+        if (
+          evidenceIds.length > 0 &&
+          !priceRows.some(
+            (r) =>
+              r.date === date &&
+              CLOSE_SOURCES.has(r.source ?? "") &&
+              evidenceIds.includes(r.securityId)
+          )
+        ) {
           result.skippedAwaitingCloses.push({ fundId: fund.id, date });
           continue;
         }
