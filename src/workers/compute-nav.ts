@@ -46,6 +46,11 @@ export interface NavSnapshotResult {
   fundsProcessed: number;
   daysComputed: number;
   errors: Array<{ fundId: string; date: string; message: string }>;
+  /**
+   * Dates skipped because that trading day's closes had not been ingested yet.
+   * Expected when the job runs mid-session; the next run picks them up.
+   */
+  skippedAwaitingCloses: Array<{ fundId: string; date: string }>;
 }
 
 export async function runNavSnapshot(
@@ -55,6 +60,7 @@ export async function runNavSnapshot(
     fundsProcessed: 0,
     daysComputed: 0,
     errors: [],
+    skippedAwaitingCloses: [],
   };
 
   // 1. Get all active funds with their benchmark info
@@ -74,7 +80,19 @@ export async function runNavSnapshot(
 
   // 2. Determine date range to compute
   const targetDate = options.date ?? new Date().toISOString().slice(0, 10);
-  const fromDate = options.fromDate ?? targetDate;
+
+  // Default look-back so a delayed or missed run heals itself.
+  //
+  // Previously fromDate defaulted to targetDate, so the nightly job computed
+  // exactly one day. If GitHub ran the job late (it has run up to three hours
+  // behind, past midnight UTC) or skipped it, that day simply never got a
+  // snapshot and nothing ever filled it in — gaps had to be spotted by eye and
+  // backfilled by hand. Snapshots are an idempotent upsert, so recomputing a
+  // short trailing window is cheap and closes gaps automatically.
+  const DEFAULT_LOOKBACK_DAYS = 14;
+  const defaultFrom = new Date(`${targetDate}T00:00:00Z`);
+  defaultFrom.setUTCDate(defaultFrom.getUTCDate() - DEFAULT_LOOKBACK_DAYS);
+  const fromDate = options.fromDate ?? defaultFrom.toISOString().slice(0, 10);
 
   // Build list of dates we'll iterate
   const dates: string[] = [];
@@ -170,6 +188,22 @@ export async function runNavSnapshot(
                 )
                 .orderBy(sql`${prices.date} DESC`)
             : [];
+
+        // A NAV for date D must be struck from D's own closes. The price query
+        // below is "latest close on or before D", which is right for a security
+        // that simply did not trade that day — but it also means that asking for
+        // TODAY mid-session silently reuses YESTERDAY's close and stamps it as
+        // today's NAV. That fabricates a point on the public chart that looks
+        // like a real close.
+        //
+        // So require evidence that this trading day's data has actually landed:
+        // at least one price row dated exactly D among the securities this fund
+        // cares about. A fund holding only cash and having no benchmark has
+        // nothing to check, and is allowed through.
+        if (allSecIds.length > 0 && !priceRows.some((r) => r.date === date && allSecIds.includes(r.securityId))) {
+          result.skippedAwaitingCloses.push({ fundId: fund.id, date });
+          continue;
+        }
 
         // Build "latest price as-of date" map per security
         const latestPriceMap = new Map<string, { price: string; date: string; currency: Currency }>();
