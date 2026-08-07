@@ -8,6 +8,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
+import { isValidDegree } from "@/lib/degrees";
 import { funds as fundsTable, users, fundMembers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getOrCreateUser } from "@/lib/auth";
@@ -49,12 +50,21 @@ export async function POST(
   const fullName = str("fullName");
   const roleInFund = str("roleInFund");
   const bio = str("bio");
+  const degree = str("degree");
   const linkedinUrl = str("linkedinUrl");
   const gradYearRaw = str("graduationYear");
 
   if (!fullName) return NextResponse.json({ ok: false, error: "Name is required" }, { status: 400 });
   if (!ROLES.has(roleInFund)) return NextResponse.json({ ok: false, error: "Invalid role" }, { status: 400 });
-  const graduationYear = gradYearRaw ? Number(gradYearRaw) : null;
+  // Degree and graduation year are required: the public team pages read as a
+  // firm's only when every profile carries both.
+  if (!degree || !isValidDegree(degree)) {
+    return NextResponse.json({ ok: false, error: "Select a degree programme" }, { status: 400 });
+  }
+  if (!gradYearRaw) {
+    return NextResponse.json({ ok: false, error: "Select a graduation year" }, { status: 400 });
+  }
+  const graduationYear = Number(gradYearRaw);
   if (gradYearRaw && (!Number.isInteger(graduationYear) || graduationYear! < 1950 || graduationYear! > 2100)) {
     return NextResponse.json({ ok: false, error: "Invalid graduation year" }, { status: 400 });
   }
@@ -96,6 +106,7 @@ export async function POST(
       fullName,
       role: "analyst", // global app role; display profiles get no elevated access
       bio: bio || null,
+      degree,
       headshotUrl,
       linkedinUrl: linkedinUrl || null,
       graduationYear,

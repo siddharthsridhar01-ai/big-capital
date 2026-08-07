@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { DEGREES, graduationYears } from "@/lib/degrees";
 
 interface MemberData {
   userId?: string;
   fullName: string;
   roleInFund: "pm" | "senior_analyst" | "analyst";
   bio: string;
+  degree: string;
   linkedinUrl: string;
   graduationYear: string;
   hasHeadshot?: boolean;
@@ -48,6 +50,7 @@ export default function TeamMemberEditor({
   const [fullName, setFullName] = useState(initial?.fullName ?? "");
   const [roleInFund, setRoleInFund] = useState<MemberData["roleInFund"]>(initial?.roleInFund ?? "analyst");
   const [bio, setBio] = useState(initial?.bio ?? "");
+  const [degree, setDegree] = useState(initial?.degree ?? "");
   const [linkedinUrl, setLinkedinUrl] = useState(initial?.linkedinUrl ?? "");
   const [graduationYear, setGraduationYear] = useState(initial?.graduationYear ?? "");
   const [headshot, setHeadshot] = useState<File | null>(null);
@@ -63,6 +66,7 @@ export default function TeamMemberEditor({
     fd.set("fullName", fullName);
     fd.set("roleInFund", roleInFund);
     fd.set("bio", bio);
+    fd.set("degree", degree);
     fd.set("linkedinUrl", linkedinUrl);
     fd.set("graduationYear", graduationYear);
     if (headshot) fd.set("headshot", headshot);
@@ -124,18 +128,33 @@ export default function TeamMemberEditor({
 
       <div style={{ marginBottom: 16 }}>
         <label style={LABEL}>Bio</label>
-        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} style={{ ...INPUT, resize: "vertical" }} placeholder="Coverage area and focus." />
+        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} style={{ ...INPUT, resize: "vertical" }} placeholder="Coverage area and focus. Your degree is set separately below." />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 16, marginBottom: 16 }}>
         <div>
-          <label style={LABEL}>LinkedIn URL <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}>(optional)</span></label>
-          <input type="url" value={linkedinUrl} onChange={(e) => setLinkedinUrl(e.target.value)} style={INPUT} placeholder="https://linkedin.com/in/…" />
+          <label style={LABEL}>Degree</label>
+          <select value={degree} onChange={(e) => setDegree(e.target.value)} required style={INPUT}>
+            <option value="">Select a programme</option>
+            {DEGREES.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
         </div>
         <div>
-          <label style={LABEL}>Grad year <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}>(optional)</span></label>
-          <input type="number" value={graduationYear} onChange={(e) => setGraduationYear(e.target.value)} style={INPUT} placeholder="2027" />
+          <label style={LABEL}>Grad year</label>
+          <select value={graduationYear} onChange={(e) => setGraduationYear(e.target.value)} required style={INPUT}>
+            <option value="">Year</option>
+            {graduationYears().map((y) => (
+              <option key={y} value={String(y)}>{y}</option>
+            ))}
+          </select>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={LABEL}>LinkedIn URL <span style={{ textTransform: "none", letterSpacing: 0, color: "#9A9A8E" }}>(optional)</span></label>
+        <input type="url" value={linkedinUrl} onChange={(e) => setLinkedinUrl(e.target.value)} style={INPUT} placeholder="https://linkedin.com/in/…" />
       </div>
 
       <div style={{ marginBottom: 18 }}>

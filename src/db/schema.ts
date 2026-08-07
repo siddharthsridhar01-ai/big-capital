@@ -98,6 +98,12 @@ export const users = pgTable("users", {
   fullName: text("full_name").notNull(),
   role: userRoleEnum("role").notNull(),
   bio: text("bio"),
+  /**
+   * Degree programme, chosen from a fixed list rather than typed free-hand.
+   * Members were writing it into `bio`, which made it impossible to group or
+   * display consistently on the public team pages.
+   */
+  degree: text("degree"),
   headshotUrl: text("headshot_url"),
   linkedinUrl: text("linkedin_url"),
   graduationYear: integer("graduation_year"),
