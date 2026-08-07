@@ -40,7 +40,7 @@ async function report(fund: { id: string; name: string; slug: string }) {
   for (const l of result.limits) {
     const detail = l.detail ? ` (${l.detail})` : "";
     const util = l.utilisation == null ? "" : `${Math.round(l.utilisation * 100)}% of limit`;
-    const flag = l.breached ? "  <-- BREACH" : "";
+    const flag = l.breached ? "  <-- BREACH" : l.exempt === "ramp-up" ? "  (ramp-up)" : "";
     console.log(
       `  ${(l.label + detail).padEnd(30)} ${fmt(l.current, l.isPct).padStart(9)} / ${fmt(
         l.limit,

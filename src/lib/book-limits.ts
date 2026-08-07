@@ -108,9 +108,14 @@ export async function loadBookLimits(fundId: string): Promise<BookLimitsResult |
     investableUniverse: new Set(universeRows.map((r) => r.securityId)),
   };
 
+  const inception = new Date(`${String(fund.inceptionDate).slice(0, 10)}T00:00:00Z`);
+  const daysSinceInception = Number.isNaN(inception.getTime())
+    ? undefined
+    : Math.floor((Date.now() - inception.getTime()) / 86400000);
+
   let limits: LimitUtilisation[] = [];
   try {
-    limits = evaluateBookLimits(constraints, ctx, prices);
+    limits = evaluateBookLimits(constraints, ctx, prices, { daysSinceInception });
   } catch {
     // Missing price or FX for a held name. The panel is informational, so
     // degrade to showing nothing rather than breaking the dashboard.

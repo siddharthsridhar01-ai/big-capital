@@ -96,6 +96,28 @@ describe("evaluateBookLimits", () => {
     expect(r.breached).toBe(true);
   });
 
+  it("exempts the cash ceiling during ramp-up but still reports the number", () => {
+    const r = evaluateBookLimits(constraints, ctx(), prices, { daysSinceInception: 30 });
+    const cash = r.find((x) => x.constraintType === "max_cash_pct")!;
+    expect(cash.current).toBeCloseTo(0.6, 6);
+    expect(cash.breached).toBe(false);
+    expect(cash.exempt).toBe("ramp-up");
+  });
+
+  it("does NOT exempt concentration limits during ramp-up", () => {
+    const r = evaluateBookLimits(constraints, ctx(), prices, { daysSinceInception: 30 });
+    const pos = r.find((x) => x.constraintType === "max_position_pct")!;
+    expect(pos.breached).toBe(true);
+    expect(pos.exempt).toBeUndefined();
+  });
+
+  it("enforces the cash ceiling once ramp-up has elapsed", () => {
+    const r = evaluateBookLimits(constraints, ctx(), prices, { daysSinceInception: 200 });
+    const cash = r.find((x) => x.constraintType === "max_cash_pct")!;
+    expect(cash.breached).toBe(true);
+    expect(cash.exempt).toBeUndefined();
+  });
+
   it("ignores boolean rules that cannot be partially used", () => {
     const bools: FundConstraint[] = [
       { id: "c6", constraintType: "long_only", value: true, isHard: true },

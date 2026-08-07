@@ -461,13 +461,41 @@ export interface LimitUtilisation {
   isPct: boolean;
   /** e.g. the ticker driving `max_position_pct`. */
   detail?: string;
+  /**
+   * Set when a limit is numerically exceeded but not treated as a breach
+   * because the fund is still ramping up. See RAMP_UP_DAYS.
+   */
+  exempt?: "ramp-up";
 }
+
+/**
+ * Deployment limits do not bind while a fund is still building its book.
+ *
+ * A fund launches 100% cash and deploys over weeks, so a cash ceiling is
+ * guaranteed to be "breached" on day one — flagging that trains PMs to ignore
+ * the panel. UCITS grants newly authorised funds a six-month derogation from
+ * diversification limits for the same reason; 90 days is the shorter, stricter
+ * end of that convention and suits a fund reviewed termly.
+ *
+ * CONCENTRATION limits are deliberately NOT exempt: a 30% single position is
+ * reckless in week one exactly as it is in year one.
+ */
+export const RAMP_UP_DAYS = 90;
+
+const RAMP_UP_EXEMPT: ReadonlySet<ConstraintType> = new Set([
+  "max_cash_pct",
+  "min_cash_pct",
+]);
 
 export function evaluateBookLimits(
   constraints: FundConstraint[],
   ctx: PortfolioContext,
-  prices: Map<string, Decimal>
+  prices: Map<string, Decimal>,
+  opts?: { daysSinceInception?: number; rampUpDays?: number }
 ): LimitUtilisation[] {
+  const rampUpDays = opts?.rampUpDays ?? RAMP_UP_DAYS;
+  const inRampUp =
+    opts?.daysSinceInception !== undefined && opts.daysSinceInception < rampUpDays;
   const values = positionValuesBase(ctx.positions, prices, ctx);
 
   let gross = new Decimal(0);
@@ -490,7 +518,13 @@ export function evaluateBookLimits(
         : o.limit === 0
           ? null
           : Math.min(o.current / o.limit, 1);
-    out.push({ ...o, utilisation: util });
+    const exemptNow = inRampUp && RAMP_UP_EXEMPT.has(o.constraintType) && o.breached;
+    out.push({
+      ...o,
+      utilisation: util,
+      breached: exemptNow ? false : o.breached,
+      ...(exemptNow ? { exempt: "ramp-up" as const } : {}),
+    });
   };
 
   for (const c of constraints) {
