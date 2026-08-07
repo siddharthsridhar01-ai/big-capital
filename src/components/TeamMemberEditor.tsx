@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { DEGREES, graduationYears } from "@/lib/degrees";
+import { graduationYears } from "@/lib/degrees";
 
 interface MemberData {
   userId?: string;
   fullName: string;
   roleInFund: "pm" | "senior_analyst" | "analyst";
-  bio: string;
   degree: string;
   linkedinUrl: string;
   graduationYear: string;
@@ -49,7 +48,6 @@ export default function TeamMemberEditor({
 
   const [fullName, setFullName] = useState(initial?.fullName ?? "");
   const [roleInFund, setRoleInFund] = useState<MemberData["roleInFund"]>(initial?.roleInFund ?? "analyst");
-  const [bio, setBio] = useState(initial?.bio ?? "");
   const [degree, setDegree] = useState(initial?.degree ?? "");
   const [linkedinUrl, setLinkedinUrl] = useState(initial?.linkedinUrl ?? "");
   const [graduationYear, setGraduationYear] = useState(initial?.graduationYear ?? "");
@@ -65,7 +63,6 @@ export default function TeamMemberEditor({
     const fd = new FormData();
     fd.set("fullName", fullName);
     fd.set("roleInFund", roleInFund);
-    fd.set("bio", bio);
     fd.set("degree", degree);
     fd.set("linkedinUrl", linkedinUrl);
     fd.set("graduationYear", graduationYear);
@@ -126,20 +123,10 @@ export default function TeamMemberEditor({
         </div>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={LABEL}>Bio</label>
-        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} style={{ ...INPUT, resize: "vertical" }} placeholder="Coverage area and focus. Your degree is set separately below." />
-      </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 16, marginBottom: 16 }}>
         <div>
           <label style={LABEL}>Degree</label>
-          <select value={degree} onChange={(e) => setDegree(e.target.value)} required style={INPUT}>
-            <option value="">Select a programme</option>
-            {DEGREES.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
+          <input type="text" value={degree} onChange={(e) => setDegree(e.target.value)} required maxLength={80} style={INPUT} placeholder="BSc Economics" />
         </div>
         <div>
           <label style={LABEL}>Grad year</label>

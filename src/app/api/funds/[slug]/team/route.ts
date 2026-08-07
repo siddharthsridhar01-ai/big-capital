@@ -8,7 +8,6 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
-import { isValidDegree } from "@/lib/degrees";
 import { funds as fundsTable, users, fundMembers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getOrCreateUser } from "@/lib/auth";
@@ -58,8 +57,8 @@ export async function POST(
   if (!ROLES.has(roleInFund)) return NextResponse.json({ ok: false, error: "Invalid role" }, { status: 400 });
   // Degree and graduation year are required: the public team pages read as a
   // firm's only when every profile carries both.
-  if (!degree || !isValidDegree(degree)) {
-    return NextResponse.json({ ok: false, error: "Select a degree programme" }, { status: 400 });
+  if (!degree || degree.length > 80) {
+    return NextResponse.json({ ok: false, error: "Enter your degree" }, { status: 400 });
   }
   if (!gradYearRaw) {
     return NextResponse.json({ ok: false, error: "Select a graduation year" }, { status: 400 });

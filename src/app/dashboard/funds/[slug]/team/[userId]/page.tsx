@@ -48,7 +48,6 @@ export default async function EditTeamMemberPage({ params }: { params: Promise<{
           userId: m.userId,
           fullName: m.fullName,
           roleInFund: m.roleInFund as "pm" | "senior_analyst" | "analyst",
-          bio: m.bio ?? "",
           degree: m.degree ?? "",
           linkedinUrl: m.linkedinUrl ?? "",
           graduationYear: m.graduationYear != null ? String(m.graduationYear) : "",

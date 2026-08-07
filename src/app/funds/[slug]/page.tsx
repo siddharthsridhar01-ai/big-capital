@@ -106,7 +106,7 @@ export default async function PublicFundPage({ params }: PageProps) {
       userId: users.id,
       fullName: users.fullName,
       roleInFund: fundMembers.roleInFund,
-      bio: users.bio,
+      degree: users.degree,
       linkedinUrl: users.linkedinUrl,
       graduationYear: users.graduationYear,
       headshotUrl: users.headshotUrl,
@@ -533,8 +533,8 @@ export default async function PublicFundPage({ params }: PageProps) {
                     </div>
                   </div>
                 </div>
-                {m.bio ? (
-                  <div style={{ fontSize: 12.5, color: "#444", lineHeight: 1.55, marginBottom: 10, fontFamily: "system-ui, sans-serif" }}>{m.bio}</div>
+                {m.degree ? (
+                  <div style={{ fontSize: 12.5, color: "#444", lineHeight: 1.55, marginBottom: 10, fontFamily: "system-ui, sans-serif" }}>{m.degree}</div>
                 ) : null}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: "#9A9A8E", fontFamily: "system-ui, sans-serif" }}>
                   <span>{m.graduationYear ? `Class of ${m.graduationYear}` : ""}</span>
