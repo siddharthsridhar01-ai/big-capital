@@ -33,6 +33,23 @@ const CORES: Record<string, string[]> = {
     "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "JPM", "JNJ", "PG",
     "HD", "KO", "PEP", "WMT", "DIS",
   ],
+  // Pair trades need BOTH legs of each pair in the universe, so this is built
+  // as a set of natural comparables rather than a list of good companies:
+  // hyperscalers against each other, foundry against IDM, fabless designers
+  // against one another, and semi-cap equipment as its own cluster. Roughly 20
+  // names, matching the stated coverage universe.
+  "tech-relative-value": [
+    // Hyperscalers and mega-cap platforms
+    "MSFT", "GOOGL", "AMZN", "META", "ORCL", "AAPL",
+    // Fabless designers and accelerators
+    "NVDA", "AMD", "AVGO", "QCOM", "MRVL", "ARM",
+    // Foundry, IDM and memory
+    "TSM", "INTC", "MU", "TXN",
+    // Semi-cap equipment
+    "AMAT", "LRCX", "KLAC", "ASML",
+    // Networking adjacency
+    "ANET",
+  ],
 };
 
 export async function GET(req: NextRequest) {
