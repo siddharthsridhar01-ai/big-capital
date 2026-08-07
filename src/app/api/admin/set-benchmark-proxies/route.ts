@@ -19,7 +19,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { funds, securities } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { yahooProvider } from "@/lib/intraday/yahoo";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +107,7 @@ export async function GET(req: NextRequest) {
 
   const report: Array<Record<string, unknown>> = [];
 
+  try {
   for (const [slug, cfg] of Object.entries(CANDIDATES)) {
     const checked = cfg.options.map((o) => ({
       symbol: o.symbol,
@@ -145,18 +146,29 @@ export async function GET(req: NextRequest) {
     }
     const fund = fundRows[0];
 
-    if (fund.benchmarkSecurityId) {
+    // Resolve the proxy BY TICKER, then repoint the fund at it.
+    //
+    // This previously rewrote whichever security the fund already pointed at.
+    // That is destructive whenever a proxy is shared: long-short pointed at
+    // SOFR_CASH, which market-neutral and tech-relative-value also use, so
+    // reassigning it would have turned the cash hurdle into an S&P tracker for
+    // three funds at once. It threw on a unique-key collision instead, which is
+    // the only reason the damage never landed.
+    //
+    // Resolving by ticker also lets several funds legitimately share one proxy.
+    const existing = await db
+      .select({ id: securities.id })
+      .from(securities)
+      .where(and(eq(securities.ticker, chosen.ticker), eq(securities.exchange, chosen.exchange)))
+      .limit(1);
+
+    let benchmarkSecurityId: string;
+    if (existing.length > 0) {
+      benchmarkSecurityId = existing[0].id;
       await db
         .update(securities)
-        .set({
-          ticker: chosen.ticker,
-          exchange: chosen.exchange,
-          currency: liveCurrency,
-          name: cfg.benchmarkName,
-          isBenchmark: true,
-          isActive: true,
-        })
-        .where(eq(securities.id, fund.benchmarkSecurityId));
+        .set({ currency: liveCurrency, name: cfg.benchmarkName, isBenchmark: true, isActive: true })
+        .where(eq(securities.id, benchmarkSecurityId));
     } else {
       const inserted = await db
         .insert(securities)
@@ -169,7 +181,11 @@ export async function GET(req: NextRequest) {
           isActive: true,
         })
         .returning({ id: securities.id });
-      await db.update(funds).set({ benchmarkSecurityId: inserted[0].id }).where(eq(funds.id, fund.id));
+      benchmarkSecurityId = inserted[0].id;
+    }
+
+    if (fund.benchmarkSecurityId !== benchmarkSecurityId) {
+      await db.update(funds).set({ benchmarkSecurityId }).where(eq(funds.id, fund.id));
     }
 
     report.push({
@@ -183,6 +199,12 @@ export async function GET(req: NextRequest) {
       currencyWarning: currencyWarning ? `Proxy priced in ${liveCurrency} but fund base is ${cfg.baseCurrency} — using anyway; consider a ${cfg.baseCurrency} proxy` : null,
       checked,
     });
+  }
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("set-benchmark-proxies failed:", err);
+    return NextResponse.json({ ok: false, error: message, report }, { status: 500 });
   }
 
   return NextResponse.json({
