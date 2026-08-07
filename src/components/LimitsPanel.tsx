@@ -64,8 +64,12 @@ function toRows(limits: LimitUtilisation[]): Row[] {
       key: l.constraintType,
       label: isCashPair ? "Cash" : l.label,
       detail: isCashPair ? undefined : l.detail,
+      // A 0% floor is not a constraint, so showing "0.0%–40.0%" implies a band
+      // where there is only a ceiling. Render the range only when the floor bites.
       value: isCashPair
-        ? `${fmt(l.current, true)} / ${fmt(floor!.limit, true)}–${fmt(l.limit, true)}`
+        ? floor!.limit > 0
+          ? `${fmt(l.current, true)} / ${fmt(floor!.limit, true)}–${fmt(l.limit, true)}`
+          : `${fmt(l.current, true)} / ${fmt(l.limit, true)}`
         : `${fmt(l.current, l.isPct)} / ${fmt(l.limit, l.isPct)}`,
       status: breached ? "Breach" : l.exempt === "ramp-up" ? "N/A" : `${Math.round(util * 100)}%`,
       utilisation: util,
