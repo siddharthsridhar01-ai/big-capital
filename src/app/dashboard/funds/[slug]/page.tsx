@@ -22,6 +22,8 @@ import { computeFundPerformance } from "@/lib/public-performance";
 import LiveHoldingsTable from "@/components/LiveHoldingsTable";
 import LiveFundHeader from "@/components/LiveFundHeader";
 import ExposuresPanel from "@/components/ExposuresPanel";
+import LimitsPanel from "@/components/LimitsPanel";
+import { loadBookLimits } from "@/lib/book-limits";
 import ActivityThesisCell, { type ThesisOption } from "@/components/ActivityThesisCell";
 import PendingOrdersPanel from "@/components/PendingOrdersPanel";
 
@@ -123,6 +125,15 @@ export default async function FundPage({
 
   // Live portfolio state computed from the transactions ledger
   const liveState = await computePortfolioState(fund.id);
+
+  // Standing mandate utilisation. Informational, so a failure here must not take
+  // the dashboard down with it.
+  let bookLimits = null;
+  try {
+    bookLimits = await loadBookLimits(fund.id);
+  } catch (err) {
+    console.error("[dashboard] loadBookLimits failed:", err);
+  }
   const liveCashBase = liveState.cashBase.toNumber();
 
   // Previous close prices for held positions — for daily change display
@@ -392,6 +403,8 @@ export default async function FundPage({
         inceptionDate={inceptionStr}
         navPoints={navPoints}
       />
+
+      {bookLimits ? <LimitsPanel data={bookLimits} /> : null}
 
       <ExposuresPanel
         baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"}
