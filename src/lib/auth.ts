@@ -12,7 +12,7 @@
 
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, or } from "drizzle-orm";
 import { currentUser } from "@clerk/nextjs/server";
 
 export interface BigCapUser {
@@ -43,11 +43,12 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
     clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)?.emailAddress ??
     addresses[0];
 
-  // Happy path on every page load after first sign-in.
+  // Match on either column: members sign in with an LSE or a personal address
+  // and both must land on the same person.
   const existing = await db
     .select()
     .from(users)
-    .where(inArray(users.email, addresses))
+    .where(or(inArray(users.email, addresses), inArray(users.secondaryEmail, addresses)))
     .limit(1);
 
   if (existing.length > 0) {

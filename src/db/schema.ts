@@ -87,6 +87,14 @@ export const briefingStatusEnum = pgEnum("briefing_status", [
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
+  /**
+   * Second verified address for the same person. Members hold both an LSE and a
+   * personal address and will sign in with either; without this, the second one
+   * created a duplicate row as an analyst with no fund membership. Nullable, and
+   * Postgres permits many NULLs under a unique index, so unseeded users are
+   * unaffected.
+   */
+  secondaryEmail: text("secondary_email").unique(),
   fullName: text("full_name").notNull(),
   role: userRoleEnum("role").notNull(),
   bio: text("bio"),

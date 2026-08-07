@@ -54,32 +54,27 @@ const NEW_FUND_CONSTRAINTS = [
   { type: "max_position_count", value: 12, isHard: false },
 ];
 
-/** LSE addresses are canonical: institutional, stable, and everyone has one. */
+/**
+ * LSE address is the primary identity; the personal address is stored alongside
+ * it so signing in with either resolves to the same person (see auth.ts).
+ */
 const TEAM: Array<{
   email: string;
+  secondaryEmail: string;
   fullName: string;
   role: "admin" | "pm" | "analyst";
   funds: string[];
 }> = [
-  { email: "s.sridhar8@lse.ac.uk", fullName: "Siddharth Sridhar", role: "admin", funds: ["uk-equity"] },
-  { email: "a.g.khan@lse.ac.uk", fullName: "Abdul Ghani Khan", role: "pm", funds: ["global-equity"] },
-  { email: "c.m.w.wong@lse.ac.uk", fullName: "Charles Wong", role: "pm", funds: ["long-short"] },
-  { email: "v.rawat1@lse.ac.uk", fullName: "Vedansh Rawat", role: "pm", funds: ["market-neutral"] },
-  { email: "s.n.raut@lse.ac.uk", fullName: "Sampanna Raut", role: "pm", funds: ["systematic-equity"] },
-  { email: "a.v.halyal@lse.ac.uk", fullName: "Abhay Halyal", role: "pm", funds: ["systematic-equity"] },
-  { email: "a.andryeyev@lse.ac.uk", fullName: "Alexander Andreyev", role: "pm", funds: [NEW_FUND.slug] },
+  { email: "s.sridhar8@lse.ac.uk", secondaryEmail: "siddharthsridhar01@gmail.com", fullName: "Siddharth Sridhar", role: "admin", funds: ["uk-equity"] },
+  { email: "a.g.khan@lse.ac.uk", secondaryEmail: "ghanikhan74@gmail.com", fullName: "Abdul Ghani Khan", role: "pm", funds: ["global-equity"] },
+  { email: "c.m.w.wong@lse.ac.uk", secondaryEmail: "charleswongmw@gmail.com", fullName: "Charles Wong", role: "pm", funds: ["long-short"] },
+  { email: "v.rawat1@lse.ac.uk", secondaryEmail: "vedansh2rawat@gmail.com", fullName: "Vedansh Rawat", role: "pm", funds: ["market-neutral"] },
+  { email: "s.n.raut@lse.ac.uk", secondaryEmail: "sampannaraut@outlook.com", fullName: "Sampanna Raut", role: "pm", funds: ["systematic-equity"] },
+  { email: "a.v.halyal@lse.ac.uk", secondaryEmail: "abhay.halyal1@gmail.com", fullName: "Abhay Halyal", role: "pm", funds: ["systematic-equity"] },
+  { email: "a.andryeyev@lse.ac.uk", secondaryEmail: "alex.andryeyev08@gmail.com", fullName: "Alexander Andreyev", role: "pm", funds: [NEW_FUND.slug] },
 ];
 
-/** Personal addresses, checked for only so a wrong-address sign-in is visible. */
-const PERSONAL = [
-  "charleswongmw@gmail.com",
-  "siddharthsridhar01@gmail.com",
-  "ghanikhan74@gmail.com",
-  "vedansh2rawat@gmail.com",
-  "abhay.halyal1@gmail.com",
-  "sampannaraut@outlook.com",
-  "alex.andryeyev08@gmail.com",
-];
+const PERSONAL = TEAM.map((t) => t.secondaryEmail);
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
@@ -141,7 +136,7 @@ export async function GET(req: NextRequest) {
     // ---- 2. Users ----
     const emails = TEAM.map((t) => t.email);
     const existingUsers = await db
-      .select({ id: users.id, email: users.email, role: users.role })
+      .select({ id: users.id, email: users.email, role: users.role, secondaryEmail: users.secondaryEmail })
       .from(users)
       .where(inArray(users.email, emails));
     const byEmail = new Map(existingUsers.map((u) => [u.email.toLowerCase(), u]));
@@ -150,18 +145,23 @@ export async function GET(req: NextRequest) {
     for (const t of TEAM) {
       const found = byEmail.get(t.email.toLowerCase());
       if (found) {
-        const needsRole = found.role !== t.role;
-        if (apply && needsRole) {
-          await db.update(users).set({ role: t.role }).where(eq(users.id, found.id));
+        const fixes: string[] = [];
+        if (found.role !== t.role) fixes.push(`role -> ${t.role}`);
+        if (found.secondaryEmail !== t.secondaryEmail) fixes.push("personal address");
+        if (apply && fixes.length > 0) {
+          await db
+            .update(users)
+            .set({ role: t.role, secondaryEmail: t.secondaryEmail })
+            .where(eq(users.id, found.id));
         }
         userReport.push({
           email: t.email,
-          status: needsRole ? (apply ? `role -> ${t.role}` : `would set role ${t.role}`) : "already correct",
+          status: fixes.length === 0 ? "already correct" : apply ? `updated: ${fixes.join(", ")}` : `would update: ${fixes.join(", ")}`,
         });
       } else if (apply) {
         await db
           .insert(users)
-          .values({ email: t.email, fullName: t.fullName, role: t.role })
+          .values({ email: t.email, secondaryEmail: t.secondaryEmail, fullName: t.fullName, role: t.role })
           .onConflictDoNothing({ target: users.email });
         userReport.push({ email: t.email, status: "created" });
       } else {
@@ -221,15 +221,15 @@ export async function GET(req: NextRequest) {
       .select({ email: users.email, role: users.role })
       .from(users)
       .where(inArray(users.email, PERSONAL));
-    report.personalAddressSignIns = strays.length
+    report.duplicateRowsFromPersonalAddress = strays.length
       ? strays
-      : "none — everyone is on their LSE address";
+      : "none";
 
     return NextResponse.json({
       ok: true,
       applied: apply,
       hint: apply
-        ? "Everyone must sign in with their LSE address, or they will be created again as an analyst."
+        ? "Either address now works. Run migrate-secondary-email first if the column is missing."
         : "Dry run. Re-run with &apply=1 to write.",
       ...report,
     });
