@@ -58,6 +58,16 @@ export async function refreshBenchmarkPrices(
       const isPence = meta === "GBp" || meta === "GBX";
       const storeCurrency = (isPence ? "GBP" : sec.currency) as StoreCurrency;
 
+      // Yahoo also reports the session state on the chart meta. If this market
+      // is still trading, today's bar is IN PROGRESS — its "close" is just the
+      // last print so far. Recording that as a close puts an intraday value in
+      // the benchmark series, and NAV then strikes against it, producing a
+      // point on the public chart that looks like a finished day but isn't.
+      // Mirrors the same guard in daily-close-ingest.
+      const marketState = (chart.meta as { marketState?: string } | undefined)?.marketState;
+      const skipToday = marketState === "REGULAR" || marketState === "PRE";
+      const todayUtc = new Date().toISOString().slice(0, 10);
+
       if (storeCurrency !== "GBP" && storeCurrency !== "USD" && storeCurrency !== "EUR") {
         report.push({ symbol: sym, status: "unsupported_currency", metaCurrency: meta });
         continue;
@@ -74,6 +84,7 @@ export async function refreshBenchmarkPrices(
         const close = q.close;
         if (close == null || !Number.isFinite(close) || !q.date) continue;
         const d = new Date(q.date).toISOString().slice(0, 10);
+        if (skipToday && d === todayUtc) continue;
         const price = isPence ? close / 100 : close;
         rows.push({
           securityId: sec.id,
