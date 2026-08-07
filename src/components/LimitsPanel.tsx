@@ -53,26 +53,27 @@ function toRows(limits: LimitUtilisation[]): Row[] {
   const rows: Row[] = [];
 
   for (const l of limits) {
-    if (l.constraintType === "min_cash_pct" && ceiling) continue;
+    // The cash FLOOR is not shown alongside the ceiling. Printing "2.0%–15.0%"
+    // reads as a band a PM must sit inside, when in practice only the ceiling
+    // binds: these funds are trying to get invested, not to hold a minimum. The
+    // floor is still enforced on every trade, and appears as its own row below
+    // if it is ever actually breached, so it is never hidden when it matters.
+    if (l.constraintType === "min_cash_pct" && ceiling && !l.breached) continue;
 
-    const isCashPair = l.constraintType === "max_cash_pct" && floor;
-    const breached = isCashPair ? l.breached || floor!.breached : l.breached;
+    const isFloorBreach = l.constraintType === "min_cash_pct";
+    const breached = l.breached;
     const util = l.utilisation ?? 0;
     const colour = breached ? BAD : l.exempt ? MUTED : util >= WARN_AT ? WARN : OK;
 
     rows.push({
       key: l.constraintType,
-      label: isCashPair ? "Cash" : l.label,
-      detail: isCashPair ? undefined : l.detail,
-      // A 0% floor is not a constraint, so showing "0.0%–40.0%" implies a band
-      // where there is only a ceiling. Render the range only when the floor bites.
-      value: isCashPair
-        ? floor!.limit > 0
-          ? `${fmt(l.current, true)} / ${fmt(floor!.limit, true)}–${fmt(l.limit, true)}`
-          : `${fmt(l.current, true)} / ${fmt(l.limit, true)}`
+      label: isFloorBreach ? "Cash floor" : l.constraintType === "max_cash_pct" ? "Cash" : l.label,
+      detail: l.detail,
+      value: isFloorBreach
+        ? `${fmt(l.current, true)} / min ${fmt(l.limit, true)}`
         : `${fmt(l.current, l.isPct)} / ${fmt(l.limit, l.isPct)}`,
       status: breached ? "Breach" : l.exempt === "ramp-up" ? "N/A" : `${Math.round(util * 100)}%`,
-      utilisation: util,
+      utilisation: isFloorBreach ? 1 : util,
       colour,
       breached,
     });
