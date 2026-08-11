@@ -52,13 +52,38 @@ jobs:
           echo "FILL -> HTTP $code"
           head -c 500 /tmp/fill.json 2>/dev/null || true
 
+      # Watchdog. This workflow runs every half hour and has proved reliable; the
+      # nightly NAV job has not. On 10 Aug the nightly job began returning 504 and
+      # every fund's NAV silently froze for four days while prices kept updating,
+      # so the site looked healthy. Checking freshness from HERE means a failure
+      # of the fragile job is reported by a job that actually runs.
+      - name: Data freshness
+        id: health
+        if: always()
+        run: |
+          code=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 60 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/health" || echo 000)
+          echo "status=$code" >> "$GITHUB_OUTPUT"
+          echo "HEALTH -> HTTP $code"
+          cat /tmp/health.json 2>/dev/null || true
+          echo ""
+
       - name: Report
         if: always()
         run: |
           closes="${{ steps.closes.outputs.status }}"
           fill="${{ steps.fill.outputs.status }}"
-          echo "closes=$closes fill=$fill"
+          health="${{ steps.health.outputs.status }}"
+          echo "closes=$closes fill=$fill health=$health"
           bad=0
+          if [ "$health" = "503" ]; then
+            echo "::error::DATA IS STALE — see the Data freshness step above. NAV or prices have stopped updating."
+            bad=1
+          elif [ "${health#2}" = "$health" ]; then
+            echo "::error::health check returned HTTP $health."
+            bad=1
+          fi
           for pair in "closes:$closes" "fill:$fill"; do
             name="${pair%%:*}"; code="${pair##*:}"
             case "$code" in

@@ -56,6 +56,11 @@ export interface NavSnapshotResult {
    * Expected when the job runs mid-session; the next run picks them up.
    */
   skippedAwaitingCloses: Array<{ fundId: string; date: string }>;
+  /**
+   * Funds with a backlog larger than one run can safely compute. The next run
+   * picks up where this one stopped.
+   */
+  truncated: Array<{ fundId: string; pending: number }>;
 }
 
 export async function runNavSnapshot(
@@ -66,6 +71,7 @@ export async function runNavSnapshot(
     daysComputed: 0,
     errors: [],
     skippedAwaitingCloses: [],
+    truncated: [],
   };
 
   // 1. Get all active funds with their benchmark info
@@ -94,7 +100,11 @@ export async function runNavSnapshot(
   // snapshot and nothing ever filled it in — gaps had to be spotted by eye and
   // backfilled by hand. Snapshots are an idempotent upsert, so recomputing a
   // short trailing window is cheap and closes gaps automatically.
-  const DEFAULT_LOOKBACK_DAYS = 14;
+  // The window only bounds how far back a gap can be healed automatically; the
+  // per-fund filter below means a normal night still computes a single day. 30
+  // covers a missed fortnight comfortably without ever being the work actually
+  // done on a healthy night.
+  const DEFAULT_LOOKBACK_DAYS = 30;
   const defaultFrom = new Date(`${targetDate}T00:00:00Z`);
   defaultFrom.setUTCDate(defaultFrom.getUTCDate() - DEFAULT_LOOKBACK_DAYS);
   const fromDate = options.fromDate ?? defaultFrom.toISOString().slice(0, 10);
@@ -116,8 +126,43 @@ export async function runNavSnapshot(
   // 3. Per-fund computation
   for (const fund of activeFunds) {
     result.fundsProcessed += 1;
-    // Skip dates before inception
-    const fundDates = dates.filter((d) => d >= fund.inceptionDate);
+
+    // Which dates does THIS fund actually need?
+    //
+    // The window above is deliberately wide so a missed night can heal. But
+    // recomputing all of it every night is what killed this job: the nightly
+    // route is capped at 60s on Vercel's Hobby plan, and 14 days across six
+    // funds returned HTTP 504 mid-run, so NAV silently stopped updating.
+    //
+    // On an explicit backfill (?from=) honour exactly what was asked. Otherwise
+    // compute only what is MISSING: the day after this fund's latest snapshot,
+    // through today. A normal night is therefore one day, as it was before, and
+    // a gap still heals automatically but costs only the size of the gap.
+    let fundDates = dates.filter((d) => d >= ymdOf(fund.inceptionDate));
+
+    if (!options.fromDate) {
+      const [latest] = await db
+        .select({ date: navSnapshots.date })
+        .from(navSnapshots)
+        .where(eq(navSnapshots.fundId, fund.id))
+        .orderBy(desc(navSnapshots.date))
+        .limit(1);
+      if (latest) {
+        const lastDone = ymdOf(latest.date);
+        fundDates = fundDates.filter((d) => d > lastDone);
+      }
+    }
+
+    // Hard cap per run. If a fund has been unattended for months, computing all
+    // of it inside one 60s request would fail outright and heal nothing. Doing
+    // the oldest chunk each night converges instead, and an operator wanting it
+    // done at once can still pass ?from= and chunk it explicitly.
+    const MAX_DAYS_PER_RUN = 7;
+    if (!options.fromDate && fundDates.length > MAX_DAYS_PER_RUN) {
+      result.truncated.push({ fundId: fund.id, pending: fundDates.length });
+      fundDates = fundDates.slice(0, MAX_DAYS_PER_RUN);
+    }
+
     if (fundDates.length === 0) continue;
 
     // Pull ALL transactions for this fund once (cheap; ledger is small)
