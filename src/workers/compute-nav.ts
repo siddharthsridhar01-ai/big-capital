@@ -149,7 +149,25 @@ export async function runNavSnapshot(
         .limit(1);
       if (latest) {
         const lastDone = ymdOf(latest.date);
-        fundDates = fundDates.filter((d) => d > lastDone);
+
+        // Recompute the two most recent days even when a snapshot exists.
+        //
+        // "Only missing days" is right for settled history but wrong at the
+        // front: a closing price is provisional until the auction settles, so a
+        // snapshot struck between 16:30 and the LSE auction print uses a
+        // pre-auction price. Skipping days that already exist meant that
+        // provisional value was frozen permanently — the fund would carry a
+        // slightly wrong close for that date forever.
+        //
+        // Snapshots are an idempotent upsert, so re-striking is cheap and simply
+        // overwrites with better prices. Two days covers a late auction print
+        // and a next-morning vendor correction without touching settled history.
+        const REVISABLE_DAYS = 2;
+        const revisableFrom = new Date(`${targetDate}T00:00:00Z`);
+        revisableFrom.setUTCDate(revisableFrom.getUTCDate() - (REVISABLE_DAYS - 1));
+        const revisableFromYmd = revisableFrom.toISOString().slice(0, 10);
+
+        fundDates = fundDates.filter((d) => d > lastDone || d >= revisableFromYmd);
       }
     }
 
