@@ -42,10 +42,19 @@ function businessDaysBetween(fromYmd: string, toYmd: string): number {
 }
 
 /**
- * Two business days. One would be a false alarm every time the nightly job runs
- * late, which GitHub's scheduler does routinely.
+ * ONE business day.
+ *
+ * NAV strikes every weeknight, so the only healthy states are "struck today"
+ * (0) or "struck yesterday, tonight's run pending" (1). Two business days means
+ * last night's run did not produce a snapshot, and there is no benign reason for
+ * that.
+ *
+ * This was originally 2, which let exactly the failure it existed to catch slip
+ * through: on 13 Aug four funds sat at staleDays 2 having missed the 12th, and
+ * the check still reported healthy. A watchdog that stays quiet while the thing
+ * it watches is broken is worse than no watchdog, because people stop looking.
  */
-const MAX_NAV_STALENESS_DAYS = 2;
+const MAX_NAV_STALENESS_DAYS = 1;
 const MAX_PRICE_STALENESS_DAYS = 2;
 
 export async function GET(req: NextRequest) {

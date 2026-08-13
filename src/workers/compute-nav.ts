@@ -264,10 +264,27 @@ export async function runNavSnapshot(
         const CLOSE_SOURCES = new Set(["yahoo-eod", "yahoo-backfill"]);
         const benchmarkIsSynthetic =
           !fund.benchmarkTicker || CASH_HURDLE_TICKERS.has(fund.benchmarkTicker);
+
+        // HOLDINGS FIRST, benchmark only as a fallback.
+        //
+        // This was the other way round, and it cost four funds their 12 Aug
+        // snapshot. Yahoo simply has no 12 Aug bar for FTAL.L, IWDA.L or CSPX.L
+        // — not late, absent — while every held security had one. Treating the
+        // benchmark as proof that the trading day finished meant a gap in a
+        // COMPARISON index blocked the VALUATION of the portfolio.
+        //
+        // NAV is a valuation of what the fund owns. If the things it owns have
+        // closes for D, D is finished and the fund can be valued. A missing
+        // benchmark price is handled gracefully downstream: the benchmark lookup
+        // takes the latest close on or before D, so that day's benchmark return
+        // is 0 and the next day's spans both. The cumulative benchmark line
+        // stays correct; only the daily attribution is lumpy for one day.
         const evidenceIds =
-          !benchmarkIsSynthetic && fund.benchmarkSecurityId
-            ? [fund.benchmarkSecurityId]
-            : securityIds;
+          securityIds.length > 0
+            ? securityIds
+            : !benchmarkIsSynthetic && fund.benchmarkSecurityId
+              ? [fund.benchmarkSecurityId]
+              : [];
 
         if (
           evidenceIds.length > 0 &&
