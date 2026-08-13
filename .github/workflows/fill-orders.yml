@@ -52,6 +52,25 @@ jobs:
           echo "FILL -> HTTP $code"
           head -c 500 /tmp/fill.json 2>/dev/null || true
 
+      # Self-heal BEFORE checking. runNavSnapshot only computes days that are
+      # actually missing, so with nothing to do this is a couple of small queries
+      # and no writes. When the nightly job has failed, this closes the gap within
+      # the hour instead of leaving funds stale until someone notices.
+      #
+      # Non-fatal on purpose: a failure here is reported by the freshness check
+      # below, which is the honest signal. Failing the run twice for one problem
+      # only makes the email harder to read.
+      - name: NAV catch-up
+        id: navcatchup
+        if: always()
+        run: |
+          code=$(curl -s -o /tmp/catchup.json -w "%{http_code}" --max-time 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/nav-catchup" || echo 000)
+          echo "CATCHUP -> HTTP $code"
+          cat /tmp/catchup.json 2>/dev/null || true
+          echo ""
+
       # Watchdog. This workflow runs every half hour and has proved reliable; the
       # nightly NAV job has not. On 10 Aug the nightly job began returning 504 and
       # every fund's NAV silently froze for four days while prices kept updating,

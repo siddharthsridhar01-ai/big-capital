@@ -286,15 +286,39 @@ export async function runNavSnapshot(
               ? [fund.benchmarkSecurityId]
               : [];
 
-        if (
-          evidenceIds.length > 0 &&
-          !priceRows.some(
-            (r) =>
-              r.date === date &&
-              CLOSE_SOURCES.has(r.source ?? "") &&
-              evidenceIds.includes(r.securityId)
-          )
-        ) {
+        // A NAV must be struck at the SAME valuation point every day: every
+        // holding at its own official close for that date.
+        //
+        // Requiring only ONE holding to have closed was safe while NAV ran once
+        // nightly, after every market had shut. It is not safe now that the
+        // catch-up runs hourly: a global fund could be struck mid-afternoon with
+        // Asian closes in and US ones not, valuing the US names at the previous
+        // close. Same date, different valuation point depending on the hour it
+        // happened to run — which makes the daily return series incomparable.
+        //
+        // So for a RECENT date, wait until every holding has a close for it. For
+        // an OLDER date, accept what exists: by then a missing close means the
+        // security genuinely did not trade (market holiday, suspension), and
+        // carrying the previous close forward is the correct treatment rather
+        // than a reason to never value the fund at all.
+        const closedForDate = new Set(
+          priceRows
+            .filter((r) => r.date === date && CLOSE_SOURCES.has(r.source ?? ""))
+            .map((r) => r.securityId)
+        );
+
+        const SETTLED_AFTER_DAYS = 2;
+        const ageDays = Math.floor(
+          (Date.parse(`${targetDate}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86400000
+        );
+        const dateIsSettled = ageDays >= SETTLED_AFTER_DAYS;
+
+        const missing = evidenceIds.filter((id) => !closedForDate.has(id));
+        const waiting = dateIsSettled
+          ? evidenceIds.length > 0 && missing.length === evidenceIds.length // nothing closed at all
+          : missing.length > 0; // recent date: every holding must have closed
+
+        if (evidenceIds.length > 0 && waiting) {
           result.skippedAwaitingCloses.push({ fundId: fund.id, date });
           continue;
         }
