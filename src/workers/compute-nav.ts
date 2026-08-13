@@ -359,16 +359,33 @@ export async function runNavSnapshot(
         }
 
         // FX rates: pull all rates for this date
+        // Latest rate ON OR BEFORE the date, not an exact-date match.
+        //
+        // convertToBase() throws when a pair has no rate, so an exact match meant
+        // one missing fxRates row cost a fund its entire NAV for that day. ECB
+        // publishes on TARGET days, which do not align with market holidays, so
+        // there are dates where the LSE and NYSE trade normally and no reference
+        // rate exists — precisely the failure that lost 12 Aug to a benchmark
+        // gap, waiting to happen again in FX.
+        //
+        // Carrying the last published rate forward is also the correct treatment
+        // rather than a workaround: if no fixing occurred, the rate did not
+        // change. Consistency holds because a normal day still uses that day's
+        // own rate; only a non-publication day reuses the prior one.
         const fxRows = await db
           .select()
           .from(fxRates)
-          .where(eq(fxRates.date, date));
+          .where(lte(fxRates.date, date))
+          .orderBy(desc(fxRates.date));
+
         const fxMap = new Map<string, string>();
         for (const row of fxRows) {
-          fxMap.set(
-            `${row.fromCurrency}/${row.toCurrency}/${row.date}`,
-            row.rate
-          );
+          // Rows arrive newest-first, so the first sighting of a pair is the most
+          // recent rate for it. Key it under the REQUESTED date, which is what
+          // convertToBase() looks up.
+          const pair = `${row.fromCurrency}/${row.toCurrency}`;
+          const key = `${pair}/${date}`;
+          if (!fxMap.has(key)) fxMap.set(key, row.rate);
         }
 
         const snap = computeNav({
