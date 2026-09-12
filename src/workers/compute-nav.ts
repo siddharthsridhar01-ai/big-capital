@@ -32,7 +32,7 @@ import {
   type Currency,
 } from "../lib/performance";
 import { seedOpeningCash } from "../lib/holdings-reconstruction";
-import { sql, eq, and, lte, gte, lt, desc } from "drizzle-orm";
+import { sql, eq, and, lte, gte, lt, desc, inArray } from "drizzle-orm";
 import Decimal from "decimal.js";
 
 // Synthetic cash-hurdle benchmarks for absolute-return funds (market-neutral,
@@ -243,6 +243,22 @@ export async function runNavSnapshot(
           ? [...securityIds, fund.benchmarkSecurityId]
           : securityIds;
 
+        // Only this fund's securities, and only recent history.
+        //
+        // This previously selected the ENTIRE prices table on every call — no
+        // securityId filter at all — and discarded the irrelevant rows in JS.
+        // With the hourly catch-up recomputing two days across six funds, that
+        // pulled every price row in the database a dozen times an hour and was
+        // the direct cause of the Supabase egress overage.
+        //
+        // The 120-day floor is safe: the only thing this data is used for is
+        // "latest close on or before D". A security with no price in four months
+        // is not being valued meaningfully by an older one anyway, and every
+        // fund's holdings are priced daily.
+        const priceFloor = new Date(`${date}T00:00:00Z`);
+        priceFloor.setUTCDate(priceFloor.getUTCDate() - 120);
+        const priceFloorYmd = priceFloor.toISOString().slice(0, 10);
+
         const priceRows =
           allSecIds.length > 0
             ? await db
@@ -250,8 +266,9 @@ export async function runNavSnapshot(
                 .from(prices)
                 .where(
                   and(
+                    inArray(prices.securityId, allSecIds),
                     lte(prices.date, date),
-                    // We want the latest price on-or-before this date
+                    gte(prices.date, priceFloorYmd)
                   )
                 )
                 .orderBy(sql`${prices.date} DESC`)
@@ -390,10 +407,17 @@ export async function runNavSnapshot(
         // rather than a workaround: if no fixing occurred, the rate did not
         // change. Consistency holds because a normal day still uses that day's
         // own rate; only a non-publication day reuses the prior one.
+        // Bounded for the same reason as prices: this was reading every FX row
+        // ever stored on each call. 30 days is far more than enough to find the
+        // last published rate for any pair — ECB gaps are days, not months.
+        const fxFloor = new Date(`${date}T00:00:00Z`);
+        fxFloor.setUTCDate(fxFloor.getUTCDate() - 30);
+        const fxFloorYmd = fxFloor.toISOString().slice(0, 10);
+
         const fxRows = await db
           .select()
           .from(fxRates)
-          .where(lte(fxRates.date, date))
+          .where(and(lte(fxRates.date, date), gte(fxRates.date, fxFloorYmd)))
           .orderBy(desc(fxRates.date));
 
         const fxMap = new Map<string, string>();
