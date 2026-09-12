@@ -72,6 +72,8 @@ const TEAM: Array<{
   { email: "s.n.raut@lse.ac.uk", secondaryEmail: "sampannaraut@outlook.com", fullName: "Sampanna Raut", role: "pm", funds: ["systematic-equity"] },
   { email: "a.v.halyal@lse.ac.uk", secondaryEmail: "abhay.halyal1@gmail.com", fullName: "Abhay Halyal", role: "pm", funds: ["systematic-equity"] },
   { email: "a.andryeyev@lse.ac.uk", secondaryEmail: "alex.andryeyev08@gmail.com", fullName: "Alexander Andreyev", role: "pm", funds: [NEW_FUND.slug] },
+  // Co-PM on uk-equity alongside Siddharth, as systematic-equity is co-run.
+  { email: "s.lee-xin-ru@lse.ac.uk", secondaryEmail: "sarahlee13016@gmail.com", fullName: "Sarah Lee", role: "pm", funds: ["uk-equity"] },
 ];
 
 const PERSONAL = TEAM.map((t) => t.secondaryEmail);
