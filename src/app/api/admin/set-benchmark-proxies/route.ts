@@ -34,11 +34,22 @@ type Option = {
 };
 
 const CANDIDATES: Record<string, { benchmarkName: string; baseCurrency: Currency; options: Option[] }> = {
-  "uk-equity": {
-    benchmarkName: "FTSE All-Share (total-return proxy)",
+  // Developed Europe INCLUDING the UK. Euro Stoxx 50 and MSCI EMU both exclude
+  // the UK and Switzerland, so neither fits this mandate.
+  //
+  // The GBP line is deliberate. The fund reports in GBP, so its European
+  // holdings carry EUR/CHF/SEK translation; the benchmark must carry the same
+  // translation or part of the excess return is simply currency movement rather
+  // than stock selection. Note a GBP LINE is not a HEDGED share class: the
+  // underlying assets stay in their own currencies, which is what the fund
+  // experiences too.
+  "european-equity": {
+    benchmarkName: "MSCI Europe (total-return proxy)",
     baseCurrency: "GBP",
     options: [
-      { symbol: "FTAL.L", ticker: "FTAL", exchange: "LSE", label: "SPDR FTSE UK All Share UCITS ETF (Acc)" },
+      { symbol: "IMEU.L", ticker: "IMEU", exchange: "LSE", label: "iShares Core MSCI Europe UCITS ETF (Acc), GBP line" },
+      { symbol: "SMEA.L", ticker: "SMEA", exchange: "LSE", label: "iShares Core MSCI Europe UCITS ETF (Acc), alternate line" },
+      { symbol: "VEUR.L", ticker: "VEUR", exchange: "LSE", label: "Vanguard FTSE Developed Europe UCITS ETF — distributing, price-return fallback" },
     ],
   },
   "global-equity": {

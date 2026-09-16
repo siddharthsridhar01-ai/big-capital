@@ -17,6 +17,31 @@ export const maxDuration = 300;
 
 // Mandate-appropriate cores, all in supported currencies (USD/EUR + Asian).
 const CORES: Record<string, string[]> = {
+  // Developed Europe including the UK, spread to mirror MSCI Europe's country
+  // and sector shape rather than to express a view: the PM adds names from here.
+  // Switzerland and the Nordics are ~25% of the index, which is why CHF, DKK,
+  // SEK and NOK had to be supported before this list was possible.
+  "european-equity": [
+    // United Kingdom (~23% of MSCI Europe)
+    "AZN.L", "SHEL.L", "HSBA.L", "ULVR.L", "BP.L", "GSK.L", "RIO.L", "REL.L",
+    "LSEG.L", "DGE.L", "BATS.L", "NG.L", "CPG.L", "EXPN.L",
+    // France (~17%)
+    "MC.PA", "OR.PA", "TTE.PA", "SAN.PA", "AIR.PA", "SU.PA", "BNP.PA", "AI.PA",
+    "EL.PA", "RMS.PA", "DG.PA",
+    // Switzerland (~15%)
+    "NESN.SW", "ROG.SW", "NOVN.SW", "UBSG.SW", "ZURN.SW", "ABBN.SW", "SIKA.SW",
+    "GIVN.SW",
+    // Germany (~13%)
+    "SAP.DE", "SIE.DE", "ALV.DE", "DTE.DE", "MUV2.DE", "BAS.DE", "IFX.DE",
+    "MBG.DE", "DB1.DE", "ADS.DE",
+    // Netherlands (~8%)
+    "ASML.AS", "INGA.AS", "AD.AS", "PHIA.AS", "WKL.AS", "HEIA.AS", "PRX.AS",
+    // Nordics (~10%)
+    "NOVO-B.CO", "DSV.CO", "ATCO-A.ST", "INVE-B.ST", "VOLV-B.ST", "SAND.ST",
+    "EQNR.OL", "DNB.OL",
+    // Southern Europe (~8%)
+    "ISP.MI", "ENI.MI", "RACE.MI", "ITX.MC", "IBE.MC", "SAN.MC",
+  ],
   "global-equity": [
     "MSFT", "PG", "KO", "PEP", "JNJ", "V", "MA", "COST", "MCD", "NKE", "PM",
     "MC.PA", "OR.PA", "SAP.DE",

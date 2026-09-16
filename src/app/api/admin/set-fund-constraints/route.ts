@@ -38,8 +38,13 @@ interface C {
 const MANDATES: Record<string, { rationale: string; constraints: C[] }> = {
   // Contrarian value, FTSE 350. Diversified by construction; UK index sector
   // weights are lumpy (financials, energy) so the sector cap stays generous.
-  "uk-equity": {
-    rationale: "Long-only UK value: diversified, lumpy index sectors, modest cash",
+  "european-equity": {
+    // MSCI Europe is less lumpy than the UK at the sector level — no single
+    // energy-and-financials concentration — but healthcare and industrials both
+    // run high, so 35% remains a sensible ceiling. The name cap stays at 40: a
+    // growth core with contrarian satellites needs room for both without
+    // becoming a tracker.
+    rationale: "Long-only Europe inc. UK: quality growth core with contrarian positions",
     constraints: [
       { type: "universe_only", value: true, isHard: true },
       { type: "long_only", value: true, isHard: true },
