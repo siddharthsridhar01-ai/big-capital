@@ -102,7 +102,11 @@ export async function GET(req: NextRequest) {
     const added: string[] = [];
     const skipped: Record<string, string> = {};
     for (const sym of symbols) {
-      const r = await addSecurityToWatchlist({ id: fund.id, slug: fund.slug }, sym, { fetchSector: false });
+      // Fetch the sector. It costs a second Yahoo call per name, but a security
+      // without one silently breaks max_single_sector_pct — every unclassified
+      // holding lands in the same bucket, so the sector cap stops measuring
+      // anything. Skipping it here is what left ~50 European names blank.
+      const r = await addSecurityToWatchlist({ id: fund.id, slug: fund.slug }, sym, { fetchSector: true });
       if (r.ok && (r.body.added || r.body.alreadyInWatchlist)) added.push(sym);
       else skipped[sym] = String(r.body.error ?? "skipped");
     }
