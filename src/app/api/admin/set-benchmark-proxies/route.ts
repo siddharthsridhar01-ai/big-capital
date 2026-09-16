@@ -21,6 +21,7 @@ import { db } from "@/db/client";
 import { funds, securities } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { yahooProvider } from "@/lib/intraday/yahoo";
+import type { Currency } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -32,7 +33,7 @@ type Option = {
   label: string;
 };
 
-const CANDIDATES: Record<string, { benchmarkName: string; baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"; options: Option[] }> = {
+const CANDIDATES: Record<string, { benchmarkName: string; baseCurrency: Currency; options: Option[] }> = {
   "uk-equity": {
     benchmarkName: "FTSE All-Share (total-return proxy)",
     baseCurrency: "GBP",

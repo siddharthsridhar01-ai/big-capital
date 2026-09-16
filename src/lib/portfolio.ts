@@ -30,8 +30,9 @@ import {
   securities as securitiesTable,
   prices as pricesTable,
 } from "@/db/schema";
+import type { Currency } from "@/lib/currency";
+export type { Currency };
 
-export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
 
 export interface LivePosition {
   securityId: string;

@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { useMemo, useState } from "react";
 import { serif, numeric } from "@/lib/typography";
+import type { Currency } from "@/lib/currency";
 
 export interface NavPoint {
   date: string; // YYYY-MM-DD
@@ -23,7 +24,7 @@ export interface NavPoint {
 
 interface NavChartProps {
   fundName: string;
-  fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  fundBaseCurrency: Currency;
   startingNav: number;
   /** YYYY-MM-DD format. */
   inceptionDate: string;

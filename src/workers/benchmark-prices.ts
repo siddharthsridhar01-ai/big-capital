@@ -14,11 +14,12 @@ import { prices, securities } from "@/db/schema";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { toYahooSymbol } from "@/lib/intraday/yahoo";
 import YahooFinance from "yahoo-finance2";
+import type { Currency } from "@/lib/currency";
 
 const yf = new YahooFinance();
 
 type StoreCurrency =
-  | "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  | Currency;
 
 export interface BenchmarkRefreshReport {
   from: string;

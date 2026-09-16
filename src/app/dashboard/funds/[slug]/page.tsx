@@ -26,6 +26,7 @@ import LimitsPanel from "@/components/LimitsPanel";
 import { loadBookLimits } from "@/lib/book-limits";
 import ActivityThesisCell, { type ThesisOption } from "@/components/ActivityThesisCell";
 import PendingOrdersPanel from "@/components/PendingOrdersPanel";
+import type { Currency } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -382,7 +383,7 @@ export default async function FundPage({
 
       <LiveFundHeader
         currencySymbol={currencySymbol}
-        baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"}
+        baseCurrency={fund.baseCurrency as Currency}
         initialNavBase={liveState.navBase.toString()}
         startingNav={startingNav}
         cashBase={liveCashBase}
@@ -407,7 +408,7 @@ export default async function FundPage({
       {bookLimits ? <LimitsPanel data={bookLimits} /> : null}
 
       <ExposuresPanel
-        baseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"}
+        baseCurrency={fund.baseCurrency as Currency}
         navBase={liveState.navBase.toNumber()}
         positions={Array.from(liveState.positions.values()).map((p) => ({
           securityId: p.securityId,
@@ -480,7 +481,7 @@ export default async function FundPage({
       ) : (
         <LiveHoldingsTable
           fundSlug={fund.slug}
-          fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"}
+          fundBaseCurrency={fund.baseCurrency as Currency}
           initialNavBase={liveState.navBase.toString()}
           positions={Array.from(liveState.positions.values()).map((p) => ({
             securityId: p.securityId,

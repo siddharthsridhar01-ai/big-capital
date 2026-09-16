@@ -5,6 +5,7 @@ import Decimal from "decimal.js";
 import { serif, numeric } from "@/lib/typography";
 import PdfMemoCard from "@/components/PdfMemoCard";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
+import type { Currency } from "@/lib/currency";
 
 // Simplified short-borrow-fee model: every fund assumes a flat annual borrow
 // rate of 2.00% on shorted positions. Real borrow rates vary by security and
@@ -23,7 +24,7 @@ export interface TradeTicketProps {
     id: string;
     name: string;
     slug: string;
-    baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+    baseCurrency: Currency;
     startingNav: string;
     tradingFeesBps: number;
     isLongShort: boolean;
@@ -33,7 +34,7 @@ export interface TradeTicketProps {
     ticker: string;
     exchange: string;
     name: string;
-    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+    currency: Currency;
     gicsSector: string | null;
   };
   latestPrice: string | null;
@@ -116,7 +117,7 @@ interface ComputedSize {
   weightTarget: Decimal; // 0..1
 }
 
-function fmtMoney(d: Decimal, currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"): string {
+function fmtMoney(d: Decimal, currency: Currency): string {
   const sym = currency === "GBP" ? "£" : currency === "EUR" ? "€" : "$";
   const n = d.toNumber();
   const formatted = new Intl.NumberFormat("en-GB", {
@@ -1669,7 +1670,7 @@ function LivePriceStatus({
   liveUpdatedAt,
 }: {
   priceNative: Decimal | null;
-  securityCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  securityCurrency: Currency;
   isUsingLive: boolean;
   isMarketClosed: boolean;
   isUsingFallback: boolean;
@@ -1759,7 +1760,7 @@ function ShortFeePanel({
   annualRateBps,
 }: {
   positionNotionalBase: Decimal;
-  baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  baseCurrency: Currency;
   annualRateBps: number;
 }) {
   const annualRate = new Decimal(annualRateBps).dividedBy(10000);

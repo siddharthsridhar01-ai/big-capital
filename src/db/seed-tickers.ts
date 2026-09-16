@@ -1,3 +1,4 @@
+import type { Currency } from "@/lib/currency";
 /**
  * Seed data for Phase 2b: hand-picked universe of ~30 tickers across exchanges.
  *
@@ -17,7 +18,7 @@ export interface SeedTicker {
   ticker: string;
   exchange: string;
   name: string;
-  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  currency: Currency;
   gicsSector: string;
   gicsIndustry: string;
   isin?: string;

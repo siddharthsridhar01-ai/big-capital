@@ -32,6 +32,7 @@ import {
   or,
 } from "drizzle-orm";
 import { getOrCreateUser } from "@/lib/auth";
+import type { Currency } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export interface SearchResult {
   ticker: string;
   exchange: string;
   name: string;
-  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  currency: Currency;
   gicsSector: string | null;
   gicsIndustry: string | null;
   /** Latest known close from the DB (yesterday-or-earlier data). */
@@ -222,7 +223,7 @@ async function attachPrices(
     ticker: string;
     exchange: string;
     name: string;
-    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+    currency: Currency;
     gicsSector: string | null;
     gicsIndustry: string | null;
   }>

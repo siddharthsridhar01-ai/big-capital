@@ -3,13 +3,14 @@ import { serif as serif_, numeric } from "@/lib/typography";
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import type { Currency } from "@/lib/currency";
 
 interface SearchResult {
   id: string;
   ticker: string;
   exchange: string;
   name: string;
-  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  currency: Currency;
   gicsSector: string | null;
   gicsIndustry: string | null;
   latestPrice: string | null;

@@ -19,9 +19,16 @@ import { prices, securities } from "../db/schema";
 import { and, eq, ne } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { yahooProvider, toYahooSymbol } from "../lib/intraday/yahoo";
+import { ECB_CURRENCIES, type Currency } from "../lib/currency";
 
-export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
-const SUPPORTED = new Set<string>(["GBP", "USD", "EUR"]);
+export type { Currency };
+/**
+ * A price may only be stored in a currency we can CONVERT, not merely one the
+ * enum allows. ECB publishes a daily rate for each of these; TWD is in the enum
+ * but has no FX ingest, so a TWD-priced security would break NAV rather than
+ * simply be inconvenient.
+ */
+const SUPPORTED = new Set<string>(ECB_CURRENCIES);
 
 /**
  * The price row's currency: trust the (already normalised) quote currency if

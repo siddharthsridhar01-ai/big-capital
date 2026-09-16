@@ -17,11 +17,12 @@ import { toYahooSymbol } from "@/lib/intraday/yahoo";
 import { getQuotes } from "@/lib/intraday/cache";
 import { activeProvider } from "@/lib/intraday/provider";
 import YahooFinance from "yahoo-finance2";
+import type { Currency } from "@/lib/currency";
 
 const yf = new YahooFinance();
 
 type StoreCurrency =
-  | "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  | Currency;
 const SUPPORTED: StoreCurrency[] = [
   "GBP", "USD", "EUR", "JPY", "HKD", "CNY", "KRW", "SGD", "INR", "TWD",
 ];

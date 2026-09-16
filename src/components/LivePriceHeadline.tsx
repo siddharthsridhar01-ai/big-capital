@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import { computeDailyChange } from "@/lib/derived";
 import { numeric } from "@/lib/typography";
+import type { Currency } from "@/lib/currency";
 
 interface LivePriceHeadlineProps {
   securityId: string;
@@ -12,7 +13,7 @@ interface LivePriceHeadlineProps {
   /** Server-rendered previous close (e.g. yesterday's close from prices table). */
   snapshotPreviousClose: string | null;
   snapshotDate: string;
-  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  currency: Currency;
 }
 
 export default function LivePriceHeadline({

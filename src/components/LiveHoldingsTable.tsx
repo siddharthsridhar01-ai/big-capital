@@ -8,7 +8,7 @@ import { computeDailyChange, computeUnrealisedPnL } from "@/lib/derived";
 
 interface HoldingsTableProps {
   fundSlug: string;
-  fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  fundBaseCurrency: Currency;
   /** NAV from the server-side initial render — used until live data arrives. */
   initialNavBase: string;
   positions: Array<{
@@ -16,7 +16,7 @@ interface HoldingsTableProps {
     ticker: string;
     name: string;
     exchange: string;
-    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+    currency: Currency;
     gicsSector: string | null;
     /** Signed: positive long, negative short. */
     quantity: string;
@@ -590,3 +590,4 @@ function useTick(ms: number): [number, (n: number) => void] {
 
 // Import shims so we don't expand React imports up top
 import { useState as useStateImpl, useEffect as useEffectImpl } from "react";
+import type { Currency } from "@/lib/currency";

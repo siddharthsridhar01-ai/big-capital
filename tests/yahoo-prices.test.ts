@@ -19,8 +19,19 @@ describe("resolvePriceCurrency", () => {
     expect(resolvePriceCurrency("GBX", "GBP")).toBe("GBP"); // raw pence code shouldn't reach here, but fall back safely
   });
 
-  it("returns null when neither currency is supported", () => {
-    expect(resolvePriceCurrency("JPY", "JPY")).toBeNull();
+  it("accepts every currency we can convert, including the European ones", () => {
+    // Switzerland and the Nordics are ~25% of MSCI Europe; without these a
+    // European fund cannot buy a quarter of its own benchmark.
+    expect(resolvePriceCurrency("CHF", "CHF")).toBe("CHF");
+    expect(resolvePriceCurrency("DKK", "DKK")).toBe("DKK");
+    expect(resolvePriceCurrency("SEK", "SEK")).toBe("SEK");
+    expect(resolvePriceCurrency("JPY", "JPY")).toBe("JPY");
+  });
+
+  it("returns null for a currency we cannot convert", () => {
+    // TWD is in the schema enum but has no ECB rate, so a price stored in it
+    // could never be translated into a fund's base currency.
+    expect(resolvePriceCurrency("TWD", "TWD")).toBeNull();
   });
 });
 

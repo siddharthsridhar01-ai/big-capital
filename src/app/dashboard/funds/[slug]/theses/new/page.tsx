@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { serif } from "@/lib/typography";
 import NewThesisForm from "@/components/NewThesisForm";
+import type { Currency } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +94,7 @@ export default async function NewThesisPage({
 
       <NewThesisForm
         fundSlug={fund.slug}
-        fundBaseCurrency={fund.baseCurrency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD"}
+        fundBaseCurrency={fund.baseCurrency as Currency}
         initialSecurityId={
           securityIdParam && universeRows.some((u) => u.securityId === securityIdParam)
             ? securityIdParam
@@ -105,7 +106,7 @@ export default async function NewThesisPage({
           ticker: u.ticker,
           name: u.name,
           exchange: u.exchange,
-          currency: u.currency as "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD",
+          currency: u.currency as Currency,
           gicsSector: u.gicsSector,
         }))}
       />

@@ -1,3 +1,4 @@
+import { ECB_CURRENCIES } from "@/lib/currency";
 /**
  * Worker: Daily FX rate ingest
  *
@@ -25,7 +26,7 @@ export async function runFxIngest(): Promise<{
 }> {
   const ecb = new EcbFxClient("big-capital-fx-worker/0.1");
   const days = await ecb.getLast90Days();
-  const rows = EcbFxClient.expandToFxRows(days, ["GBP", "USD", "EUR", "JPY", "HKD", "CNY", "KRW", "SGD", "INR"]);
+  const rows = EcbFxClient.expandToFxRows(days, ECB_CURRENCIES);
 
   if (rows.length === 0) {
     console.warn("FX ingest: ECB returned no rows");

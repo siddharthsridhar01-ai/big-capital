@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import { numeric } from "@/lib/typography";
+import type { Currency } from "@/lib/currency";
 
 interface UniverseRow {
   securityId: string;
   ticker: string;
   name: string;
   exchange: string;
-  currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  currency: Currency;
   gicsSector: string | null;
   gicsIndustry: string | null;
   latestPrice: string | null;
@@ -22,7 +23,7 @@ interface UniverseRow {
 interface UniverseTableProps {
   rows: UniverseRow[];
   fundSlug: string;
-  fundBaseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  fundBaseCurrency: Currency;
   canManage?: boolean;
 }
 

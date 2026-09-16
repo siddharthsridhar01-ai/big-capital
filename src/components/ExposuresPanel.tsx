@@ -10,16 +10,17 @@
  */
 
 import { serif, numeric } from "@/lib/typography";
+import type { Currency } from "@/lib/currency";
 
 interface ExposuresPanelProps {
-  baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  baseCurrency: Currency;
   navBase: number;
   positions: Array<{
     securityId: string;
     ticker: string;
     name: string;
     exchange: string;
-    currency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+    currency: Currency;
     gicsSector: string | null;
     /** Signed quantity. */
     quantity: number;

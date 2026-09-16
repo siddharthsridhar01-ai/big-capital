@@ -11,8 +11,9 @@
  *     of perShare * sharesHeld automatically.
  */
 import Decimal from "decimal.js";
+import type { Currency } from "@/lib/currency";
+export type { Currency };
 
-export type Currency = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
 
 export interface RawDividend {
   date: string; // ex-date, YYYY-MM-DD

@@ -5,6 +5,7 @@ import Decimal from "decimal.js";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import LiveNavCards from "@/components/LiveNavCards";
 import NavChart, { type NavPoint } from "@/components/NavChart";
+import type { Currency } from "@/lib/currency";
 
 /**
  * Owns the SINGLE intraday poll for the fund header, computes the live NAV once,
@@ -26,7 +27,7 @@ interface Position {
 
 interface Props {
   currencySymbol: string;
-  baseCurrency: "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+  baseCurrency: Currency;
   initialNavBase: string;
   startingNav: number;
   cashBase: number;

@@ -9,6 +9,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { toYahooSymbol } from "@/lib/intraday/yahoo";
 import { checkMandate } from "@/lib/mandates";
 import YahooFinance from "yahoo-finance2";
+import type { Currency } from "@/lib/currency";
 
 const yf = new YahooFinance();
 
@@ -69,7 +70,7 @@ export async function backfillSecurityPrices(securityId: string, rawSymbol: stri
   }
 }
 
-export type Currency10 = "GBP" | "USD" | "EUR" | "JPY" | "HKD" | "CNY" | "KRW" | "SGD" | "INR" | "TWD";
+export type Currency10 = Currency;
 
 export interface AddOutcome {
   ok: boolean;
