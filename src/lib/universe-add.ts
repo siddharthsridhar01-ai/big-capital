@@ -10,6 +10,7 @@ import { toYahooSymbol } from "@/lib/intraday/yahoo";
 import { checkMandate } from "@/lib/mandates";
 import YahooFinance from "yahoo-finance2";
 import type { Currency } from "@/lib/currency";
+import { normaliseSector } from "./sectors";
 
 const yf = new YahooFinance();
 
@@ -145,7 +146,7 @@ export async function addSecurityToWatchlist(
   if (opts.fetchSector !== false) {
     try {
       const profile = await yf.quoteSummary(raw, { modules: ["assetProfile"] });
-      sector = (profile?.assetProfile?.sector as string | undefined) ?? null;
+      sector = normaliseSector(profile?.assetProfile?.sector as string | undefined);
     } catch { /* optional */ }
   }
 

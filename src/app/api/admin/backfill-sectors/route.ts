@@ -26,6 +26,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import { securities } from "@/db/schema";
 import { toYahooSymbol } from "@/lib/intraday/yahoo";
+import { normaliseSector } from "@/lib/sectors";
 import YahooFinance from "yahoo-finance2";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
       const raw = toYahooSymbol(sec.ticker, sec.exchange);
       try {
         const profile = await yf.quoteSummary(raw, { modules: ["assetProfile"] });
-        const sector = (profile?.assetProfile?.sector as string | undefined) ?? null;
+        const sector = normaliseSector(profile?.assetProfile?.sector as string | undefined);
         const industry = (profile?.assetProfile?.industry as string | undefined) ?? null;
 
         if (sector && apply) {
