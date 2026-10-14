@@ -51,6 +51,25 @@ export default function AdminPeoplePanel() {
     return p.email.endsWith("@bigcapital.invalid");
   }
 
+  async function setRole(userId: string, role: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/people/role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, role }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) setError(data.error ?? "Could not change role");
+      else await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function merge(sourceId: string, targetId: string) {
     setBusy(true);
     setError(null);
@@ -234,7 +253,12 @@ export default function AdminPeoplePanel() {
                   )}
                 </span>
               </div>
+              {/* Primary address first, then any linked personal one beneath it,
+                  mirroring how Clerk presents them. */}
               <div style={MUTED}>{p.email}</div>
+              {p.secondaryEmail ? (
+                <div style={{ ...MUTED, color: "#C4C4BC" }}>{p.secondaryEmail}</div>
+              ) : null}
               <div style={{ ...MUTED, marginTop: 2 }}>
                 {p.funds.length === 0
                   ? "no fund"
@@ -258,12 +282,24 @@ export default function AdminPeoplePanel() {
                   <button onClick={() => setMergeFrom(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#6B6B66", fontSize: 11, cursor: "pointer" }}>cancel</button>
                 </div>
               ) : (
-                <button
-                  onClick={() => setMergeFrom(p.id)}
-                  style={{ marginTop: 4, background: "none", border: "none", padding: 0, color: "#8A6D1F", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
-                >
-                  merge into another record
-                </button>
+                <div style={{ marginTop: 4, display: "flex", gap: 12 }}>
+                  <button
+                    onClick={() => setMergeFrom(p.id)}
+                    style={{ background: "none", border: "none", padding: 0, color: "#8A6D1F", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    merge into another record
+                  </button>
+                  {/* Platform-wide access, separate from any fund role. */}
+                  {!isArtefact(p) ? (
+                    <button
+                      onClick={() => setRole(p.id, p.role === "admin" ? "pm" : "admin")}
+                      disabled={busy}
+                      style={{ background: "none", border: "none", padding: 0, color: p.role === "admin" ? "#7A1F1F" : "#2F5D45", fontSize: 11, cursor: busy ? "default" : "pointer", textDecoration: "underline" }}
+                    >
+                      {p.role === "admin" ? "remove admin" : "make admin"}
+                    </button>
+                  ) : null}
+                </div>
               )}
             </div>
           ))
