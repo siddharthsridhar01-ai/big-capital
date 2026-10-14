@@ -21,6 +21,7 @@ import { funds as fundsTable, securities, prices } from "@/db/schema";
 import { theses, thesisUpdates } from "@/db/schema-theses";
 import { eq, and, desc } from "drizzle-orm";
 import { getOrCreateUser } from "@/lib/auth";
+import { isFundPm } from "@/lib/fund-role";
 import { put } from "@vercel/blob";
 
 export const dynamic = "force-dynamic";
@@ -166,8 +167,15 @@ export async function POST(
   if (refRows.length > 0) referencePriceNative = refRows[0].closePrice;
 
   try {
+    // An update revises conviction, sizing or the target the PM answers for, so
+    // an analyst's update is reviewed exactly as their original thesis was.
+    const canPublish = await isFundPm(user, fund.id);
+
     await db.insert(thesisUpdates).values({
       thesisId,
+      approvalStatus: canPublish ? "approved" : "pending",
+      approvedByUserId: canPublish ? user.id : null,
+      approvedAt: canPublish ? new Date() : null,
       authorUserId: user.id,
       transactionId: null,
       note,

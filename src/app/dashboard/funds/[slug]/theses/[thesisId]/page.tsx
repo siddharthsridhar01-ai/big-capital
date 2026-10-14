@@ -10,6 +10,8 @@ import {
 import { theses, thesisPostMortems, thesisUpdates } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
 import ThesisApprovalActions from "@/components/ThesisApprovalActions";
+import UpdateApprovalActions from "@/components/UpdateApprovalActions";
+import { isFundPm } from "@/lib/fund-role";
 import { eq, and, asc, desc, isNotNull, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -112,6 +114,7 @@ type TLEvent =
       newTargetWeightPct: string | null;
       newTargetPriceNative: string | null;
       attachmentFilename: string | null;
+      approvalStatus: string;
     }
   | { kind: "close"; date: Date }
   | {
@@ -149,6 +152,8 @@ export default async function ThesisDetailPage({
     .limit(1);
   if (fundRows.length === 0) notFound();
   const fund = fundRows[0];
+  // Approval authority is the seat in THIS fund, not the global role.
+  const canApprove = await isFundPm(user, fund.id);
   const baseCur = fund.baseCurrency as Cur;
 
   const thesisRows = await db
@@ -232,6 +237,7 @@ export default async function ThesisDetailPage({
       newTargetPriceNative: thesisUpdates.newTargetPriceNative,
       referencePriceNative: thesisUpdates.referencePriceNative,
       attachmentFilename: thesisUpdates.attachmentBlobFilename,
+      approvalStatus: thesisUpdates.approvalStatus,
       author: users.fullName,
     })
     .from(thesisUpdates)
@@ -317,6 +323,7 @@ export default async function ThesisDetailPage({
       newTargetWeightPct: u.newTargetWeightPct,
       newTargetPriceNative: u.newTargetPriceNative,
       attachmentFilename: u.attachmentFilename,
+      approvalStatus: (u as { approvalStatus?: string }).approvalStatus ?? "approved",
     });
   }
   if (t.closedAt) events.push({ kind: "close", date: new Date(t.closedAt) });
@@ -351,6 +358,9 @@ export default async function ThesisDetailPage({
   let twRevised = false;
   let tpRevised = false;
   for (const u of updates) {
+    // A pending update is shown for review but must not change the thesis's
+    // current conviction or targets until the PM approves it.
+    if ((u as { approvalStatus?: string }).approvalStatus === "pending") continue;
     if (u.newConviction) {
       curConviction = u.newConviction;
       convRevised = true;
@@ -612,6 +622,21 @@ export default async function ThesisDetailPage({
                     <iframe src={memoUrl} title="Thesis memo" style={{ width: "100%", height: 460, border: "1px solid #E5E5DE", background: "#FAFAF7" }} />
                   </div>
                 ) : null}
+                {/* The model downloads rather than previewing: a spreadsheet is
+                    meant to be opened and inspected, not read as a page. */}
+                {(t as { modelBlobUrl?: string | null }).modelBlobUrl ? (
+                  <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "10px 12px", border: "1px solid #E5E5DE", background: "#FAFAF7" }}>
+                    <span style={{ fontSize: 11, color: "#6B6B66" }}>
+                      Financial model
+                      {(t as { modelBlobFilename?: string | null }).modelBlobFilename ? (
+                        <span style={{ color: "#9A9A8E" }}> · {(t as { modelBlobFilename?: string | null }).modelBlobFilename}</span>
+                      ) : null}
+                    </span>
+                    <a href={`/api/funds/${slug}/theses/${thesisId}/model`} style={{ fontSize: 11, color: "#00183A", textDecoration: "none", borderBottom: "1px solid #00183A" }}>
+                      Download .xlsx ↓
+                    </a>
+                  </div>
+                ) : null}
                 {(user.role === "admin" || t.authorUserId === user.id) && (
                   <div style={{ marginTop: 12, textAlign: "right" }}>
                     <Link
@@ -661,9 +686,21 @@ export default async function ThesisDetailPage({
           if (ev.kind === "update") {
             return (
               <TimelineItem key={i} color="#8A6D1F" title="Thesis update" date={dateStr(ev.date)} last={last}>
+                {(ev as { approvalStatus?: string }).approvalStatus === "pending" ? (
+                  <div style={{ fontSize: 11, color: "#8A6D1F", marginBottom: 6 }}>
+                    Awaiting PM approval &mdash; not yet reflected in the thesis.
+                  </div>
+                ) : (ev as { approvalStatus?: string }).approvalStatus === "rejected" ? (
+                  <div style={{ fontSize: 11, color: "#7A1F1F", marginBottom: 6 }}>
+                    Rejected by the PM &mdash; kept on the record, not applied.
+                  </div>
+                ) : null}
                 <div style={{ fontSize: 13, color: "#0A0A0A", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
                   {ev.note}
                 </div>
+                {(ev as { approvalStatus?: string }).approvalStatus === "pending" && canApprove ? (
+                  <UpdateApprovalActions fundSlug={slug} thesisId={thesisId} updateId={ev.updateId} />
+                ) : null}
                 {(ev.newConviction ||
                   ev.newHoldingPeriod ||
                   ev.newTargetWeightPct ||

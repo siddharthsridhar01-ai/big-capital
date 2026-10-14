@@ -83,6 +83,7 @@ export default function NewThesisForm({
   const [targetWeightPct, setTargetWeightPct] = useState(""); // user enters as %, e.g. "5"
   const [targetPriceNative, setTargetPriceNative] = useState("");
   const [memoFile, setMemoFile] = useState<File | null>(null);
+  const [modelFile, setModelFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -146,6 +147,9 @@ export default function NewThesisForm({
     }
     if (targetPriceNative) {
       form.append("targetPriceNative", targetPriceNative);
+    }
+    if (modelFile) {
+      form.append("model", modelFile);
     }
     if (memoFile) {
       form.append("memo", memoFile);
@@ -437,6 +441,65 @@ export default function NewThesisForm({
             overflowWrap: "break-word",
           }}
         />
+      </div>
+
+      {/* FINANCIAL MODEL (optional) */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={SECTION_HEADER}>Financial model (optional)</div>
+        <div
+          style={{
+            border: "1px dashed #D9D9D2",
+            padding: "16px",
+            background: "#FAFAF7",
+            textAlign: "center",
+            color: "#6B6B66",
+            fontSize: 12,
+          }}
+        >
+          {modelFile ? (
+            <div>
+              <div style={{ fontSize: 13, color: "#00183A", fontWeight: 500, marginBottom: 4 }}>
+                {modelFile.name}
+              </div>
+              <div style={{ fontSize: 11, color: "#6B6B66" }}>
+                {(modelFile.size / 1024).toFixed(0)} KB
+              </div>
+              <button
+                type="button"
+                onClick={() => setModelFile(null)}
+                style={{
+                  marginTop: 8, background: "none", border: "none", color: "#7A1F1F",
+                  cursor: "pointer", fontSize: 11, fontFamily: "system-ui, sans-serif",
+                  textDecoration: "underline",
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <label style={{ cursor: "pointer" }}>
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) setModelFile(f);
+                }}
+                style={{ display: "none" }}
+              />
+              <div>
+                <div style={{ marginBottom: 4 }}>
+                  Drop an .xlsx here, or{" "}
+                  <span style={{ color: "#00183A", textDecoration: "underline" }}>browse</span>
+                </div>
+                <div style={{ fontSize: 11 }}>Excel only · max 20 MB</div>
+              </div>
+            </label>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: "#9A9A8E", marginTop: 6, lineHeight: 1.5 }}>
+          Use the BIG Capital model template so the PM can read it at a glance.
+        </div>
       </div>
 
       {/* MEMO PDF (optional) */}

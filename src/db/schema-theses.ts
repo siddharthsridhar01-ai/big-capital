@@ -112,6 +112,11 @@ export const theses = pgTable("theses", {
   memoBlobFilename: text("memo_blob_filename"),
   memoSizeBytes: integer("memo_size_bytes"),
 
+  // Optional financial model (.xlsx) — the numbers behind the memo.
+  modelBlobUrl: text("model_blob_url"),
+  modelBlobFilename: text("model_blob_filename"),
+  modelSizeBytes: integer("model_size_bytes"),
+
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   // Approval workflow. Default "approved" so all pre-existing theses stay live.
@@ -167,6 +172,12 @@ export const thesisPostMortems = pgTable("thesis_post_mortems", {
  * structured field revisions (conviction/target) can layer on later.
  */
 export const thesisUpdates = pgTable("thesis_updates", {
+  // Approval, as for theses. An update changes conviction, sizing or the target
+  // the PM is accountable for, so an analyst's update needs the same review the
+  // original thesis did. Existing rows default to "approved".
+  approvalStatus: thesisApprovalEnum("approval_status").notNull().default("approved"),
+  approvedByUserId: uuid("approved_by_user_id"),
+  approvedAt: timestamp("approved_at"),
   id: uuid("id").primaryKey().defaultRandom(),
   thesisId: uuid("thesis_id")
     .notNull()

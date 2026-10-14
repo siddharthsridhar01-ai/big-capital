@@ -23,6 +23,7 @@ import { funds as fundsTable, securities, prices } from "@/db/schema";
 import { theses } from "@/db/schema-theses";
 import { eq, desc, and } from "drizzle-orm";
 import { getOrCreateUser } from "@/lib/auth";
+import { isFundPm } from "@/lib/fund-role";
 import { put } from "@vercel/blob";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,9 @@ export const maxDuration = 30;
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10 MB
 const PDF_MAGIC_BYTES = [0x25, 0x50, 0x44, 0x46]; // "%PDF"
+// .xlsx is a ZIP container, so it opens with the ZIP local-file signature "PK\x03\x04".
+const XLSX_MAGIC_BYTES = [0x50, 0x4b, 0x03, 0x04];
+const MAX_MODEL_SIZE = 20 * 1024 * 1024; // 20 MB — models carry more data than memos
 
 // ---------------------------------------------------------------------------
 // GET — list theses for this fund
@@ -149,6 +153,7 @@ export async function POST(
   const targetWeightPctRaw = form.get("targetWeightPct");
   const targetPriceNativeRaw = form.get("targetPriceNative");
   const memoFile = form.get("memo");
+  const modelFile = form.get("model");
 
   // Validation
   if (typeof securityId !== "string" || securityId.trim() === "") {
@@ -299,6 +304,50 @@ export async function POST(
     }
   }
 
+  // Optional financial model (.xlsx) — validated the same way as the memo.
+  // The extension alone is not trusted: an .xlsx is a ZIP container, so its
+  // first four bytes must be the ZIP signature.
+  let modelBlobUrl: string | null = null;
+  let modelBlobFilename: string | null = null;
+  let modelSizeBytes: number | null = null;
+  if (modelFile && modelFile instanceof File && modelFile.size > 0) {
+    if (modelFile.size > MAX_MODEL_SIZE) {
+      return NextResponse.json(
+        { ok: false, error: `Model is ${(modelFile.size / 1024 / 1024).toFixed(1)}MB; max 20MB` },
+        { status: 400 }
+      );
+    }
+    if (!modelFile.name.toLowerCase().endsWith(".xlsx")) {
+      return NextResponse.json(
+        { ok: false, error: "Model must be an Excel .xlsx file" },
+        { status: 400 }
+      );
+    }
+    const head = Array.from(new Uint8Array(await modelFile.slice(0, 4).arrayBuffer()));
+    if (!XLSX_MAGIC_BYTES.every((b, i) => head[i] === b)) {
+      return NextResponse.json(
+        { ok: false, error: "File doesn't look like a valid .xlsx workbook" },
+        { status: 400 }
+      );
+    }
+    const safeModel = modelFile.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+    try {
+      const blob = await put(`theses/${fund.slug}/models/${Date.now()}_${safeModel}`, modelFile, {
+        access: "private",
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        addRandomSuffix: false,
+      });
+      modelBlobUrl = blob.url;
+      modelBlobFilename = modelFile.name;
+      modelSizeBytes = modelFile.size;
+    } catch (err) {
+      return NextResponse.json(
+        { ok: false, error: `Model upload failed: ${err instanceof Error ? err.message : String(err)}` },
+        { status: 500 }
+      );
+    }
+  }
+
   // Capture the reference price (latest stored close) at formation — the
   // basis for the opening target's upside. Null if no price on record yet.
   let referencePriceNative: string | null = null;
@@ -311,7 +360,8 @@ export async function POST(
   if (refRows.length > 0) referencePriceNative = refRows[0].closePrice;
 
   // Approval workflow: PMs/admins publish directly; analysts submit for review.
-  const isPrivileged = user.role === "admin" || user.role === "pm";
+  // Publishing authority comes from the seat in THIS fund, not the global role.
+  const isPrivileged = await isFundPm(user, fund.id);
   const now = new Date();
 
   // Insert thesis
@@ -334,6 +384,9 @@ export async function POST(
       memoBlobUrl,
       memoBlobFilename,
       memoSizeBytes,
+      modelBlobUrl,
+      modelBlobFilename,
+      modelSizeBytes,
       approvalStatus: isPrivileged ? "approved" : "pending",
       submittedByUserId: user.id,
       approvedByUserId: isPrivileged ? user.id : null,
