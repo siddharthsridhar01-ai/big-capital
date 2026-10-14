@@ -6,9 +6,10 @@ import {
   transactions,
   securities as securitiesTable,
   pendingOrders,
+  fundMembers,
 } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, and, inArray, isNull } from "drizzle-orm";
 import { theses as thesesTable } from "@/db/schema-theses";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -47,6 +48,20 @@ export default async function FundPage({
 
   if (fundRows.length === 0) notFound();
   const fund = fundRows[0];
+
+  // Whether this viewer may trade the book: the fund's PM, or an admin.
+  const viewerSeat = await db
+    .select({ roleInFund: fundMembers.roleInFund })
+    .from(fundMembers)
+    .where(
+      and(
+        eq(fundMembers.fundId, fund.id),
+        eq(fundMembers.userId, user!.id),
+        isNull(fundMembers.endDate)
+      )
+    )
+    .limit(1);
+  const canTrade = user!.role === "admin" || viewerSeat[0]?.roleInFund === "pm";
 
   // Access check: admins see all. Others must be members.
   // (Membership check skipped for v1 — would query fund_members. Admin-only for now.)
@@ -480,6 +495,7 @@ export default async function FundPage({
         </div>
       ) : (
         <LiveHoldingsTable
+          canTrade={canTrade}
           fundSlug={fund.slug}
           fundBaseCurrency={fund.baseCurrency as Currency}
           initialNavBase={liveState.navBase.toString()}

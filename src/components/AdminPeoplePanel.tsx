@@ -70,6 +70,27 @@ export default function AdminPeoplePanel() {
     }
   }
 
+  async function removeAccess(userId: string, name: string, fund?: string) {
+    const what = fund ? `remove ${name} from ${fund}` : `remove ALL of ${name}'s access`;
+    if (!window.confirm(`Are you sure you want to ${what}?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/people/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, fund }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) setError(data.error ?? "Could not remove");
+      else await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function merge(sourceId: string, targetId: string) {
     setBusy(true);
     setError(null);
@@ -262,7 +283,19 @@ export default function AdminPeoplePanel() {
               <div style={{ ...MUTED, marginTop: 2 }}>
                 {p.funds.length === 0
                   ? "no fund"
-                  : p.funds.map((f) => `${f.slug} · ${ROLE_LABEL[f.roleInFund] ?? f.roleInFund}`).join("   ")}
+                  : p.funds.map((f) => (
+                      <span key={f.slug} style={{ marginRight: 14 }}>
+                        {f.slug} · {ROLE_LABEL[f.roleInFund] ?? f.roleInFund}
+                        <button
+                          onClick={() => removeAccess(p.id, p.fullName, f.slug)}
+                          disabled={busy}
+                          title={`Remove from ${f.slug}`}
+                          style={{ marginLeft: 5, background: "none", border: "none", padding: 0, color: "#7A1F1F", fontSize: 11, cursor: busy ? "default" : "pointer" }}
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
               </div>
 
               {mergeFrom === p.id ? (
@@ -299,6 +332,13 @@ export default function AdminPeoplePanel() {
                       {p.role === "admin" ? "remove admin" : "make admin"}
                     </button>
                   ) : null}
+                  <button
+                    onClick={() => removeAccess(p.id, p.fullName)}
+                    disabled={busy}
+                    style={{ background: "none", border: "none", padding: 0, color: "#7A1F1F", fontSize: 11, cursor: busy ? "default" : "pointer", textDecoration: "underline" }}
+                  >
+                    remove all access
+                  </button>
                 </div>
               )}
             </div>

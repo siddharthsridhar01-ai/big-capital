@@ -27,6 +27,12 @@ interface HoldingsTableProps {
     previousCloseNative: string | null;
     marketValueBase: string | null;
   }>;
+  /**
+   * Whether the viewer may trade this book. Only the fund's PM (or an admin)
+   * can; for everyone else the Add / Trim / Close controls are not rendered at
+   * all, rather than shown and then refused on submit.
+   */
+  canTrade?: boolean;
 }
 
 const numericStyle: React.CSSProperties = {
@@ -57,6 +63,7 @@ export default function LiveHoldingsTable({
   fundBaseCurrency,
   initialNavBase,
   positions,
+  canTrade = false,
 }: HoldingsTableProps) {
   const securityIds = useMemo(
     () => positions.map((p) => p.securityId),
@@ -448,6 +455,10 @@ export default function LiveHoldingsTable({
                     textDecoration: "none",
                     padding: "2px 6px",
                   };
+                  // Analysts see the book but not the controls that change it.
+                  if (!canTrade) {
+                    return <td style={{ padding: "10px 14px", borderBottom: "1px solid #F0EFEA" }} />;
+                  }
                   return (
                     <td
                       style={{
