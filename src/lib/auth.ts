@@ -55,11 +55,20 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
     // Stamp the first real sign-in. One write per person, ever: a row may have
     // been created by an admin adding them to a fund, which is not the same as
     // them having signed in.
-    if (!existing[0].firstSignInAt) {
-      await db
-        .update(users)
-        .set({ firstSignInAt: new Date() })
-        .where(eq(users.id, existing[0].id));
+    const patch: { firstSignInAt?: Date; fullName?: string } = {};
+    if (!existing[0].firstSignInAt) patch.firstSignInAt = new Date();
+
+    // Repair a name derived from the email prefix. The first sign-in falls back
+    // to the local part when Clerk has no first or last name yet, which left
+    // records reading "s.sridhar8". Once Clerk knows the real name, adopt it.
+    const clerkName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ");
+    const stored = existing[0].fullName ?? "";
+    if (clerkName && (!stored.includes(" ") || stored === stored.toLowerCase())) {
+      patch.fullName = clerkName;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await db.update(users).set(patch).where(eq(users.id, existing[0].id));
     }
     return toApiShape(existing[0]);
   }

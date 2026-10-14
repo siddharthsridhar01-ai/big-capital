@@ -39,6 +39,36 @@ export default function AdminPeoplePanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<Array<Record<string, unknown>> | null>(null);
+  const [mergeFrom, setMergeFrom] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  /**
+   * Placeholder rows from the old display-only team page, and the system
+   * account. Hidden by default: they are artefacts, and flagging them as "not
+   * signed in" alongside real people is noise rather than information.
+   */
+  function isArtefact(p: Person) {
+    return p.email.endsWith("@bigcapital.invalid");
+  }
+
+  async function merge(sourceId: string, targetId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/people/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId, targetId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) setError(data.error ?? "Merge failed");
+      else { setMergeFrom(null); await load(); }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function load() {
     try {
@@ -162,26 +192,46 @@ export default function AdminPeoplePanel() {
             People
           </span>
           <span style={MUTED}>
-            {people ? `${people.filter((p) => p.signedIn).length} of ${people.length} signed in` : "…"}
+            {people
+              ? `${people.filter((p) => !isArtefact(p) && p.signedIn).length} of ${people.filter((p) => !isArtefact(p)).length} signed in`
+              : "…"}
           </span>
         </div>
+
+        {people && people.some(isArtefact) ? (
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            style={{ background: "none", border: "none", padding: 0, marginBottom: 8, color: "#8A6D1F", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+          >
+            {showAll ? "hide" : "show"} {people.filter(isArtefact).length} legacy entries
+          </button>
+        ) : null}
 
         {!people ? (
           <div style={MUTED}>Loading…</div>
         ) : people.length === 0 ? (
           <div style={MUTED}>Nobody yet.</div>
         ) : (
-          people.map((p) => (
+          people
+            .filter((p) => showAll || !isArtefact(p))
+            .map((p) => (
             <div key={p.id} style={{ padding: "9px 0", borderBottom: "1px solid #F0EFEA" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                <span style={{ fontSize: 13, color: "#00183A" }}>
+                <span style={{ fontSize: 13, color: isArtefact(p) ? "#9A9A8E" : "#00183A" }}>
                   {p.fullName}
                   {p.role === "admin" ? (
                     <span style={{ ...MUTED, marginLeft: 6, color: "#8A6D1F" }}>admin</span>
                   ) : null}
                 </span>
-                <span style={{ fontSize: 11, color: p.signedIn ? "#2F5D45" : "#8A6D1F", whiteSpace: "nowrap" }}>
-                  {p.signedIn ? "signed in" : "not signed in"}
+                {/* Only say "not signed in" for real people awaiting onboarding. */}
+                <span style={{ fontSize: 11, color: "#2F5D45", whiteSpace: "nowrap" }}>
+                  {isArtefact(p) ? (
+                    <span style={{ color: "#9A9A8E" }}>legacy entry</span>
+                  ) : p.signedIn ? (
+                    "signed in"
+                  ) : (
+                    <span style={{ color: "#8A6D1F" }}>not signed in</span>
+                  )}
                 </span>
               </div>
               <div style={MUTED}>{p.email}</div>
@@ -190,6 +240,31 @@ export default function AdminPeoplePanel() {
                   ? "no fund"
                   : p.funds.map((f) => `${f.slug} · ${ROLE_LABEL[f.roleInFund] ?? f.roleInFund}`).join("   ")}
               </div>
+
+              {mergeFrom === p.id ? (
+                <div style={{ marginTop: 6, fontSize: 11 }}>
+                  <span style={{ color: "#7A1F1F" }}>Merge this record into: </span>
+                  <select
+                    onChange={(e) => e.target.value && merge(p.id, e.target.value)}
+                    defaultValue=""
+                    disabled={busy}
+                    style={{ fontSize: 11, padding: "2px 4px", border: "1px solid #D9D9D2" }}
+                  >
+                    <option value="">choose…</option>
+                    {people!.filter((o) => o.id !== p.id).map((o) => (
+                      <option key={o.id} value={o.id}>{o.fullName} · {o.email}</option>
+                    ))}
+                  </select>
+                  <button onClick={() => setMergeFrom(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#6B6B66", fontSize: 11, cursor: "pointer" }}>cancel</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setMergeFrom(p.id)}
+                  style={{ marginTop: 4, background: "none", border: "none", padding: 0, color: "#8A6D1F", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+                >
+                  merge into another record
+                </button>
+              )}
             </div>
           ))
         )}
