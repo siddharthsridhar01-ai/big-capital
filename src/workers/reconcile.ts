@@ -6,7 +6,7 @@
  */
 import { db } from "../db/client";
 import { funds as fundsTable, navSnapshots, prices, securities, transactions } from "../db/schema";
-import { and, eq, desc, isNotNull, inArray, gte } from "drizzle-orm";
+import { and, eq, desc, isNotNull, inArray, gte, isNull } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { reconcileSnapshot, reconcilePriceJumps, type Anomaly, type PricePair } from "../lib/reconciliation";
 
@@ -51,7 +51,7 @@ export async function runReconciliation(): Promise<ReconciliationResult> {
   const tradedRows = await db
     .selectDistinct({ securityId: transactions.securityId })
     .from(transactions)
-    .where(isNotNull(transactions.securityId));
+    .where(and(isNotNull(transactions.securityId), isNull(transactions.voidedAt)));
   const heldIds = tradedRows.map((r) => r.securityId as string);
 
   let securitiesChecked = 0;

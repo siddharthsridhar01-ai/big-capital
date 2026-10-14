@@ -31,7 +31,7 @@ import {
   firstDayOfMonthOf,
   type SecurityMeta,
 } from "../lib/holdings-reconstruction";
-import { and, eq, lte, sql } from "drizzle-orm";
+import { and, eq, lte, sql, isNull } from "drizzle-orm";
 
 interface RunOptions {
   fundSlug?: string; // limit to one fund
@@ -83,7 +83,7 @@ export async function runHoldingsReconstruction(options: RunOptions = {}): Promi
     const rawTxns = await db
       .select()
       .from(transactionsTable)
-      .where(eq(transactionsTable.fundId, fund.id));
+      .where(and(eq(transactionsTable.fundId, fund.id), isNull(transactionsTable.voidedAt)));
     const txns: Transaction[] = rawTxns.map((t) => ({
       id: t.id,
       fundId: t.fundId,

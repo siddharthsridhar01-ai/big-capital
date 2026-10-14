@@ -32,7 +32,7 @@ import {
   type Currency,
 } from "../lib/performance";
 import { seedOpeningCash } from "../lib/holdings-reconstruction";
-import { sql, eq, and, lte, gte, lt, desc, inArray } from "drizzle-orm";
+import { sql, eq, and, lte, gte, lt, desc, inArray, isNull } from "drizzle-orm";
 import Decimal from "decimal.js";
 
 // Synthetic cash-hurdle benchmarks for absolute-return funds (market-neutral,
@@ -187,7 +187,7 @@ export async function runNavSnapshot(
     const fundTransactions = await db
       .select()
       .from(transactionsTable)
-      .where(eq(transactionsTable.fundId, fund.id));
+      .where(and(eq(transactionsTable.fundId, fund.id), isNull(transactionsTable.voidedAt)));
 
     // Coerce DB rows to the performance-engine Transaction type
     const txns: Transaction[] = fundTransactions.map((t) => ({

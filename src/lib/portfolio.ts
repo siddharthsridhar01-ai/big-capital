@@ -298,7 +298,7 @@ export async function computePortfolioState(
   const txns = await db
     .select()
     .from(transactionsTable)
-    .where(eq(transactionsTable.fundId, fundId))
+    .where(and(eq(transactionsTable.fundId, fundId), isNull(transactionsTable.voidedAt)))
     .orderBy(transactionsTable.executedAt);
 
   // 3) Load security metadata + latest prices for all securities mentioned

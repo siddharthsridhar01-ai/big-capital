@@ -390,6 +390,22 @@ export const transactions = pgTable(
     // Soft-constraint overrides at trade time, if any
     overriddenConstraints: jsonb("overridden_constraints"),
 
+    /**
+     * Voiding, not deletion.
+     *
+     * Mistakes happen — a fat-fingered size, a trade entered against the wrong
+     * fund — and they have to be correctable. But deleting the row removes the
+     * evidence that it ever occurred, which contradicts what PMs are told about
+     * the ledger being append-only, and leaves nothing to learn from.
+     *
+     * A voided transaction is excluded from positions, NAV and reconciliation,
+     * but stays in the ledger and on the activity feed, struck through, with who
+     * voided it and why. That is how a real fund handles a busted trade.
+     */
+    voidedAt: timestamp("voided_at"),
+    voidedByUserId: uuid("voided_by_user_id"),
+    voidReason: text("void_reason"),
+
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => ({

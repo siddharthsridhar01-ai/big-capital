@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { serif, numeric } from "@/lib/typography";
+import VoidTradePanel from "@/components/VoidTradePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,18 @@ export default async function AdminTransactionDetailPage({
     .limit(1);
   if (rows.length === 0) notFound();
   const { txn, fund, security, executedBy } = rows[0];
+
+  // Who voided it, if anyone. Separate lookup because the main query already
+  // joins users once for executedBy.
+  let voidedByName: string | null = null;
+  if (txn.voidedByUserId) {
+    const [voider] = await db
+      .select({ name: users.fullName, email: users.email })
+      .from(users)
+      .where(eq(users.id, txn.voidedByUserId))
+      .limit(1);
+    voidedByName = voider?.name ?? voider?.email ?? null;
+  }
 
   const attachments = await db
     .select()
@@ -286,27 +299,13 @@ export default async function AdminTransactionDetailPage({
 
       <div style={{ marginTop: 32 }}>
         <SectionLabel>Admin actions</SectionLabel>
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #D9D9D2",
-            padding: "16px 20px",
-            fontFamily: "system-ui, sans-serif",
-            fontSize: 13,
-            color: "#6B6B66",
-          }}
-        >
-          Admin-only counter-trade tooling will live here. For now, mistakes
-          are corrected by entering a counter-trade through the normal trade
-          ticket. Reach the fund &rarr;{" "}
-          <Link
-            href={`/dashboard/funds/${fund?.slug ?? ""}`}
-            style={{ color: "#00183A", textDecoration: "underline" }}
-          >
-            {fund?.name}
-          </Link>{" "}
-          to enter one.
-        </div>
+        <VoidTradePanel
+          txnId={txn.id}
+          voided={Boolean(txn.voidedAt)}
+          voidReason={txn.voidReason ?? null}
+          voidedBy={voidedByName}
+          fundSlug={fund?.slug ?? ""}
+        />
       </div>
     </main>
   );

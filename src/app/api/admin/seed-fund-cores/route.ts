@@ -40,7 +40,15 @@ const CORES: Record<string, string[]> = {
     "NOVO-B.CO", "DSV.CO", "ATCO-A.ST", "INVE-B.ST", "VOLV-B.ST", "SAND.ST",
     "EQNR.OL", "DNB.OL",
     // Southern Europe (~8%)
-    "ISP.MI", "ENI.MI", "RACE.MI", "ITX.MC", "IBE.MC", "SAN.MC",
+    "ISP.MI", "ENI.MI", "RACE.MI", "ITX.MC", "IBE.MC", "SAN.MC", "ENEL.MI",
+    // Semiconductors and AI infrastructure. Europe's exposure sits in equipment
+    // and analogue rather than memory or logic design — there is no European
+    // memory name at all. These trade at a discount to US peers largely because
+    // of automotive and industrial end-market weighting rather than oversight,
+    // which is the point a contrarian thesis has to engage with.
+    "BESI.AS", "ASM.AS", "STMPA.PA", "SOI.PA", "NOD.OL",
+    // Luxury: completes the champions theme alongside MC, RMS, OR and RACE.
+    "CFR.SW",
   ],
   "global-equity": [
     "MSFT", "PG", "KO", "PEP", "JNJ", "V", "MA", "COST", "MCD", "NKE", "PM",
