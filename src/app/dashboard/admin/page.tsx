@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { serif } from "@/lib/typography";
 import AdminFundsPanel from "@/components/AdminFundsPanel";
 import LaunchResetPanel from "@/components/LaunchResetPanel";
+import AdminPeoplePanel from "@/components/AdminPeoplePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -153,6 +154,13 @@ export default async function AdminPage() {
         <section>
           <SectionLabel>Fund management</SectionLabel>
           <AdminFundsPanel funds={allFunds} />
+        </section>
+
+        <section style={{ marginTop: 36 }}>
+          <h2 style={{ ...serif, fontSize: 18, color: "#00183A", margin: "0 0 10px" }}>
+            People and fund access
+          </h2>
+          <AdminPeoplePanel />
         </section>
 
         <section style={{ marginTop: 36 }}>
