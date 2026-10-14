@@ -211,7 +211,10 @@ export async function GET(req: NextRequest) {
           await db
             .insert(fundMembers)
             .values({ fundId: fId, userId: uId, roleInFund: "pm", startDate: START_DATE })
-            .onConflictDoNothing();
+          .onConflictDoUpdate({
+            target: [fundMembers.fundId, fundMembers.userId, fundMembers.startDate],
+            set: { endDate: null, roleInFund: "pm" },
+          });
         }
         memberReport.push({ email: t.email, fund: slug, status: apply ? "assigned as PM" : "would assign as PM" });
       }

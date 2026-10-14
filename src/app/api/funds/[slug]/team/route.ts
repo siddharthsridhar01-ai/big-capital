@@ -169,7 +169,11 @@ export async function POST(
         userId: memberId,
         roleInFund: roleInFund as "pm" | "senior_analyst" | "analyst",
         startDate: new Date().toISOString().slice(0, 10),
-      });
+      })
+          .onConflictDoUpdate({
+            target: [fundMembers.fundId, fundMembers.userId, fundMembers.startDate],
+            set: { endDate: null, roleInFund: roleInFund as "pm" | "senior_analyst" | "analyst" },
+          });
     }
 
     return NextResponse.json({ ok: true, id: memberId, existing: Boolean(existing) });

@@ -187,12 +187,21 @@ export async function POST(req: NextRequest) {
           results.push({ email, status: "already a member", fund: slug, role });
         }
       } else {
-        await db.insert(fundMembers).values({
-          fundId,
-          userId,
-          roleInFund: role,
-          startDate: new Date().toISOString().slice(0, 10),
-        });
+        // The key is (fund, person, start date). Removing someone ENDS their
+        // membership rather than deleting it, so re-adding them on the same day
+        // collides with the row that was just ended. Reactivate it instead.
+        await db
+          .insert(fundMembers)
+          .values({
+            fundId,
+            userId,
+            roleInFund: role,
+            startDate: new Date().toISOString().slice(0, 10),
+          })
+          .onConflictDoUpdate({
+            target: [fundMembers.fundId, fundMembers.userId, fundMembers.startDate],
+            set: { endDate: null, roleInFund: role },
+          });
         results.push({
           email,
           status: created ? "created and added" : "added to fund",
