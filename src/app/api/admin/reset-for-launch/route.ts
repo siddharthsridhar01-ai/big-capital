@@ -42,7 +42,7 @@ import { theses, thesisUpdates, thesisPostMortems } from "@/db/schema-theses";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const DEFAULT_DATE = "2026-10-01";
+const DEFAULT_DATE = "2026-10-19";
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
