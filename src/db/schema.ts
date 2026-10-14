@@ -105,6 +105,15 @@ export const users = pgTable("users", {
    * display consistently on the public team pages.
    */
   degree: text("degree"),
+  /**
+   * Set the first time this person actually signs in.
+   *
+   * A row can exist because an admin added them to a fund, which is not the same
+   * as having an account. Without this there was no way to tell "invited" from
+   * "active", so nobody knew whether a PM had onboarded or had simply never
+   * turned up.
+   */
+  firstSignInAt: timestamp("first_sign_in_at"),
   headshotUrl: text("headshot_url"),
   linkedinUrl: text("linkedin_url"),
   graduationYear: integer("graduation_year"),

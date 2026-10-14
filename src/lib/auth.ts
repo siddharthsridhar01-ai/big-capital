@@ -52,6 +52,15 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
     .limit(1);
 
   if (existing.length > 0) {
+    // Stamp the first real sign-in. One write per person, ever: a row may have
+    // been created by an admin adding them to a fund, which is not the same as
+    // them having signed in.
+    if (!existing[0].firstSignInAt) {
+      await db
+        .update(users)
+        .set({ firstSignInAt: new Date() })
+        .where(eq(users.id, existing[0].id));
+    }
     return toApiShape(existing[0]);
   }
 

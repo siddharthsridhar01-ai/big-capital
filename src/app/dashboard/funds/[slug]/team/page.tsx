@@ -32,6 +32,8 @@ export default async function TeamListPage({ params }: { params: Promise<{ slug:
     .select({
       userId: users.id,
       fullName: users.fullName,
+      email: users.email,
+      firstSignInAt: users.firstSignInAt,
       roleInFund: fundMembers.roleInFund,
       headshotUrl: users.headshotUrl,
     })
@@ -74,7 +76,22 @@ export default async function TeamListPage({ params }: { params: Promise<{ slug:
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ ...serif, fontSize: 15, color: "#00183A" }}>{r.fullName}</div>
-                  <div style={{ fontSize: 12, color: "#9A9A8E", fontFamily: "system-ui, sans-serif" }}>{ROLE_LABEL[r.roleInFund] ?? r.roleInFund}</div>
+                  <div style={{ fontSize: 12, color: "#9A9A8E", fontFamily: "system-ui, sans-serif" }}>
+                    {ROLE_LABEL[r.roleInFund] ?? r.roleInFund}
+                    {" · "}
+                    {/* A row can exist because an admin added them, which is not
+                        the same as having signed in. Say which. */}
+                    {r.firstSignInAt ? (
+                      <span style={{ color: "#2F5D45" }}>
+                        active since {new Date(r.firstSignInAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#8A6D1F" }}>invited, not signed in</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#C4C4BC", fontFamily: "system-ui, sans-serif", marginTop: 2 }}>
+                    {r.email}
+                  </div>
                 </div>
                 <span style={{ color: "#C8C8C0" }}>›</span>
               </div>

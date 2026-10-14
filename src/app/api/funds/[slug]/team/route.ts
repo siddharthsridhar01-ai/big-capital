@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { funds as fundsTable, users, fundMembers } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, or, isNull } from "drizzle-orm";
 import { getOrCreateUser } from "@/lib/auth";
 import { put } from "@vercel/blob";
 import { randomUUID } from "crypto";
@@ -98,26 +98,81 @@ export async function POST(
     }
   }
 
+  // A REAL address, not a placeholder.
+  //
+  // This used to write `team-xxxx@bigcapital.invalid`, which made the entry
+  // display-only: the address could never match a Clerk account, so the person
+  // could be shown on the team page and still have no way to sign in. Keying on
+  // the real address means adding someone here also provisions their access.
+  const email = str("email").toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return NextResponse.json(
+      { ok: false, error: "A valid email address is required so they can sign in." },
+      { status: 400 }
+    );
+  }
+
   try {
-    await db.insert(users).values({
-      id: userId,
-      email: `team-${userId.slice(0, 8)}@bigcapital.invalid`, // display-only placeholder
-      fullName,
-      role: "analyst", // global app role; display profiles get no elevated access
-      bio: bio || null,
-      degree,
-      headshotUrl,
-      linkedinUrl: linkedinUrl || null,
-      graduationYear,
-      isActive: true,
-    });
-    await db.insert(fundMembers).values({
-      fundId: fund.id,
-      userId,
-      roleInFund: roleInFund as "pm" | "senior_analyst" | "analyst",
-      startDate: new Date().toISOString().slice(0, 10),
-    });
-    return NextResponse.json({ ok: true, id: userId });
+    // Match an existing person on either address before creating anyone.
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(or(eq(users.email, email), eq(users.secondaryEmail, email)))
+      .limit(1);
+
+    let memberId = existing?.id;
+
+    if (memberId) {
+      await db
+        .update(users)
+        .set({
+          fullName,
+          degree,
+          linkedinUrl: linkedinUrl || null,
+          graduationYear,
+          ...(headshotUrl ? { headshotUrl } : {}),
+          ...(roleInFund === "pm" ? { role: "pm" as const } : {}),
+          isActive: true,
+        })
+        .where(eq(users.id, memberId));
+    } else {
+      memberId = userId;
+      await db.insert(users).values({
+        id: memberId,
+        email,
+        fullName,
+        role: roleInFund === "pm" ? "pm" : "analyst",
+        degree,
+        headshotUrl,
+        linkedinUrl: linkedinUrl || null,
+        graduationYear,
+        isActive: true,
+      });
+    }
+
+    // Don't duplicate an existing active membership of the same fund.
+    const [already] = await db
+      .select({ userId: fundMembers.userId })
+      .from(fundMembers)
+      .where(
+        and(
+          eq(fundMembers.fundId, fund.id),
+          eq(fundMembers.userId, memberId),
+          isNull(fundMembers.endDate)
+        )
+      )
+      .limit(1);
+
+    if (!already) {
+      await db.insert(fundMembers).values({
+        fundId: fund.id,
+        userId: memberId,
+        roleInFund: roleInFund as "pm" | "senior_analyst" | "analyst",
+        startDate: new Date().toISOString().slice(0, 10),
+      });
+    }
+
+    return NextResponse.json({ ok: true, id: memberId, existing: Boolean(existing) });
   } catch (err) {
     console.error("[team] create failed", err);
     return NextResponse.json({ ok: false, error: "Database write failed" }, { status: 500 });

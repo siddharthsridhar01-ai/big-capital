@@ -9,6 +9,7 @@ interface MemberData {
   fullName: string;
   roleInFund: "pm" | "senior_analyst" | "analyst";
   degree: string;
+  email: string;
   linkedinUrl: string;
   graduationYear: string;
   hasHeadshot?: boolean;
@@ -49,6 +50,7 @@ export default function TeamMemberEditor({
   const [fullName, setFullName] = useState(initial?.fullName ?? "");
   const [roleInFund, setRoleInFund] = useState<MemberData["roleInFund"]>(initial?.roleInFund ?? "analyst");
   const [degree, setDegree] = useState(initial?.degree ?? "");
+  const [email, setEmail] = useState(initial?.email ?? "");
   const [linkedinUrl, setLinkedinUrl] = useState(initial?.linkedinUrl ?? "");
   const [graduationYear, setGraduationYear] = useState(initial?.graduationYear ?? "");
   const [headshot, setHeadshot] = useState<File | null>(null);
@@ -64,6 +66,7 @@ export default function TeamMemberEditor({
     fd.set("fullName", fullName);
     fd.set("roleInFund", roleInFund);
     fd.set("degree", degree);
+    fd.set("email", email);
     fd.set("linkedinUrl", linkedinUrl);
     fd.set("graduationYear", graduationYear);
     if (headshot) fd.set("headshot", headshot);
@@ -120,6 +123,22 @@ export default function TeamMemberEditor({
             <option value="senior_analyst">Senior Analyst</option>
             <option value="analyst">Analyst</option>
           </select>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={LABEL}>Email</label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          style={INPUT}
+          placeholder="f.lastname@lse.ac.uk"
+        />
+        <div style={{ fontSize: 11, color: "#9A9A8E", marginTop: 4 }}>
+          They sign in with this address. Use their LSE email; a personal address can be
+          added to their own account afterwards.
         </div>
       </div>
 
