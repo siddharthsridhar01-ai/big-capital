@@ -407,6 +407,42 @@ export function checkTrade(
   const hard: ConstraintViolation[] = [];
   const soft: ConstraintViolation[] = [];
 
+  // SOLVENCY. Not a mandate preference — arithmetic.
+  //
+  // A long-only fund has no borrowing facility, so it cannot spend cash it does
+  // not hold. This was never enforced: the only cash rule was min_cash_pct,
+  // which is a SOFT buffer, so a justification box was enough to let a £100k
+  // fund buy £1.2m of stock and run cash at -748% of NAV. A limit that can be
+  // typed past is not a limit.
+  //
+  // Checked here rather than as a fund_constraints row so it cannot be switched
+  // off, softened or forgotten when a new fund is seeded. Funds that legitimately
+  // use leverage declare it through max_gross_exposure; this only blocks cash
+  // going negative, which no fund in this system is funded to do.
+  const isLongOnlyFund = constraints.some(
+    (c) => c.constraintType === "long_only" && c.value === true
+  );
+  if (isLongOnlyFund && (trade.side === "buy" || trade.side === "cover")) {
+    const cashAfter = postTradeCash.get(trade.currency) ?? new Decimal(0);
+    if (cashAfter.isNegative()) {
+      const cost = trade.price.times(trade.quantity);
+      const available = ctx.cashByCurrency.get(trade.currency) ?? new Decimal(0);
+      const affordable = trade.price.isZero()
+        ? new Decimal(0)
+        : available.dividedBy(trade.price).floor();
+      hard.push({
+        constraintId: "solvency",
+        constraintType: "min_cash_pct",
+        isHard: true,
+        message:
+          `Insufficient cash. This trade costs ${cost.toFixed(2)} ${trade.currency} but only ` +
+          `${available.toFixed(2)} is available — at most ${affordable.toFixed(0)} shares.`,
+        currentValue: available.toFixed(2),
+        limit: cost.toFixed(2),
+      });
+    }
+  }
+
   for (const c of constraints) {
     const violation = evaluateConstraint(
       c,

@@ -88,6 +88,30 @@ jobs:
           cat /tmp/health.json 2>/dev/null || true
           echo ""
 
+      # Soft limits are meant to be exceeded deliberately and defended, not
+      # quietly. The justification was already stored on the trade; nothing
+      # surfaced it, so an override was invisible unless someone opened that
+      # transaction. This raises a GitHub annotation, which reaches repo
+      # watchers. It never fails the run: an override is a judgement call, not a
+      # fault, and failing on one would train people to ignore the emails.
+      - name: Mandate overrides
+        if: always()
+        continue-on-error: true
+        run: |
+          code=$(curl -s -o /tmp/breach.json -w "%{http_code}" --max-time 60 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/breach-report?days=1" || echo 000)
+          echo "BREACH-REPORT -> HTTP $code"
+          if [ "$code" = "200" ]; then
+            count=$(grep -o '"count":[0-9]*' /tmp/breach.json | head -1 | cut -d: -f2)
+            if [ -n "$count" ] && [ "$count" -gt 0 ]; then
+              echo "::warning::$count soft-limit override(s) in the last 24h"
+              cat /tmp/breach.json
+            else
+              echo "no overrides in the last 24h"
+            fi
+          fi
+
       - name: Report
         if: always()
         run: |

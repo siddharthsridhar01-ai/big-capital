@@ -35,6 +35,33 @@ interface C {
   isHard: boolean;
 }
 
+/**
+ * HARD vs SOFT, and why the split falls where it does.
+ *
+ * Hard limits block the trade outright. Soft limits warn and ask for a written
+ * justification.
+ *
+ * Concentration limits — position size, sector weight, number of names — are
+ * SOFT. A PM who wants to run a position above the cap may, provided they write
+ * down why, and that justification is recorded on the trade and reported to the
+ * admins. The judgement is theirs to make and defend; the point of the limit is
+ * that it cannot be exceeded quietly.
+ *
+ * What made the 800%-of-NAV trade possible was not softness here, it was the
+ * absence of any solvency rule: the fund could spend cash it did not hold. That
+ * is blocked in checkTrade and cannot be overridden.
+ *
+ * Deployment limits — minimum and maximum cash — stay SOFT. They describe pace
+ * rather than risk: holding too much cash is a judgement to explain, not an act
+ * to prevent, and they are exempt during the first 90 days anyway. Spending cash
+ * the fund does not have is blocked separately by the solvency check in
+ * checkTrade, which cannot be overridden at all.
+ *
+ * Note a position may still DRIFT above its cap as prices move. That is not a
+ * breach of this rule, which governs trades; the limits panel will show it and
+ * the PM is expected to trim.
+ */
+
 const MANDATES: Record<string, { rationale: string; constraints: C[] }> = {
   // Contrarian value, FTSE 350. Diversified by construction; UK index sector
   // weights are lumpy (financials, energy) so the sector cap stays generous.
