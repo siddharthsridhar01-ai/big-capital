@@ -66,6 +66,14 @@ export async function DELETE(
         { status: 403 }
       );
     }
+    // Cancelling a queued order changes what the fund will own, so it belongs
+    // with the PM for the same reason submitting one does.
+    if (membership[0].roleInFund !== "pm") {
+      return NextResponse.json(
+        { ok: false, error: "Only the fund's Portfolio Manager can cancel orders." },
+        { status: 403 }
+      );
+    }
   }
 
   const orderRows = await db

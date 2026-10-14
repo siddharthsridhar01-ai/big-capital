@@ -1,14 +1,5 @@
 import { db } from "@/db/client";
-import {
-  funds as fundsTable,
-  securities,
-  investableUniverses,
-  prices,
-  positions,
-  transactions,
-  fxRates,
-  users,
-} from "@/db/schema";
+import { funds as fundsTable, securities, investableUniverses, prices, positions, transactions, fxRates, users, fundMembers } from "@/db/schema";
 import { theses, thesisPostMortems } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -49,6 +40,21 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
     .limit(1);
   if (fundRows.length === 0) notFound();
   const fund = fundRows[0];
+
+  // Only the fund's PM may trade. Admins can, for correction.
+  const tradeMembership = await db
+    .select({ roleInFund: fundMembers.roleInFund })
+    .from(fundMembers)
+    .where(
+      and(
+        eq(fundMembers.fundId, fund.id),
+        eq(fundMembers.userId, user.id),
+        isNull(fundMembers.endDate)
+      )
+    )
+    .limit(1);
+  const canTrade =
+    user.role === "admin" || tradeMembership[0]?.roleInFund === "pm";
 
   // Look up security
   const secRows = await db
@@ -443,6 +449,31 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
               >
                 Cannot construct trade — no price data available for{" "}
                 {security.ticker}.
+              </div>
+            ) : !canTrade ? (
+              // Analysts research; the PM decides what the fund owns. Showing a
+              // ticket that would be refused on submit is worse than not showing
+              // one, so the research route is offered instead.
+              <div
+                style={{
+                  background: "white",
+                  border: "1px solid #E5E5DE",
+                  padding: "16px 20px",
+                  fontFamily: "system-ui, sans-serif",
+                  fontSize: 13,
+                  color: "#444",
+                  lineHeight: 1.6,
+                }}
+              >
+                Only the fund&rsquo;s Portfolio Manager can trade the book. Write the idea
+                up as a thesis and raise it with them &mdash;{" "}
+                <Link
+                  href={`/dashboard/funds/${fund.slug}/theses/new`}
+                  style={{ color: "#00183A", textDecoration: "underline" }}
+                >
+                  start a thesis
+                </Link>
+                .
               </div>
             ) : (
               <TradeTicket

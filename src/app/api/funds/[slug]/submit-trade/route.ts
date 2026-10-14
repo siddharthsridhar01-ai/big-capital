@@ -147,6 +147,26 @@ export async function POST(
         { status: 403 }
       );
     }
+
+    // ONLY A PM MAY TRADE THE BOOK.
+    //
+    // roleInFund was stored, displayed and editable, but nothing in the
+    // application ever read it: any member of a fund could trade it, so an
+    // analyst joining a pod had the same power over the book as the PM who
+    // answers for it.
+    //
+    // Analysts research and write theses; the PM decides what the fund owns and
+    // is accountable for it. That line is the whole point of having a PM.
+    if (membership[0].roleInFund !== "pm") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Only the fund's Portfolio Manager can submit trades. Write up the idea as a thesis and raise it with them.",
+        },
+        { status: 403 }
+      );
+    }
   }
 
   // ----- Resolve security + price -----
