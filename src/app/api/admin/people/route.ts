@@ -155,12 +155,7 @@ export async function POST(req: NextRequest) {
 
       if (existing) {
         userId = existing.id;
-        // Never demote: an admin added to a fund as PM stays an admin.
-        const shouldPromote = role === "pm" && existing.role === "analyst";
-        await db
-          .update(users)
-          .set({ fullName, isActive: true, ...(shouldPromote ? { role: "pm" as const } : {}) })
-          .where(eq(users.id, userId));
+        await db.update(users).set({ fullName, isActive: true }).where(eq(users.id, userId));
       } else {
         const [ins] = await db
           .insert(users)
@@ -205,6 +200,40 @@ export async function POST(req: NextRequest) {
           role,
           signedIn: Boolean(existing?.firstSignInAt),
         });
+      }
+    }
+
+    // Derive the global role from fund membership rather than setting it once
+    // and letting it drift.
+    //
+    // Promoting on add but never recalculating meant someone added as a PM, then
+    // moved to an analyst seat, kept `pm` for ever — so the header badge said
+    // Portfolio Manager while their only membership was as an analyst. Admin is
+    // deliberately excluded: it is platform-wide and granted separately, so a
+    // membership change must never revoke it.
+    for (const r of results) {
+      const email = String(r.email ?? "");
+      if (!email) continue;
+      const [u] = await db
+        .select({ id: users.id, role: users.role })
+        .from(users)
+        .where(or(eq(users.email, email), eq(users.secondaryEmail, email)))
+        .limit(1);
+      if (!u || u.role === "admin") continue;
+
+      const pmSeats = await db
+        .select({ fundId: fundMembers.fundId })
+        .from(fundMembers)
+        .where(
+          and(
+            eq(fundMembers.userId, u.id),
+            eq(fundMembers.roleInFund, "pm"),
+            isNull(fundMembers.endDate)
+          )
+        );
+      const derived = pmSeats.length > 0 ? "pm" : "analyst";
+      if (derived !== u.role) {
+        await db.update(users).set({ role: derived }).where(eq(users.id, u.id));
       }
     }
 

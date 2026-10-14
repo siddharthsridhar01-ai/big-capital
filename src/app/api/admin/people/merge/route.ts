@@ -22,6 +22,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
+import { orderedEmails } from "@/lib/email-order";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -121,6 +122,19 @@ export async function POST(req: NextRequest) {
     `));
 
     await db.delete(users).where(eq(users.id, sourceId));
+
+    // Lead with the institutional address. Which record was the merge target is
+    // an arbitrary choice, so without this the LSE address could end up second.
+    const [after] = await db
+      .select({ email: users.email, secondaryEmail: users.secondaryEmail })
+      .from(users)
+      .where(eq(users.id, targetId))
+      .limit(1);
+    const swapped = after ? orderedEmails(after.email, after.secondaryEmail) : null;
+    if (swapped) {
+      await db.update(users).set({ secondaryEmail: null }).where(eq(users.id, targetId));
+      await db.update(users).set(swapped).where(eq(users.id, targetId));
+    }
 
     return NextResponse.json({
       ok: true,

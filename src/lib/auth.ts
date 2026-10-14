@@ -13,6 +13,7 @@
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { eq, inArray, or } from "drizzle-orm";
+import { orderedEmails } from "./email-order";
 import { currentUser } from "@clerk/nextjs/server";
 
 export interface BigCapUser {
@@ -55,7 +56,23 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
     // Stamp the first real sign-in. One write per person, ever: a row may have
     // been created by an admin adding them to a fund, which is not the same as
     // them having signed in.
-    const patch: { firstSignInAt?: Date; fullName?: string } = {};
+    const patch: { firstSignInAt?: Date; fullName?: string; secondaryEmail?: string } = {};
+
+    // Adopt a personal address the person linked in Clerk. Until now
+    // secondaryEmail was only ever written by seeding or merging, so an address
+    // someone added themselves stayed invisible here.
+    if (!existing[0].secondaryEmail) {
+      const other = addresses.find(
+        (a) => a.toLowerCase() !== existing[0].email.toLowerCase()
+      );
+      if (other) patch.secondaryEmail = other;
+    }
+
+    // If the institutional address is the one arriving second, lead with it.
+    const merged = orderedEmails(
+      existing[0].email,
+      patch.secondaryEmail ?? existing[0].secondaryEmail ?? null
+    );
     if (!existing[0].firstSignInAt) patch.firstSignInAt = new Date();
 
     // Repair a name derived from the email prefix. The first sign-in falls back
@@ -67,7 +84,12 @@ export async function getOrCreateUser(): Promise<BigCapUser | null> {
       patch.fullName = clerkName;
     }
 
-    if (Object.keys(patch).length > 0) {
+    if (merged) {
+      // Both columns are unique, so clear before swapping to avoid a collision.
+      await db.update(users).set({ secondaryEmail: null }).where(eq(users.id, existing[0].id));
+      patch.secondaryEmail = merged.secondaryEmail ?? undefined;
+      await db.update(users).set({ ...patch, email: merged.email }).where(eq(users.id, existing[0].id));
+    } else if (Object.keys(patch).length > 0) {
       await db.update(users).set(patch).where(eq(users.id, existing[0].id));
     }
     return toApiShape(existing[0]);
