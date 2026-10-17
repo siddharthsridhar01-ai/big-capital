@@ -17,6 +17,7 @@
  */
 
 import {
+  boolean,
   pgTable,
   pgEnum,
   uuid,
@@ -81,6 +82,15 @@ export const theses = pgTable("theses", {
   openedAt: timestamp("opened_at").notNull().defaultNow(),
   closedAt: timestamp("closed_at"),
   status: thesisStatusEnum("status").notNull().default("active"),
+
+  /**
+   * Shown on the public fund page when true. Chosen by the fund's PM. Featuring
+   * a thesis on an open, undisclosed position publishes that position ahead of
+   * the holdings disclosure lag, so the PM is warned — and the fund can forbid
+   * it outright via funds.featureDisclosedOnly.
+   */
+  isFeatured: boolean("is_featured").notNull().default(false),
+  featuredAt: timestamp("featured_at"),
 
   // Direction (long or short) — null until the first trade links to this
   // thesis. Determined by the side of that first trade.

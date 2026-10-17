@@ -1,6 +1,7 @@
 import { db } from "@/db/client";
 import { funds as fundsTable, securities, navSnapshots, monthlyBriefings, publicHoldingsSnapshots, users, fundMembers } from "@/db/schema";
 import { eq, asc, and, desc, isNull } from "drizzle-orm";
+import { theses } from "@/db/schema-theses";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
@@ -140,6 +141,32 @@ export default async function PublicFundPage({ params }: PageProps) {
       ? latestLetter.macroSection.slice(0, 160).trimEnd() + "…"
       : latestLetter.macroSection
     : null;
+
+  // Featured research. Only APPROVED theses the PM has chosen to publish; an
+  // unreviewed thesis never reaches the public page even if flagged.
+  const featured = await db
+    .select({
+      id: theses.id,
+      title: theses.title,
+      summary: theses.summary,
+      direction: theses.direction,
+      conviction: theses.conviction,
+      status: theses.status,
+      ticker: securities.ticker,
+      name: securities.name,
+      featuredAt: theses.featuredAt,
+    })
+    .from(theses)
+    .leftJoin(securities, eq(securities.id, theses.securityId))
+    .where(
+      and(
+        eq(theses.fundId, fund.id),
+        eq(theses.isFeatured, true),
+        eq(theses.approvalStatus, "approved")
+      )
+    )
+    .orderBy(desc(theses.featuredAt))
+    .limit(6);
 
   // Public holdings disclosure (read ONLY the lagged snapshots, never live positions).
   const top10Rows = await db
@@ -516,6 +543,42 @@ export default async function PublicFundPage({ params }: PageProps) {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {featured.length > 0 ? (
+        <div style={{ marginTop: 26 }}>
+          <div style={{ ...serif, fontSize: 22, color: "#00183A", marginBottom: 4 }}>Featured research</div>
+          <div style={{ fontSize: 12, color: "#9A9A8E", marginBottom: 14, fontFamily: "system-ui, sans-serif" }}>
+            Selected investment theses from the fund&rsquo;s analysts, chosen by the portfolio manager.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+            {featured.map((f) => (
+              <Link
+                key={f.id}
+                href={`/funds/${fund.slug}/research/${f.id}`}
+                style={{ display: "block", background: "white", border: "1px solid #E5E5DE", padding: "16px 18px", textDecoration: "none" }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", color: f.direction === "short" ? "#7A1F1F" : "#2F5D45", fontFamily: "system-ui, sans-serif" }}>
+                    {f.direction === "short" ? "Short" : "Long"} · {f.ticker ?? "—"}
+                  </span>
+                  <span style={{ fontSize: 10, color: "#9A9A8E", fontFamily: "system-ui, sans-serif" }}>
+                    {f.status === "active" ? "Open" : f.status === "abandoned" ? "Not pursued" : "Closed"}
+                  </span>
+                </div>
+                <div style={{ ...serif, fontSize: 16, color: "#00183A", marginBottom: 6, lineHeight: 1.3 }}>
+                  {f.title ?? f.name ?? "Investment thesis"}
+                </div>
+                <div style={{ fontSize: 12.5, color: "#444", lineHeight: 1.55, fontFamily: "system-ui, sans-serif" }}>
+                  {f.summary && f.summary.length > 180 ? f.summary.slice(0, 180).trimEnd() + "…" : f.summary}
+                </div>
+                <div style={{ fontSize: 11, color: "#00183A", marginTop: 10, fontFamily: "system-ui, sans-serif" }}>
+                  Read the thesis &rarr;
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       ) : null}

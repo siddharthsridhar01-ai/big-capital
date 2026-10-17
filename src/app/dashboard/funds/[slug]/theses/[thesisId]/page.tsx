@@ -11,6 +11,8 @@ import { theses, thesisPostMortems, thesisUpdates } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
 import ThesisApprovalActions from "@/components/ThesisApprovalActions";
 import UpdateApprovalActions from "@/components/UpdateApprovalActions";
+import FeatureThesisControl from "@/components/FeatureThesisControl";
+import { featureSafety } from "@/lib/feature-safety";
 import { isFundPm } from "@/lib/fund-role";
 import { eq, and, asc, desc, isNotNull, inArray } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
@@ -187,6 +189,7 @@ export default async function ThesisDetailPage({
     .limit(1);
   if (thesisRows.length === 0) notFound();
   const t = thesisRows[0];
+  const featureCheck = await featureSafety(fund.id, { status: t.status, securityId: t.securityId });
   const secCur = t.securityCurrency as Cur;
   const st = statusStyle(t.status);
 
@@ -523,12 +526,12 @@ export default async function ThesisDetailPage({
               Pending approval
             </div>
             <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#6B6B66", marginTop: 3 }}>
-              {user.role === "admin" || user.role === "pm"
+              {canApprove
                 ? "Review this thesis, then approve it so trades can be linked to it."
                 : "Submitted for review — a PM must approve it before trades can be linked."}
             </div>
           </div>
-          {(user.role === "admin" || user.role === "pm") && (
+          {canApprove && (
             <ThesisApprovalActions fundSlug={slug} thesisId={thesisId} />
           )}
         </div>
@@ -538,6 +541,17 @@ export default async function ThesisDetailPage({
           This thesis was not approved. Trades cannot be linked to it.
         </div>
       )}
+
+      {canApprove ? (
+        <FeatureThesisControl
+          fundSlug={slug}
+          thesisId={thesisId}
+          featured={Boolean((t as { isFeatured?: boolean }).isFeatured)}
+          approved={t.approvalStatus === "approved"}
+          safeToFeature={featureCheck.safe}
+          disclosedOnly={Boolean((fund as { featureDisclosedOnly?: boolean }).featureDisclosedOnly)}
+        />
+      ) : null}
 
       {/* HEADLINE STATS */}
       <div

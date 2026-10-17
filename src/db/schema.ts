@@ -139,6 +139,12 @@ export const funds = pgTable("funds", {
   // Per-trade fee modelling, in basis points. 5 bps = 0.05% of notional value
   // deducted from cash on every trade. Lets us model trading costs realistically.
   tradingFeesBps: integer("trading_fees_bps").notNull().default(0),
+  /**
+   * When true, only theses on closed or already-disclosed positions may be
+   * featured publicly. Protects the holdings disclosure lag for funds that
+   * want it enforced rather than left to the PM's judgement.
+   */
+  featureDisclosedOnly: boolean("feature_disclosed_only").notNull().default(false),
 
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),

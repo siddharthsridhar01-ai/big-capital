@@ -8,6 +8,7 @@ interface Fund {
   slug: string;
   name: string;
   baseCurrency: string;
+  featureDisclosedOnly?: boolean;
 }
 
 export default function AdminFundsPanel({ funds }: { funds: Fund[] }) {
@@ -108,6 +109,24 @@ export default function AdminFundsPanel({ funds }: { funds: Fund[] }) {
                 </span>
               </div>
             </div>
+            {/* Whether featured theses must already be public. */}
+            <label
+              title="When on, only closed or already-disclosed positions can be featured publicly"
+              style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#6B6B66", cursor: "pointer", whiteSpace: "nowrap" }}
+            >
+              <input
+                type="checkbox"
+                defaultChecked={Boolean(f.featureDisclosedOnly)}
+                onChange={async (e) => {
+                  await fetch(`/api/admin/funds/${f.slug}/feature-policy`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ disclosedOnly: e.target.checked }),
+                  });
+                }}
+              />
+              Feature disclosed only
+            </label>
             <Link
               href={`/dashboard/funds/${f.slug}`}
               style={{

@@ -39,6 +39,7 @@ export default async function AdminPage() {
       slug: fundsTable.slug,
       name: fundsTable.name,
       baseCurrency: fundsTable.baseCurrency,
+      featureDisclosedOnly: fundsTable.featureDisclosedOnly,
     })
     .from(fundsTable)
     .where(eq(fundsTable.isActive, true));
