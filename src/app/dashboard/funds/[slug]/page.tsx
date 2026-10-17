@@ -103,6 +103,7 @@ export default async function FundPage({
 
   // Benchmark since-inception comparison for the "Since inception" card.
   let benchmarkSinceInceptionPct: number | null = null;
+  let risk: { sharpe: number | null; sharpeDays: number | null; vol: number | null; isAnnualised: boolean } | null = null;
   let benchmarkLabel: string | null = null;
   let benchmarkChartPoints: { date: string; fund: number; benchmark: number | null }[] = [];
   if (fund.benchmarkSecurityId) {
@@ -117,6 +118,12 @@ export default async function FundPage({
       .orderBy(navSnapshots.date);
     const perf = computeFundPerformance(benchSnaps, fund.inceptionDate);
     benchmarkSinceInceptionPct = perf.benchmarkCumulative;
+    risk = {
+      sharpe: perf.sharpe,
+      sharpeDays: perf.sharpeDays,
+      vol: perf.annualisedVol,
+      isAnnualised: perf.isAnnualised,
+    };
     benchmarkChartPoints = perf.fundSeries.map((p, i) => ({
       date: p.date,
       fund: p.pct,
@@ -419,6 +426,33 @@ export default async function FundPage({
         inceptionDate={inceptionStr}
         navPoints={navPoints}
       />
+
+      {/* Risk, against the cash rate. Shown from 20 trading days and labelled
+          with the period it covers, so an early figure isn't read as a long-run one. */}
+      {risk ? (
+        <div style={{ display: "flex", gap: 28, margin: "12px 0 4px", fontFamily: "system-ui, sans-serif" }}>
+          <div>
+            <div style={{ fontSize: 10, letterSpacing: "0.05em", textTransform: "uppercase", color: "#9A9A8E" }}>Sharpe</div>
+            <div style={{ fontSize: 16, color: "#00183A", fontVariantNumeric: "tabular-nums" }}>
+              {risk.sharpe == null ? "—" : risk.sharpe.toFixed(2)}
+            </div>
+            <div style={{ fontSize: 10, color: "#9A9A8E" }}>
+              {risk.sharpe == null
+                ? "from 20 trading days"
+                : risk.isAnnualised
+                  ? "vs cash, annualised"
+                  : `vs cash, ${Math.round((risk.sharpeDays ?? 0) / 21)}m of data`}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, letterSpacing: "0.05em", textTransform: "uppercase", color: "#9A9A8E" }}>Volatility</div>
+            <div style={{ fontSize: 16, color: "#00183A", fontVariantNumeric: "tabular-nums" }}>
+              {risk.vol == null ? "—" : `${(risk.vol * 100).toFixed(1)}%`}
+            </div>
+            <div style={{ fontSize: 10, color: "#9A9A8E" }}>annualised</div>
+          </div>
+        </div>
+      ) : null}
 
       {bookLimits ? <LimitsPanel data={bookLimits} /> : null}
 

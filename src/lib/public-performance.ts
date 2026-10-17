@@ -1,3 +1,4 @@
+import { CASH_RATE_ANNUAL } from "./cash-rate";
 /**
  * Public-site performance helpers.
  *
@@ -12,6 +13,7 @@ import {
   annualiseReturn,
   annualisedVolatility,
   sharpeRatio,
+  sharpeFromDaily,
   maxDrawdown,
 } from "@/lib/performance";
 
@@ -31,6 +33,8 @@ export interface FundPerformance {
   annualisedReturn: number | null;
   annualisedVol: number | null;
   sharpe: number | null;
+  /** Trading days the Sharpe was computed over, for labelling. */
+  sharpeDays: number | null;
   calendarDays: number;
   isAnnualised: boolean;
   // Rebased cumulative-return series (%) for charting
@@ -56,6 +60,7 @@ export function computeFundPerformance(
       annualisedReturn: null,
       annualisedVol: null,
       sharpe: null,
+      sharpeDays: null,
       calendarDays: 0,
       isAnnualised: false,
       fundSeries: [],
@@ -80,12 +85,17 @@ export function computeFundPerformance(
   const isAnnualised = calendarDays >= 365;
 
   let annualisedReturn: Decimal | null = null;
-  let sharpe: Decimal | null = null;
   const annualisedVol = annualisedVolatility(dailyReturns);
   if (isAnnualised) {
     annualisedReturn = annualiseReturn(cum, calendarDays);
-    sharpe = sharpeRatio(annualisedReturn, new Decimal(0), annualisedVol);
   }
+
+  // Sharpe against the CASH RATE, not zero, and from daily excess returns.
+  // Shown once there are 20 trading days of history, labelled with the period
+  // it covers so a three-month figure is not read as a long-run one.
+  const sharpeResult = sharpeFromDaily(dailyReturns, CASH_RATE_ANNUAL, 20);
+  const sharpe = sharpeResult ? new Decimal(sharpeResult.sharpe) : null;
+  const sharpeDays = sharpeResult?.days ?? null;
 
   // Rebased cumulative series (start at 0%)
   const buildSeries = (returns: (Decimal | null)[]) => {
@@ -105,6 +115,7 @@ export function computeFundPerformance(
     annualisedReturn: annualisedReturn != null ? annualisedReturn.toNumber() : null,
     annualisedVol: annualisedVol.toNumber(),
     sharpe: sharpe != null ? sharpe.toNumber() : null,
+    sharpeDays,
     calendarDays,
     isAnnualised,
     fundSeries: buildSeries(dailyReturns),

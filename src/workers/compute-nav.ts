@@ -33,13 +33,15 @@ import {
 } from "../lib/performance";
 import { seedOpeningCash } from "../lib/holdings-reconstruction";
 import { sql, eq, and, lte, gte, lt, desc, inArray, isNull } from "drizzle-orm";
+import { CASH_RATE_ANNUAL } from "../lib/cash-rate";
 import Decimal from "decimal.js";
 
 // Synthetic cash-hurdle benchmarks for absolute-return funds (market-neutral,
 // net-long L/S): accrue a flat daily rate instead of ratioing a market price.
 // ~USD SOFR / GBP SONIA cash level; a simplification, tunable here.
 const CASH_HURDLE_TICKERS = new Set(["SOFR_CASH", "SONIA_CASH"]);
-const CASH_HURDLE_ANNUAL_RATE = 0.043;
+// One shared cash rate for the hurdle and for Sharpe — see src/lib/cash-rate.ts.
+const CASH_HURDLE_ANNUAL_RATE = CASH_RATE_ANNUAL;
 const CASH_HURDLE_DAILY_RATE = new Decimal(CASH_HURDLE_ANNUAL_RATE).dividedBy(252);
 
 /** Drizzle returns `date` columns as either a string or a Date depending on driver. */

@@ -248,7 +248,13 @@ export default async function PublicFundPage({ params }: PageProps) {
         <Stat
           label="Sharpe"
           value={perf.sharpe != null ? perf.sharpe.toFixed(2) : "—"}
-          sub={perf.isAnnualised ? "annualised" : "needs 1 yr"}
+          sub={
+            perf.sharpe == null
+              ? "from 20 trading days"
+              : perf.isAnnualised
+                ? "vs cash, annualised"
+                : `vs cash, ${Math.round((perf.sharpeDays ?? 0) / 21)}m of data`
+          }
         />
         {/* Was a hardcoded "Holdings —" card, which could never show a value: the
             live holdings count is withheld (it leaks position-building), and the
@@ -502,7 +508,11 @@ export default async function PublicFundPage({ params }: PageProps) {
                 <div style={{ fontSize: 11, color: "#9A9A8E" }}>Sharpe</div>
                 <div style={{ fontSize: 18, color: "#9A9A8E", ...numeric, marginTop: 3 }}>
                   {perf.sharpe == null ? "—" : perf.sharpe.toFixed(2)}
-                  {perf.sharpe == null ? <span style={{ fontSize: 11 }}> needs 1 yr</span> : null}
+                  {perf.sharpe == null ? (
+                    <span style={{ fontSize: 11 }}> from 20 trading days</span>
+                  ) : !perf.isAnnualised ? (
+                    <span style={{ fontSize: 11 }}> · {Math.round((perf.sharpeDays ?? 0) / 21)}m of data</span>
+                  ) : null}
                 </div>
               </div>
             </div>

@@ -402,6 +402,44 @@ export function annualisedVolatility(dailyReturns: (Decimal | null)[]): Decimal 
  * @param annualisedRf      the risk-free rate, annualised
  * @param annualisedVol     the portfolio's annualised volatility
  */
+/**
+ * Sharpe ratio from DAILY returns, annualised by sqrt(252).
+ *
+ *   sharpe = mean(r_daily - rf_daily) / stdev(r_daily - rf_daily) * sqrt(252)
+ *
+ * Preferred over annualising a cumulative return for a young fund. Compounding
+ * two months of return up to a year multiplies whatever happened in those weeks
+ * by six, so a quiet start and a lucky week produce wildly different figures.
+ * Averaging daily excess returns is far less explosive, and it is the standard
+ * construction.
+ *
+ * Returns null below `minDays` observations: a Sharpe built from a handful of
+ * days is noise presented as a statistic.
+ */
+export function sharpeFromDaily(
+  dailyReturns: (Decimal | null)[],
+  annualRf: number,
+  minDays = 20
+): { sharpe: number; days: number } | null {
+  const clean = dailyReturns.filter((r): r is Decimal => r !== null);
+  if (clean.length < minDays) return null;
+
+  const rfDaily = new Decimal(annualRf).dividedBy(252);
+  const excess = clean.map((r) => r.minus(rfDaily));
+
+  let sum = new Decimal(0);
+  for (const e of excess) sum = sum.plus(e);
+  const mean = sum.dividedBy(excess.length);
+
+  let sq = new Decimal(0);
+  for (const e of excess) sq = sq.plus(e.minus(mean).pow(2));
+  const variance = sq.dividedBy(excess.length - 1);
+  if (variance.isZero()) return null;
+
+  const sharpe = mean.dividedBy(variance.sqrt()).times(new Decimal(252).sqrt());
+  return { sharpe: sharpe.toNumber(), days: clean.length };
+}
+
 export function sharpeRatio(
   annualisedReturn: Decimal,
   annualisedRf: Decimal,
