@@ -28,6 +28,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
+import { getOrCreateUser } from "@/lib/auth";
 import {
   funds,
   transactions,
@@ -48,8 +49,16 @@ export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
   const url = new URL(req.url);
   const secret = url.searchParams.get("secret");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}` && secret !== process.env.CRON_SECRET) {
-    return new NextResponse("Unauthorized", { status: 401 });
+  // Two ways in: the cron secret, for PowerShell, or a signed-in admin, for the
+  // Launch reset panel. The panel runs in the browser, which never has the
+  // secret, so accepting only the secret made the button unusable.
+  const viaSecret =
+    auth === `Bearer ${process.env.CRON_SECRET}` || secret === process.env.CRON_SECRET;
+  if (!viaSecret) {
+    const user = await getOrCreateUser();
+    if (!user || user.role !== "admin") {
+      return NextResponse.json({ ok: false, error: "Admin only" }, { status: 401 });
+    }
   }
 
   const apply = url.searchParams.get("apply") === "1";
