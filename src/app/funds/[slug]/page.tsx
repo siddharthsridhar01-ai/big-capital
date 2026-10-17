@@ -476,7 +476,7 @@ export default async function PublicFundPage({ params }: PageProps) {
               ))}
             </div>
             <div style={{ fontSize: 10, color: "#9A9A8E", marginTop: 8, lineHeight: 1.5 }}>
-              Time-weighted returns on paper NAV. Periods longer than the fund&rsquo;s life are shown as &mdash;. Year to date runs from launch.
+              Time-weighted returns on paper NAV, gross of transaction costs and short borrow. Periods longer than the fund&rsquo;s life are shown as &mdash;. Year to date runs from launch.
             </div>
           </div>
 
