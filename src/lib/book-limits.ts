@@ -24,8 +24,20 @@ import {
 } from "@/lib/constraints";
 import { computePortfolioState } from "@/lib/portfolio";
 
+/**
+ * A limit, plus where it will stand once queued orders fill. `forward` is set
+ * only when there are queued orders, so a fund with none shows exactly as before.
+ */
+export type LimitWithForward = LimitUtilisation & {
+  forward?: Pick<LimitUtilisation, "current" | "utilisation" | "breached" | "detail" | "exempt">;
+};
+
 export interface BookLimitsResult {
-  limits: LimitUtilisation[];
+  limits: LimitWithForward[];
+  /** Queued orders reflected in each limit's `forward` value. */
+  pendingOrdersIncluded: number;
+  /** Limits within bounds now that the queue would push out of them. */
+  forwardBreachCount: number;
   /** Always-on rules with no utilisation, e.g. "Long only". */
   hardRules: Array<{ label: string; constraintType: string }>;
   breachCount: number;
@@ -63,65 +75,78 @@ export async function loadBookLimits(fundId: string): Promise<BookLimitsResult |
       and(eq(investableUniverses.fundId, fundId), isNull(investableUniverses.removedDate))
     );
 
-  const state = await computePortfolioState(fundId);
-
   const baseCurrency = fund.baseCurrency as PortfolioContext["baseCurrency"];
   const dateStr = new Date().toISOString().slice(0, 10);
-
-  const securityMeta: PortfolioContext["securityMeta"] = new Map();
-  const positions: PortfolioContext["positions"] = new Map();
-  const prices = new Map<string, Decimal>();
-  for (const [id, p] of state.positions) {
-    securityMeta.set(id, { ticker: p.ticker, sector: p.gicsSector, currency: p.currency });
-    positions.set(id, {
-      securityId: id,
-      quantity: p.quantity,
-      avgCostNative: p.avgCostNative,
-      currency: p.currency,
-    });
-    // A held security with no price cannot be weighted; skipping it would
-    // understate exposure, so leave it out of the map and let the evaluator
-    // surface the gap rather than silently valuing it at zero.
-    if (p.latestPriceNative) prices.set(id, p.latestPriceNative);
-
-  }
-
-  // Stored ECB rates for every currency held or in cash — the same source NAV
-  // and trades use. This read the static fallback table, which disagreed with
-  // the real rate and had no entry at all for the Swiss franc or Nordic currencies.
-  const fxRates = await fxRateMapForEngine(
-    [
-      ...Array.from(state.positions.values()).map((p) => p.currency),
-      ...Array.from(state.cashByCurrency.keys()),
-    ],
-    baseCurrency,
-    dateStr
-  );
-
-  const ctx: PortfolioContext = {
-    navBase: state.navBase,
-    cashByCurrency: state.cashByCurrency,
-    positions,
-    fxRates,
-    baseCurrency,
-    date: dateStr,
-    securityMeta,
-    investableUniverse: new Set(universeRows.map((r) => r.securityId)),
-  };
-
+  const investableUniverse = new Set(universeRows.map((r) => r.securityId));
   const inception = new Date(`${String(fund.inceptionDate).slice(0, 10)}T00:00:00Z`);
   const daysSinceInception = Number.isNaN(inception.getTime())
     ? undefined
     : Math.floor((Date.now() - inception.getTime()) / 86400000);
 
-  let limits: LimitUtilisation[] = [];
-  try {
-    limits = evaluateBookLimits(constraints, ctx, prices, { daysSinceInception });
-  } catch {
-    // Missing price or FX for a held name. The panel is informational, so
-    // degrade to showing nothing rather than breaking the dashboard.
-    limits = [];
+  /** Evaluate every limit against one book — the current one or the forward one. */
+  async function evaluate(state: Awaited<ReturnType<typeof computePortfolioState>>): Promise<LimitUtilisation[]> {
+    const securityMeta: PortfolioContext["securityMeta"] = new Map();
+    const positions: PortfolioContext["positions"] = new Map();
+    const prices = new Map<string, Decimal>();
+    for (const [id, p] of state.positions) {
+      securityMeta.set(id, { ticker: p.ticker, sector: p.gicsSector, currency: p.currency });
+      positions.set(id, {
+        securityId: id,
+        quantity: p.quantity,
+        avgCostNative: p.avgCostNative,
+        currency: p.currency,
+      });
+      // A held security with no price cannot be weighted; skipping it would
+      // understate exposure, so leave it out and let the evaluator surface it.
+      if (p.latestPriceNative) prices.set(id, p.latestPriceNative);
+    }
+
+    // Stored ECB rates for every currency held or in cash — the same source NAV
+    // and trades use, never the static fallback table.
+    const fxRates = await fxRateMapForEngine(
+      [
+        ...Array.from(state.positions.values()).map((p) => p.currency),
+        ...Array.from(state.cashByCurrency.keys()),
+      ],
+      baseCurrency,
+      dateStr
+    );
+
+    const ctx: PortfolioContext = {
+      navBase: state.navBase,
+      cashByCurrency: state.cashByCurrency,
+      positions,
+      fxRates,
+      baseCurrency,
+      date: dateStr,
+      securityMeta,
+      investableUniverse,
+    };
+    try {
+      return evaluateBookLimits(constraints, ctx, prices, { daysSinceInception });
+    } catch {
+      // Missing price or FX for a held name. The panel is informational, so
+      // degrade to showing nothing rather than breaking the dashboard.
+      return [];
+    }
   }
+
+  const current = await evaluate(await computePortfolioState(fundId));
+
+  // Where each limit stands once queued orders fill. A PM placing twenty orders
+  // for the open needs to see the sector or cash limit those orders will hit —
+  // not discover it at the open, when the later ones are refused.
+  const forwardState = await computePortfolioState(fundId, undefined, { includePending: true });
+  const pendingOrdersIncluded = forwardState.pendingOrdersIncluded ?? 0;
+  const forward = pendingOrdersIncluded > 0 ? await evaluate(forwardState) : [];
+  const forwardByType = new Map(forward.map((l) => [l.constraintType, l]));
+
+  const limits: LimitWithForward[] = current.map((l) => {
+    const f = forwardByType.get(l.constraintType);
+    return f
+      ? { ...l, forward: { current: f.current, utilisation: f.utilisation, breached: f.breached, detail: f.detail, exempt: f.exempt } }
+      : l;
+  });
 
   const hardRules = constraints
     .filter((c) => HARD_RULE_LABELS[c.constraintType])
@@ -129,6 +154,8 @@ export async function loadBookLimits(fundId: string): Promise<BookLimitsResult |
 
   return {
     limits,
+    pendingOrdersIncluded,
+    forwardBreachCount: limits.filter((l) => !l.breached && l.forward?.breached && !l.forward?.exempt).length,
     hardRules,
     breachCount: limits.filter((l) => l.breached).length,
   };

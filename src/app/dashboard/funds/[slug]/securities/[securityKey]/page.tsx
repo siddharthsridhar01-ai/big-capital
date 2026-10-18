@@ -158,7 +158,22 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
     .limit(10);
 
   // === Live portfolio state from transactions ledger ===
+  // ACTUAL book: what the fund holds now. Drives the position shown on the page,
+  // which sides of the ticket are offered, and realised P&L.
   const portfolioState = await computePortfolioState(fund.id);
+  // FORWARD book: as if every queued order had filled at its latest price. Drives
+  // the ticket's preview, so twenty orders queued for the open are sized against
+  // each other rather than each against an empty book.
+  const forwardState = await computePortfolioState(fund.id, undefined, { includePending: true });
+  const forwardPosition = forwardState.positions.get(security.id);
+  const forwardPositionQuantity = forwardPosition?.quantity ?? new Decimal(0);
+  const forwardPositionWeight =
+    forwardPosition?.marketValueBase && !forwardState.navBase.isZero()
+      ? forwardPosition.marketValueBase.abs().dividedBy(forwardState.navBase)
+      : new Decimal(0);
+  const forwardSectorWeight = security.gicsSector
+    ? forwardState.sectorExposures.get(security.gicsSector) ?? new Decimal(0)
+    : new Decimal(0);
   const livePosition = portfolioState.positions.get(security.id);
   const currentPositionQuantity = livePosition?.quantity ?? new Decimal(0);
   const currentPositionWeight =
@@ -499,17 +514,23 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
                 latestPrice={latestPrice.closePrice}
                 fxRateToBase={fxRateToBase}
                 portfolioSnapshot={{
-                  nav: portfolioState.navBase.toString(),
-                  cashBalance: portfolioState.cashBase.toString(),
-                  currentPositionWeight: currentPositionWeight.toString(),
+                  // Weights, cash, names and exposure from the FORWARD book...
+                  nav: forwardState.navBase.toString(),
+                  cashBalance: forwardState.cashBase.toString(),
+                  currentPositionWeight: forwardPositionWeight.toString(),
+                  forwardPositionQuantity: forwardPositionQuantity.toString(),
+                  currentSectorWeight: forwardSectorWeight.toString(),
+                  positionCount: forwardState.positions.size,
+                  grossExposure: forwardState.grossExposure.toString(),
+                  netExposure: forwardState.netExposure.toString(),
+                  pendingOrdersIncluded: forwardState.pendingOrdersIncluded ?? 0,
+                  pendingOrdersUnpriced: forwardState.pendingOrdersUnpriced ?? 0,
+                  // ...but shares held and their cost from the ACTUAL book, since
+                  // they decide what can be sold — a queued purchase isn't owned yet.
                   currentPositionQuantity: currentPositionQuantity.toString(),
                   currentPositionAvgCostNative: livePosition
                     ? livePosition.avgCostNative.toString()
                     : undefined,
-                  currentSectorWeight: currentSectorWeight.toString(),
-                  positionCount: portfolioState.positions.size,
-                  grossExposure: portfolioState.grossExposure.toString(),
-                  netExposure: portfolioState.netExposure.toString(),
                 }}
                 initialSide={
                   sideParam === "buy" || sideParam === "sell" || sideParam === "short" || sideParam === "cover"

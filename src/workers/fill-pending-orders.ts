@@ -40,6 +40,7 @@ import { activeProvider } from "@/lib/intraday/provider";
 import { resolveFxToBase } from "@/lib/fx";
 import { checkPriceSanity } from "@/lib/price-guardrail";
 import { executeTrade } from "@/lib/execute-trade";
+import { reduceFirstRank } from "@/lib/portfolio";
 import type { Currency } from "@/lib/portfolio";
 
 const yf = new YahooFinance();
@@ -74,11 +75,21 @@ export async function fillPendingOrders(): Promise<FillPendingResult> {
     detail: [],
   };
 
-  const orders = await db
-    .select()
-    .from(pendingOrders)
-    .where(eq(pendingOrders.status, "pending"))
-    .orderBy(pendingOrders.submittedAt);
+  // REDUCE BEFORE YOU ADD. Sales and covers fill first, then purchases and new
+  // shorts, each group in submission order.
+  //
+  // Filling purely by submission time meant a PM who queued a purchase and then
+  // the trim that funds it saw the purchase refused for lack of cash — the trim
+  // had not filled yet — although at a real opening auction both execute
+  // together. Reducing first frees the cash and makes exposure limits easier to
+  // meet, and it is the order the trade-ticket preview assumes.
+  const orders = (
+    await db
+      .select()
+      .from(pendingOrders)
+      .where(eq(pendingOrders.status, "pending"))
+      .orderBy(pendingOrders.submittedAt)
+  ).sort((a, b) => reduceFirstRank(a.side) - reduceFirstRank(b.side) || a.submittedAt.getTime() - b.submittedAt.getTime());
 
   result.examined = orders.length;
   if (orders.length === 0) return result;

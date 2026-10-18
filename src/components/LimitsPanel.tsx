@@ -13,8 +13,8 @@
  */
 
 import { serif, numeric } from "@/lib/typography";
-import type { BookLimitsResult } from "@/lib/book-limits";
-import { RAMP_UP_DAYS, type LimitUtilisation } from "@/lib/constraints";
+import type { BookLimitsResult, LimitWithForward } from "@/lib/book-limits";
+import { RAMP_UP_DAYS } from "@/lib/constraints";
 
 /** Amber from 80% of limit. A convention, not a standard — one number, one place. */
 const WARN_AT = 0.8;
@@ -40,6 +40,10 @@ interface Row {
   utilisation: number;
   colour: string;
   breached: boolean;
+  /** Where the limit will stand once queued orders fill, when there are any. */
+  forwardUtil?: number;
+  /** The tighter of now and after-queue — what the row sorts by. */
+  sortKey: number;
 }
 
 /**
@@ -47,7 +51,7 @@ interface Row {
  * Shown separately they printed the same percentage twice, and the floor drew a
  * bar reading "3% used" when the floor was in fact comfortably satisfied.
  */
-function toRows(limits: LimitUtilisation[]): Row[] {
+function toRows(limits: LimitWithForward[]): Row[] {
   const floor = limits.find((l) => l.constraintType === "min_cash_pct");
   const ceiling = limits.find((l) => l.constraintType === "max_cash_pct");
   const rows: Row[] = [];
@@ -58,28 +62,50 @@ function toRows(limits: LimitUtilisation[]): Row[] {
     // binds: these funds are trying to get invested, not to hold a minimum. The
     // floor is still enforced on every trade, and appears as its own row below
     // if it is ever actually breached, so it is never hidden when it matters.
-    if (l.constraintType === "min_cash_pct" && ceiling && !l.breached) continue;
+    // ...and if the QUEUE would take cash below the floor, that is shown too:
+    // it is the warning that the later orders will be refused at the open.
+    if (l.constraintType === "min_cash_pct" && ceiling && !l.breached && !l.forward?.breached) continue;
 
     const isFloorBreach = l.constraintType === "min_cash_pct";
     const breached = l.breached;
     const util = l.utilisation ?? 0;
     const colour = breached ? BAD : l.exempt ? MUTED : util >= WARN_AT ? WARN : OK;
 
+    const f = l.forward;
+    const changes = f && Math.abs(f.current - l.current) > 1e-9;
+    const fUtil = f?.utilisation ?? 0;
+    const breachesLater = Boolean(f?.breached && !breached && !f.exempt);
+    const nowStr = fmt(l.current, l.isPct || isFloorBreach);
+    const fwdStr = changes ? ` → ${fmt(f!.current, l.isPct || isFloorBreach)}` : "";
+    // The binding name can change once the queue fills — Financials now,
+    // Industrials after — so show the forward one when it differs.
+    const detail = changes && f!.detail && f!.detail !== l.detail
+      ? `${l.detail ?? "—"} → ${f!.detail}`
+      : l.detail;
+
     rows.push({
       key: l.constraintType,
       label: isFloorBreach ? "Cash floor" : l.constraintType === "max_cash_pct" ? "Cash" : l.label,
-      detail: l.detail,
+      detail,
       value: isFloorBreach
-        ? `${fmt(l.current, true)} / min ${fmt(l.limit, true)}`
-        : `${fmt(l.current, l.isPct)} / ${fmt(l.limit, l.isPct)}`,
-      status: breached ? "Breach" : l.exempt === "ramp-up" ? "N/A" : `${Math.round(util * 100)}%`,
+        ? `${nowStr}${fwdStr} / min ${fmt(l.limit, true)}`
+        : `${nowStr}${fwdStr} / ${fmt(l.limit, l.isPct)}`,
+      status: breached
+        ? "Breach"
+        : breachesLater
+          ? "After queue"
+          : l.exempt === "ramp-up"
+            ? "N/A"
+            : `${Math.round((changes ? fUtil : util) * 100)}%`,
       utilisation: isFloorBreach ? 1 : util,
-      colour,
-      breached,
+      colour: breachesLater ? BAD : changes && !l.exempt && fUtil >= WARN_AT && !breached ? WARN : colour,
+      breached: breached || breachesLater,
+      forwardUtil: changes && !isFloorBreach ? fUtil : undefined,
+      sortKey: isFloorBreach || breachesLater ? 1.01 : Math.max(util, changes ? fUtil : 0),
     });
   }
 
-  return rows.sort((a, b) => b.utilisation - a.utilisation);
+  return rows.sort((a, b) => b.sortKey - a.sortKey);
 }
 
 export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
@@ -98,8 +124,17 @@ export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
           </span>
           <span style={{ ...numeric, fontSize: 11, color: data.breachCount > 0 ? BAD : MUTED }}>
             {data.breachCount === 0 ? "Within limits" : `${data.breachCount} breach${data.breachCount === 1 ? "" : "es"}`}
+            {data.forwardBreachCount > 0 ? (
+              <span style={{ color: BAD }}> · {data.forwardBreachCount} after queued orders</span>
+            ) : null}
           </span>
         </div>
+        {data.pendingOrdersIncluded > 0 ? (
+          <div style={{ fontSize: 11, color: WARN, margin: "-4px 0 10px", lineHeight: 1.5 }}>
+            Showing where each limit stands now, and after {data.pendingOrdersIncluded} queued order
+            {data.pendingOrdersIncluded === 1 ? "" : "s"} fill at their latest prices.
+          </div>
+        ) : null}
 
         {rows.map((r, i) => (
           <div
@@ -127,15 +162,19 @@ export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
               {r.detail ? <span style={{ color: MUTED }}> · {r.detail}</span> : null}
             </span>
 
-            <div style={{ flex: "1 1 auto", height: 4, background: TRACK, borderRadius: 2, overflow: "hidden" }}>
-              <div style={{ width: `${Math.max(Math.min(r.utilisation, 1) * 100, 1)}%`, height: "100%", background: r.colour }} />
+            <div style={{ flex: "1 1 auto", height: 4, background: TRACK, borderRadius: 2, overflow: "hidden", position: "relative" }}>
+              {/* After queued orders: a lighter band behind the current bar. */}
+              {r.forwardUtil != null ? (
+                <div style={{ position: "absolute", left: 0, top: 0, width: `${Math.max(Math.min(r.forwardUtil, 1) * 100, 1)}%`, height: "100%", background: r.colour, opacity: 0.3 }} />
+              ) : null}
+              <div style={{ position: "relative", width: `${Math.max(Math.min(r.utilisation, 1) * 100, 1)}%`, height: "100%", background: r.colour }} />
             </div>
 
-            <span style={{ ...numeric, flex: "0 0 150px", textAlign: "right", fontSize: 11, color: r.breached ? BAD : MUTED, whiteSpace: "nowrap" }}>
+            <span style={{ ...numeric, flex: "0 0 190px", textAlign: "right", fontSize: 11, color: r.breached ? BAD : MUTED, whiteSpace: "nowrap" }}>
               {r.value}
             </span>
 
-            <span style={{ ...numeric, flex: "0 0 62px", textAlign: "right", fontSize: 11, color: r.colour }}>
+            <span style={{ ...numeric, flex: "0 0 74px", textAlign: "right", fontSize: 11, color: r.colour }}>
               {r.status}
             </span>
           </div>

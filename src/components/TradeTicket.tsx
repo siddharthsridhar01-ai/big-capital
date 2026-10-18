@@ -44,6 +44,16 @@ export interface TradeTicketProps {
     positionCount: number;
     grossExposure: string; // 0..N, only relevant for L/S
     netExposure: string; // -1..1, only relevant for L/S
+    /**
+     * Shares of this security once queued orders fill. Sizes the projection;
+     * currentPositionQuantity (what is actually held) still decides which sides
+     * are offered, since a queued purchase isn't owned yet.
+     */
+    forwardPositionQuantity?: string;
+    /** Queued orders reflected in the figures above. */
+    pendingOrdersIncluded?: number;
+    /** Queued orders that couldn't be reflected, having no price to estimate at. */
+    pendingOrdersUnpriced?: number;
   };
   /** Optional pre-fill (e.g. from a "Close position" action on the holdings table). */
   initialSide?: "buy" | "sell" | "short" | "cover";
@@ -369,7 +379,9 @@ export default function TradeTicket(props: TradeTicketProps) {
           : side === "short"
             ? size.shares.negated()
             : size.shares; // cover
-    const newQty = currentQty.plus(qtyChange);
+    // From the FORWARD holding, so queued orders in this security count.
+    const forwardQty = new Decimal(portfolioSnapshot.forwardPositionQuantity ?? currentQty.toString());
+    const newQty = forwardQty.plus(qtyChange);
     // Signed weight preserves direction: positive for long, negative for short.
     // Used for the position row in the projection so a short shows as -1.12%.
     const newPositionValueSigned = newQty.times(priceBase);
@@ -409,6 +421,7 @@ export default function TradeTicket(props: TradeTicketProps) {
     cash,
     nav,
     portfolioSnapshot.currentSectorWeight,
+    portfolioSnapshot.forwardPositionQuantity,
     currentWeight,
     fund.tradingFeesBps,
   ]);
@@ -1022,6 +1035,18 @@ export default function TradeTicket(props: TradeTicketProps) {
                 </>
               )}
             </div>
+            {/* The starting figures already include the queue — say so, or a sector
+                at 30% before anything has traded would read as a mistake. */}
+            {(portfolioSnapshot.pendingOrdersIncluded ?? 0) > 0 ? (
+              <div style={{ padding: "7px 14px", borderTop: "1px solid #E5E5DE", fontSize: 11, color: "#8A6D1F", lineHeight: 1.5 }}>
+                Includes {portfolioSnapshot.pendingOrdersIncluded} queued order
+                {portfolioSnapshot.pendingOrdersIncluded === 1 ? "" : "s"}, estimated at their latest prices.
+                Actual fills happen at the next opening price, sales before purchases.
+                {(portfolioSnapshot.pendingOrdersUnpriced ?? 0) > 0
+                  ? ` ${portfolioSnapshot.pendingOrdersUnpriced} more could not be estimated and are left out.`
+                  : ""}
+              </div>
+            ) : null}
           </div>
         </Section>
       )}

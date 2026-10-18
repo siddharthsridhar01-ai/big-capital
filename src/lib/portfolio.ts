@@ -31,6 +31,7 @@ import {
   transactions as transactionsTable,
   securities as securitiesTable,
   prices as pricesTable,
+  pendingOrders as pendingOrdersTable,
 } from "@/db/schema";
 import type { Currency } from "@/lib/currency";
 export type { Currency };
@@ -78,6 +79,10 @@ export interface PortfolioState {
   /** Gross = long + short. Net = long − short. Both as fraction of NAV. */
   grossExposure: Decimal;
   netExposure: Decimal;
+  /** Queued orders folded in, when computed with includePending. */
+  pendingOrdersIncluded?: number;
+  /** Queued orders left out because their security has no price to estimate at. */
+  pendingOrdersUnpriced?: number;
 }
 
 /**
@@ -318,7 +323,15 @@ export function aggregatePortfolioFromTransactions(
 export async function computePortfolioState(
   fundId: string,
   asOfDate?: Date,
-  opts?: { skipLivePrices?: boolean }
+  opts?: {
+    skipLivePrices?: boolean;
+    /**
+     * Include queued orders as if filled at their latest price — the book the
+     * fund WILL have, for previewing a new order. Off by default: valuations,
+     * NAV and the actual fill check must use what the fund holds now.
+     */
+    includePending?: boolean;
+  }
 ): Promise<PortfolioState> {
   // 1) Load fund record
   const fundRows = await db
@@ -336,9 +349,21 @@ export async function computePortfolioState(
     .where(and(eq(transactionsTable.fundId, fundId), isNull(transactionsTable.voidedAt)))
     .orderBy(transactionsTable.executedAt);
 
-  // 3) Load security metadata + latest prices for all securities mentioned
+  // 2b) Queued orders, when previewing the book the fund will have.
+  const queued = opts?.includePending
+    ? await db
+        .select()
+        .from(pendingOrdersTable)
+        .where(and(eq(pendingOrdersTable.fundId, fundId), eq(pendingOrdersTable.status, "pending")))
+    : [];
+
+  // 3) Load security metadata + latest prices for all securities mentioned,
+  // including any that are only in the queue so far.
   const allSecIds = Array.from(
-    new Set(txns.filter((t) => t.securityId).map((t) => t.securityId as string))
+    new Set([
+      ...txns.filter((t) => t.securityId).map((t) => t.securityId as string),
+      ...queued.map((o) => o.securityId as string),
+    ])
   );
   let securityMetaList: SecurityMeta[] = [];
   let latestPriceMap = new Map<string, { close: string; date: string }>();
@@ -396,20 +421,38 @@ export async function computePortfolioState(
     fund.baseCurrency as Currency
   );
 
+  // 3c) Each queued order as a provisional trade — see provisionalFromQueue.
+  const after = new Date(Math.max(Date.now(), ...txns.map((t) => t.executedAt.getTime())) + 1000);
+  const { provisional, unpriced: pendingUnpriced } = provisionalFromQueue(
+    queued.map((o) => ({
+      securityId: o.securityId as string,
+      side: o.side,
+      quantity: o.quantity,
+      submittedAt: o.submittedAt,
+    })),
+    securityMetaList,
+    latestPriceMap,
+    currentFx,
+    after
+  );
+
   // 4) Run pure aggregation
   const result = aggregatePortfolioFromTransactions(
     fund.baseCurrency as Currency,
     fund.startingNav,
-    txns.map((t) => ({
-      transactionType: t.transactionType,
-      securityId: t.securityId,
-      quantity: t.quantity,
-      price: t.price,
-      currency: t.currency as Currency,
-      cashImpact: t.cashImpact,
-      fxRateToBase: t.fxRateToBase,
-      executedAt: t.executedAt,
-    })),
+    [
+      ...txns.map((t) => ({
+        transactionType: t.transactionType,
+        securityId: t.securityId,
+        quantity: t.quantity,
+        price: t.price,
+        currency: t.currency as Currency,
+        cashImpact: t.cashImpact,
+        fxRateToBase: t.fxRateToBase,
+        executedAt: t.executedAt,
+      })),
+      ...provisional,
+    ],
     securityMetaList,
     latestPriceMap,
     asOfDate,
@@ -420,6 +463,9 @@ export async function computePortfolioState(
     fundId: fund.id,
     fundSlug: fund.slug,
     ...result,
+    ...(opts?.includePending
+      ? { pendingOrdersIncluded: provisional.length, pendingOrdersUnpriced: pendingUnpriced }
+      : {}),
   };
 }
 
@@ -528,4 +574,54 @@ export function staticFxFallback(from: Currency, to: Currency): Decimal {
   }
   // 1 `from` = (1/perFrom) EUR = (perTo/perFrom) `to`
   return new Decimal(perTo).dividedBy(perFrom);
+}
+
+
+/** Sales and covers before purchases and new shorts — the order fills happen in. */
+export function reduceFirstRank(side: string): number {
+  return side === "sell" || side === "cover" ? 0 : 1;
+}
+
+/**
+ * Turn queued orders into provisional transactions at their latest price, so
+ * the forward book can be built with the SAME aggregation as the real one.
+ *
+ * Pure, so it can be tested without a database. Reductions are ordered before
+ * additions, matching fill-pending-orders. An order whose security has no price
+ * cannot be estimated and is counted in `unpriced` rather than guessed at.
+ */
+export function provisionalFromQueue(
+  queued: Array<{ securityId: string | null; side: string; quantity: string; submittedAt: Date }>,
+  securityMetaList: SecurityMeta[],
+  latestPriceMap: Map<string, { close: string; date: string }>,
+  currentFx: Map<string, Decimal>,
+  after: Date
+): { provisional: RawTransaction[]; unpriced: number } {
+  const provisional: RawTransaction[] = [];
+  let unpriced = 0;
+  [...queued]
+    .sort((a, b) => reduceFirstRank(a.side) - reduceFirstRank(b.side) || a.submittedAt.getTime() - b.submittedAt.getTime())
+    .forEach((o, i) => {
+      const meta = securityMetaList.find((m) => m.id === o.securityId);
+      const px = o.securityId ? latestPriceMap.get(o.securityId) : undefined;
+      if (!meta || !px) {
+        unpriced += 1;
+        return;
+      }
+      const q = new Decimal(o.quantity);
+      const price = new Decimal(px.close);
+      // Buys and covers spend cash and add shares; sales and shorts raise cash.
+      const spends = o.side === "buy" || o.side === "cover";
+      provisional.push({
+        transactionType: o.side,
+        securityId: o.securityId,
+        quantity: (spends ? q : q.negated()).toString(),
+        price: price.toString(),
+        currency: meta.currency,
+        cashImpact: (spends ? q.times(price).negated() : q.times(price)).toString(),
+        fxRateToBase: (currentFx.get(meta.currency) ?? new Decimal(1)).toString(),
+        executedAt: new Date(after.getTime() + i),
+      });
+    });
+  return { provisional, unpriced };
 }

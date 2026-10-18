@@ -186,7 +186,12 @@ export async function POST(
   });
 
   // ===== Compute live portfolio state from the transactions ledger =====
-  const state = await computePortfolioState(fund.id);
+  // The book INCLUDING queued orders — what the fund will hold once they fill.
+  // Queuing an order runs no compliance check of its own, so this preview is the
+  // only warning a PM gets before committing more cash, sector weight or names
+  // than the fund has room for. Checked against the current book alone, each of
+  // twenty-five orders queued for the open looked affordable on its own.
+  const state = await computePortfolioState(fund.id, undefined, { includePending: true });
 
   // Add metadata for every currently-held security
   for (const [id, pos] of state.positions) {
@@ -309,6 +314,9 @@ export async function POST(
       pricePerShare: latestPrice.toFixed(4),
       priceCurrency: security.currency,
       fundBaseCurrency: fund.baseCurrency,
+      // So the ticket can say the figures include the queue.
+      pendingOrdersIncluded: state.pendingOrdersIncluded ?? 0,
+      pendingOrdersUnpriced: state.pendingOrdersUnpriced ?? 0,
     },
   });
 }
