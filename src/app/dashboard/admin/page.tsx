@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { serif } from "@/lib/typography";
 import AdminFundsPanel from "@/components/AdminFundsPanel";
 import LaunchResetPanel from "@/components/LaunchResetPanel";
+import ClearResearchPanel from "@/components/ClearResearchPanel";
 import AdminPeoplePanel from "@/components/AdminPeoplePanel";
 
 export const dynamic = "force-dynamic";
@@ -169,6 +170,13 @@ export default async function AdminPage() {
             Launch reset
           </h2>
           <LaunchResetPanel defaultDate="2026-10-19" />
+        </section>
+
+        <section style={{ marginTop: 36 }}>
+          <h2 style={{ ...serif, fontSize: 18, color: "#00183A", margin: "0 0 10px" }}>
+            Clear research and letters
+          </h2>
+          <ClearResearchPanel />
         </section>
       </div>
     </main>
