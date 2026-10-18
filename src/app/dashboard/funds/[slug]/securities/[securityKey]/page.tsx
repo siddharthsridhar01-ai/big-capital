@@ -2,6 +2,7 @@ import { db } from "@/db/client";
 import { funds as fundsTable, securities, investableUniverses, prices, positions, transactions, fxRates, users, fundMembers } from "@/db/schema";
 import { theses, thesisPostMortems } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
+import { fundCanShort } from "@/lib/fund-role";
 import { resolveFxToBase } from "@/lib/fx";
 import type { Currency } from "@/lib/currency";
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -43,6 +44,8 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
     .limit(1);
   if (fundRows.length === 0) notFound();
   const fund = fundRows[0];
+  // From the fund's limits, not its name: see fundCanShort.
+  const canShort = await fundCanShort(fund.id);
 
   // Only the fund's PM may trade. Admins can, for correction.
   const tradeMembership = await db
@@ -501,7 +504,7 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
                   baseCurrency: fund.baseCurrency,
                   startingNav: fund.startingNav,
                   tradingFeesBps: fund.tradingFeesBps,
-                  isLongShort: fund.slug === "long-short",
+                  isLongShort: canShort,
                 }}
                 security={{
                   id: security.id,
