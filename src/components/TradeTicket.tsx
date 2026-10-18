@@ -673,11 +673,6 @@ export default function TradeTicket(props: TradeTicketProps) {
     if (!size || size.shares.isZero()) {
       errors.push("Enter at least 1 share");
     }
-    if (rationale.length < 50) {
-      errors.push(
-        `Rationale must be at least 50 characters (${rationale.length}/50)`
-      );
-    }
     if (memoRequired && !uploadedMemo) {
       errors.push(
         "New positions ≥1% target weight require an attached investment memo (PDF)"
@@ -1095,10 +1090,9 @@ export default function TradeTicket(props: TradeTicketProps) {
                 marginBottom: 4,
               }}
             >
-              Rationale (required, min 50 chars){" "}
+              Rationale{" "}
               <span style={{ color: "#9A9A8E", fontWeight: 400 }}>
-                {rationale.length}/50. A brief paraphrase of why you&rsquo;re
-                placing this specific trade
+                (optional) A brief note on why you&rsquo;re placing this trade
               </span>
             </label>
             <textarea

@@ -53,17 +53,10 @@ export async function PATCH(
     return NextResponse.json({ ok: false, error: "Invalid form data" }, { status: 400 });
   }
 
+  // Optional, matching the trade ticket. The column is NOT NULL, so an empty
+  // rationale is stored as "" rather than rejected.
   const rationaleRaw = form.get("rationale");
-  if (typeof rationaleRaw !== "string") {
-    return NextResponse.json({ ok: false, error: "Rationale is required" }, { status: 400 });
-  }
-  const rationale = rationaleRaw.trim();
-  if (rationale.length < 20) {
-    return NextResponse.json(
-      { ok: false, error: `Rationale must be at least 20 characters (got ${rationale.length})` },
-      { status: 400 }
-    );
-  }
+  const rationale = typeof rationaleRaw === "string" ? rationaleRaw.trim() : "";
 
   // Update ONLY the rationale. Quantity/price/side/date are never modified, and
   // trades cannot carry PDF attachments — those belong to theses only.

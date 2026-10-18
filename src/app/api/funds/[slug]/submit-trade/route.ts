@@ -13,7 +13,7 @@
  *     securityId: string,
  *     side: "buy" | "sell" | "short" | "cover",
  *     shares: number,            // integer, ≥ 1
- *     rationale: string,         // ≥ 50 chars
+ *     rationale?: string,        // optional
  *     memo?: {                   // optional PDF upload result
  *       url: string,
  *       filename: string,
@@ -98,8 +98,10 @@ export async function POST(
     typeof body.shares !== "number" ||
     !Number.isInteger(body.shares) ||
     body.shares < 1 ||
-    typeof body.rationale !== "string" ||
-    body.rationale.length < 50
+    // Rationale is optional — no minimum length. It used to require 50
+    // characters, which blocked quick initial positions for no real gain; a
+    // forced paragraph is padding, not reasoning. It must still be text if sent.
+    (body.rationale != null && typeof body.rationale !== "string")
   ) {
     return NextResponse.json(
       { ok: false, error: "Invalid trade parameters" },
@@ -307,7 +309,7 @@ export async function POST(
         side: body.side,
         quantity: new Decimal(body.shares).toString(),
         submittedByUserId: user.id,
-        rationale: body.rationale,
+        rationale: (body.rationale ?? "").trim(),
         thesisId: linkedThesis ? linkedThesis.id : null,
         updateNote: body.updateNote ?? null,
         softOverrideJustification: body.softOverrideJustification ?? null,
@@ -414,7 +416,7 @@ export async function POST(
     fxToBase,
     userId: user.id,
     executedAt: executionDate,
-    rationale: body.rationale,
+    rationale: (body.rationale ?? "").trim(),
     priceProviderLabel,
     linkedThesis,
     updateNote: body.updateNote,

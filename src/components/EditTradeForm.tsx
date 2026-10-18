@@ -40,7 +40,8 @@ export default function EditTradeForm({ fundSlug, txnId, tradeLabel, initial }: 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = rationale.trim().length >= 20 && !submitting;
+  // Rationale is optional, as on the trade ticket — no minimum length.
+  const canSubmit = !submitting;
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -89,7 +90,7 @@ export default function EditTradeForm({ fundSlug, txnId, tradeLabel, initial }: 
 
       <div style={{ marginBottom: 24 }}>
         <div style={SECTION_HEADER}>
-          Rationale <span style={{ color: rationale.trim().length >= 20 ? "#9A9A8E" : "#7A1F1F" }}>({rationale.trim().length} chars, min 20)</span>
+          Rationale <span style={{ color: "#9A9A8E", fontWeight: 400 }}>(optional)</span>
         </div>
         <textarea
           style={{ ...INPUT, minHeight: 140, resize: "vertical", lineHeight: 1.5 }}
