@@ -15,6 +15,7 @@
  */
 
 import Decimal from "decimal.js";
+import { restatePosition } from "./corporate-actions";
 import type { Currency } from "@/lib/currency";
 export type { Currency };
 
@@ -123,12 +124,27 @@ export function buildLedgerState(
 
     const existing = positions.get(t.securityId);
 
+    // A corporate action RESTATES the position: shares change, total cost basis
+    // is preserved, nothing is bought or sold. Treating it as a trade would
+    // leave the old per-share cost on a reverse split. See corporate-actions.ts.
+    if (t.transactionType === "corporate_action") {
+      const held = positions.get(t.securityId);
+      if (held) {
+        const restated = restatePosition(held.quantity, held.avgCostNative, qty);
+        if (restated) {
+          positions.set(t.securityId, { ...held, ...restated });
+        } else {
+          positions.delete(t.securityId);
+        }
+      }
+      continue;
+    }
+
     if (
       t.transactionType === "buy" ||
       t.transactionType === "short" ||
       t.transactionType === "cover" ||
-      t.transactionType === "sell" ||
-      t.transactionType === "corporate_action"
+      t.transactionType === "sell"
     ) {
       if (!existing) {
         // Opening a position

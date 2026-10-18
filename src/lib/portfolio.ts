@@ -22,6 +22,7 @@
  */
 
 import Decimal from "decimal.js";
+import { restatePosition } from "./corporate-actions";
 import { eq, and, desc, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
@@ -84,6 +85,11 @@ export interface PortfolioState {
  * directly without mocking the database.
  */
 export interface RawTransaction {
+  /**
+   * Optional so existing callers and tests still type-check. When it is
+   * "corporate_action" the row is a restatement, not a trade.
+   */
+  transactionType?: string;
   securityId: string | null;
   quantity: string; // signed
   price: string;
@@ -134,6 +140,22 @@ export function aggregatePortfolioFromTransactions(
     const txnQty = new Decimal(t.quantity);
     const txnPrice = new Decimal(t.price);
     const fxToBase = new Decimal(t.fxRateToBase);
+
+    // Restatement, not a trade: without this, a reverse split reaches the
+    // reducing branch below and books a fake realised loss of the removed
+    // shares' entire cost basis.
+    if (t.transactionType === "corporate_action") {
+      if (existing) {
+        const restated = restatePosition(existing.quantity, existing.avgCostNative, txnQty);
+        if (restated) {
+          existing.quantity = restated.quantity;
+          existing.avgCostNative = restated.avgCostNative;
+        } else {
+          existing.quantity = new Decimal(0);
+        }
+      }
+      continue;
+    }
 
     if (!existing) {
       aggregates.set(t.securityId, {
@@ -359,6 +381,7 @@ export async function computePortfolioState(
     fund.baseCurrency as Currency,
     fund.startingNav,
     txns.map((t) => ({
+      transactionType: t.transactionType,
       securityId: t.securityId,
       quantity: t.quantity,
       price: t.price,

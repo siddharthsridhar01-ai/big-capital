@@ -60,6 +60,22 @@ jobs:
       # Non-fatal on purpose: a failure here is reported by the freshness check
       # below, which is the honest signal. Failing the run twice for one problem
       # only makes the email harder to read.
+      # Book stock splits on held securities before NAV is struck. Prices are
+      # stored raw and positions are share counts, so an unprocessed 10-for-1
+      # split reads as a 90% loss — and the dashboard prices holdings live, so
+      # waiting for the nightly run would show that loss all day. Runs hourly,
+      # is idempotent, and never fails the run: it is bookkeeping, not a check.
+      - name: Corporate actions
+        if: always()
+        continue-on-error: true
+        run: |
+          code=$(curl -s -o /tmp/ca.json -w "%{http_code}" --max-time 90 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/corporate-actions?mode=process" || echo 000)
+          echo "CORPORATE-ACTIONS -> HTTP $code"
+          cat /tmp/ca.json 2>/dev/null || true
+          echo ""
+
       - name: NAV catch-up
         id: navcatchup
         if: always()

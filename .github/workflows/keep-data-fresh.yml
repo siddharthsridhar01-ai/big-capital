@@ -55,6 +55,16 @@ jobs:
           echo "PRICES -> HTTP $code"
           head -c 500 /tmp/prices.json 2>/dev/null || true
 
+      - name: Corporate actions
+        if: always()
+        continue-on-error: true
+        run: |
+          code=$(curl -s -o /tmp/ca.json -w "%{http_code}" --max-time 90 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/corporate-actions?mode=process" || echo 000)
+          echo "CORPORATE-ACTIONS -> HTTP $code"
+          head -c 800 /tmp/ca.json 2>/dev/null || true
+
       - name: NAV strike
         id: nav
         if: always()
@@ -65,6 +75,25 @@ jobs:
           echo "status=$code" >> "$GITHUB_OUTPUT"
           echo "NAV -> HTTP $code"
           head -c 500 /tmp/nav.json 2>/dev/null || true
+
+      # Flags held securities showing the signature of an event that is not
+      # processed automatically: a large unexplained move (spin-off, rights
+      # issue, takeover bid, unprocessed split) or a holding that has stopped
+      # being priced (completed takeover, delisting, ticker change). Fails the
+      # run so the admins are emailed. Nightly, so one event is one email.
+      - name: Corporate action check
+        if: always()
+        run: |
+          code=$(curl -s -o /tmp/cacheck.json -w "%{http_code}" --max-time 90 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/corporate-actions?mode=check" || echo 000)
+          echo "CORPORATE-ACTION-CHECK -> HTTP $code"
+          cat /tmp/cacheck.json 2>/dev/null || true
+          echo ""
+          if [ "$code" = "503" ]; then
+            echo "::error::A held security needs attention — likely a corporate action that is not processed automatically. See the alerts above."
+            exit 1
+          fi
 
       # 2xx is success. 207 is a legitimate "partial" from these routes (some
       # securities errored but the run completed) and must not fail the job.
