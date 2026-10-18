@@ -403,6 +403,7 @@ export async function POST(
       id: fund.id,
       baseCurrency: fund.baseCurrency,
       tradingFeesBps: fund.tradingFeesBps,
+      inceptionDate: fund.inceptionDate,
     },
     security: {
       id: security.id,

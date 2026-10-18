@@ -42,6 +42,7 @@ import {
   type PortfolioContext,
   type ConstraintViolation,
 } from "@/lib/constraints";
+import { daysSinceInception } from "@/lib/constraints";
 import { computePortfolioState } from "@/lib/portfolio";
 
 export const dynamic = "force-dynamic";
@@ -237,6 +238,7 @@ export async function POST(
     date: dateStr,
     securityMeta,
     investableUniverse,
+    daysSinceInception: daysSinceInception(fund.inceptionDate),
   };
 
   // ===== Build the proposed trade =====

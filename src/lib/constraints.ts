@@ -63,6 +63,12 @@ export interface PortfolioContext {
   securityMeta: Map<string, { ticker: string; sector: string | null; currency: Currency }>;
   // Set of security IDs currently in the investable universe
   investableUniverse: Set<string>;
+  /**
+   * Days since the fund's inception. Within RAMP_UP_DAYS the cash band (min and
+   * max cash) is not enforced on trades, matching the limits panel. Omitted, the
+   * band applies as normal.
+   */
+  daysSinceInception?: number;
 }
 
 export interface ConstraintViolation {
@@ -84,7 +90,7 @@ export interface ConstraintCheckResult {
 // Apply trade hypothetically to compute post-trade state
 // ---------------------------------------------------------------------------
 
-function applyTradeToPositions(
+export function applyTradeToPositions(
   positions: Map<string, Position>,
   trade: ProposedTrade
 ): Map<string, Position> {
@@ -455,7 +461,15 @@ export function checkTrade(
     }
   }
 
+  // During ramp-up the cash band is not enforced: a new fund holds cash while it
+  // builds positions, and a short raises cash, so either would otherwise ask for
+  // a justification on almost every trade. This was exempt in the limits panel
+  // but still evaluated here. The solvency check above is separate and stays in
+  // force — a long-only fund still cannot spend cash it does not have.
+  const inRampUp = ctx.daysSinceInception !== undefined && ctx.daysSinceInception < RAMP_UP_DAYS;
+
   for (const c of constraints) {
+    if (inRampUp && RAMP_UP_EXEMPT.has(c.constraintType)) continue;
     const violation = evaluateConstraint(
       c,
       trade,
@@ -694,4 +708,29 @@ export function evaluateBookLimits(
   }
 
   return out;
+}
+
+
+/**
+ * The portfolio context after a trade — positions and cash updated exactly as
+ * checkTrade computes its post-trade state. Used to check a basket of orders in
+ * sequence, each against the book the earlier ones leave behind. NAV is
+ * unchanged: a trade at market swaps cash for a position of equal value.
+ */
+export function applyTradeToContext(ctx: PortfolioContext, trade: ProposedTrade): PortfolioContext {
+  const cash = new Map(ctx.cashByCurrency);
+  const signed =
+    trade.side === "buy" || trade.side === "cover"
+      ? trade.price.times(trade.quantity).negated()
+      : trade.price.times(trade.quantity);
+  cash.set(trade.currency, (cash.get(trade.currency) ?? new Decimal(0)).plus(signed));
+  return { ...ctx, positions: applyTradeToPositions(ctx.positions, trade), cashByCurrency: cash };
+}
+
+
+/** Whole days from a fund's inception date to today; undefined if unparseable. */
+export function daysSinceInception(inceptionDate: string | Date | null | undefined): number | undefined {
+  if (!inceptionDate) return undefined;
+  const d = new Date(`${String(inceptionDate).slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? undefined : Math.floor((Date.now() - d.getTime()) / 86400000);
 }

@@ -41,6 +41,7 @@ import { resolveFxToBase } from "@/lib/fx";
 import { checkPriceSanity } from "@/lib/price-guardrail";
 import { executeTrade } from "@/lib/execute-trade";
 import { reduceFirstRank } from "@/lib/portfolio";
+import { orderMayFillAtOpen } from "@/lib/basket";
 import type { Currency } from "@/lib/portfolio";
 
 const yf = new YahooFinance();
@@ -171,6 +172,24 @@ export async function fillPendingOrders(): Promise<FillPendingResult> {
         continue;
       }
 
+      // ---- The open must postdate the order ----
+      // Filling at an opening print from BEFORE the order was placed is
+      // look-ahead: the PM would already know the price. Single orders were safe
+      // only because they are queued solely while a market is shut; a basket
+      // submitted during trading hours would otherwise fill at that morning's
+      // open. An order submitted after today's session began waits for the next.
+      const sessionStart = chart.meta?.currentTradingPeriod?.regular?.start;
+      if (!orderMayFillAtOpen(new Date(order.submittedAt), sessionStart, todayUtc)) {
+        result.waiting += 1;
+        result.detail.push({
+          orderId: order.id,
+          ticker,
+          outcome: "waiting",
+          reason: "submitted after today's open; fills at the next session",
+        });
+        continue;
+      }
+
       const meta = (chart.meta?.currency as string | undefined) ?? "";
       const isPence = meta === "GBp" || meta === "GBX";
       const openNative = new Decimal(
@@ -230,6 +249,7 @@ export async function fillPendingOrders(): Promise<FillPendingResult> {
           id: fund.id,
           baseCurrency: fund.baseCurrency,
           tradingFeesBps: fund.tradingFeesBps,
+          inceptionDate: fund.inceptionDate,
         },
         security: {
           id: security.id,

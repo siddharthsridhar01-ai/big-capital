@@ -22,6 +22,7 @@ import Decimal from "decimal.js";
 import { fxRateMapForEngine } from "./fx";
 import {
   checkTrade,
+  daysSinceInception,
   type FundConstraint,
   type ProposedTrade,
   type PortfolioContext,
@@ -44,7 +45,7 @@ export class TradeHalt extends Error {
 }
 
 export interface ExecuteTradeParams {
-  fund: { id: string; baseCurrency: string; tradingFeesBps: number };
+  fund: { id: string; baseCurrency: string; tradingFeesBps: number; inceptionDate?: string | null };
   security: { id: string; ticker: string; currency: string; gicsSector: string | null };
   side: "buy" | "sell" | "short" | "cover";
   shares: number;
@@ -184,6 +185,7 @@ export async function executeTrade(p: ExecuteTradeParams): Promise<ExecuteTradeR
         date: dateStr,
         securityMeta,
         investableUniverse,
+        daysSinceInception: daysSinceInception(fund.inceptionDate),
       };
 
       let check;
