@@ -9,7 +9,7 @@ import {
   prices,
 } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
-import { and, desc, eq, gte, inArray, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or, sql, type SQL } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import Decimal from "decimal.js";
@@ -102,8 +102,17 @@ export default async function AdminTransactionsPage({
 
   // ------------------------------------------------------------------ orders
   const orderSince = new Date(Date.now() - RESOLVED_ORDER_DAYS * 86400000);
+  // Built from operators, not a raw SQL fragment: interpolating a Date into raw
+  // SQL hands the driver a JavaScript object it cannot serialise, and the page
+  // threw. gte() converts the date through the column's own type.
   const orderWhere: SQL[] = [
-    sql`(${pendingOrders.status} = 'pending' OR (${pendingOrders.status} IN ('rejected','cancelled','expired') AND ${pendingOrders.resolvedAt} >= ${orderSince}))`,
+    or(
+      eq(pendingOrders.status, "pending"),
+      and(
+        inArray(pendingOrders.status, ["rejected", "cancelled", "expired"]),
+        gte(pendingOrders.resolvedAt, orderSince)
+      )
+    )!,
   ];
   if (selected) orderWhere.push(eq(pendingOrders.fundId, selected.id));
 
