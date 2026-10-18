@@ -356,6 +356,23 @@ export default async function FundPage({
           >
             Theses →
           </Link>
+          {canTrade ? (
+            <Link
+              href={`/dashboard/funds/${fund.slug}/basket`}
+              style={{
+                fontFamily: "system-ui, sans-serif",
+                fontSize: 12,
+                color: "#00183A",
+                textDecoration: "none",
+                border: "1px solid #00183A",
+                padding: "8px 14px",
+                background: "white",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Basket order →
+            </Link>
+          ) : null}
           <Link
             href={`/dashboard/funds/${fund.slug}/universe`}
             style={{

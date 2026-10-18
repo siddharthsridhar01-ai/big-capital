@@ -577,10 +577,9 @@ export function staticFxFallback(from: Currency, to: Currency): Decimal {
 }
 
 
-/** Sales and covers before purchases and new shorts — the order fills happen in. */
-export function reduceFirstRank(side: string): number {
-  return side === "sell" || side === "cover" ? 0 : 1;
-}
+// One definition, in the pure basket module; re-exported for existing callers.
+export { reduceFirstRank } from "./basket";
+import { reduceFirstRank } from "./basket";
 
 /**
  * Turn queued orders into provisional transactions at their latest price, so
