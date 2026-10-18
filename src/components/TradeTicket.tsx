@@ -198,8 +198,11 @@ export default function TradeTicket(props: TradeTicketProps) {
   const [thesesLoaded, setThesesLoaded] = useState(false);
 
   // For OPEN: toggle between creating a new thesis or linking an existing one.
-  const [openModeToggle, setOpenModeToggle] = useState<"create" | "link">(
-    "create"
+  // Defaults to "skip": a thesis is encouraged but optional when opening, and
+  // can be linked afterwards from Portfolio activity. Requiring one blocked PMs
+  // from putting on initial positions they had not yet written up.
+  const [openModeToggle, setOpenModeToggle] = useState<"create" | "link" | "skip">(
+    "skip"
   );
   // For ADD onto a legacy position with no active thesis: optionally create one.
   const [addNoThesisChoice, setAddNoThesisChoice] = useState<"create" | "skip">(
@@ -562,7 +565,12 @@ export default function TradeTicket(props: TradeTicketProps) {
     required: boolean;
   } => {
     if (positionIntent === "open") {
-      // Opening a position requires a thesis: create one, or link an active one.
+      // A thesis is optional when opening. It can be linked later from the
+      // Portfolio activity feed, so a PM can put on a position before writing
+      // it up rather than being blocked at the ticket.
+      if (openModeToggle === "skip") {
+        return { mode: "none", thesisId: null, valid: true, required: false };
+      }
       if (activeTheses.length === 0 || openModeToggle === "create") {
         return {
           mode: "create",
@@ -2453,8 +2461,8 @@ interface ThesisPickerProps {
     valid: boolean;
     required: boolean;
   };
-  openModeToggle: "create" | "link";
-  setOpenModeToggle: (m: "create" | "link") => void;
+  openModeToggle: "create" | "link" | "skip";
+  setOpenModeToggle: (m: "create" | "link" | "skip") => void;
   addNoThesisChoice: "create" | "skip";
   setAddNoThesisChoice: (c: "create" | "skip") => void;
   linkedThesisId: string | null;
@@ -2855,10 +2863,14 @@ function ThesisPicker(props: ThesisPickerProps) {
     <div style={{ display: "flex", gap: 0, marginBottom: 14 }}>
       {(
         [
+          ["skip", "Add later"],
           ["create", "Create new"],
           ["link", "Link existing"],
         ] as const
-      ).map(([mode, label]) => (
+      )
+        // "Link existing" only makes sense when there is a thesis to link to.
+        .filter(([mode]) => mode !== "link" || activeTheses.length > 0)
+        .map(([mode, label]) => (
         <button
           key={mode}
           type="button"
@@ -2891,12 +2903,18 @@ function ThesisPicker(props: ThesisPickerProps) {
     return (
       <div>
         <div style={hint}>
-          Opening a position requires an investment thesis — the &ldquo;why&rdquo;
-          behind the trade. The per-trade rationale below is a short paraphrase;
-          this thesis is the durable idea the position lives under.
+          An investment thesis is the durable idea a position lives under. It&rsquo;s
+          optional at the moment of trading &mdash; you can write one now, or link it
+          afterwards from Portfolio activity.
         </div>
-        {activeTheses.length > 0 && createLinkToggle}
-        {resolution.mode === "create" ? (
+        {createLinkToggle}
+        {openModeToggle === "skip" ? (
+          <div style={{ ...muted, fontSize: 12, lineHeight: 1.55 }}>
+            No thesis linked yet. Write it up when you&rsquo;re ready and use{" "}
+            <strong style={{ color: "#00183A" }}>Link thesis</strong> on this trade in
+            Portfolio activity.
+          </div>
+        ) : resolution.mode === "create" ? (
           <>
             {activeTheses.length === 0 && (
               <div style={{ ...muted, marginBottom: 12 }}>
