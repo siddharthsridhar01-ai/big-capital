@@ -34,6 +34,7 @@ import {
 import { seedOpeningCash } from "../lib/holdings-reconstruction";
 import { sql, eq, and, lte, gte, lt, desc, inArray, isNull } from "drizzle-orm";
 import { CASH_RATE_ANNUAL } from "../lib/cash-rate";
+import { navGuard } from "../lib/nav-guard";
 import Decimal from "decimal.js";
 
 // Synthetic cash-hurdle benchmarks for absolute-return funds (market-neutral,
@@ -344,16 +345,22 @@ export async function runNavSnapshot(
             .map((r) => r.securityId)
         );
 
-        const SETTLED_AFTER_DAYS = 2;
         const ageDays = Math.floor(
           (Date.parse(`${targetDate}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86400000
         );
-        const dateIsSettled = ageDays >= SETTLED_AFTER_DAYS;
 
-        const missing = evidenceIds.filter((id) => !closedForDate.has(id));
-        const waiting = dateIsSettled
-          ? evidenceIds.length > 0 && missing.length === evidenceIds.length // nothing closed at all
-          : missing.length > 0; // recent date: every holding must have closed
+        // Each holding's last OFFICIAL close on or before this date. priceRows is
+        // ordered newest first, so the first close-source row per security wins.
+        const lastCloseDate = new Map<string, string>();
+        for (const r of priceRows) {
+          if (!CLOSE_SOURCES.has(r.source ?? "")) continue;
+          if (!lastCloseDate.has(r.securityId)) lastCloseDate.set(r.securityId, r.date);
+        }
+
+        // See src/lib/nav-guard.ts. A holding that has stopped closing — a
+        // delisted takeover target — no longer holds the whole fund back.
+        const guard = navGuard({ evidenceIds, closedForDate, lastCloseDate, date, ageDays });
+        const waiting = guard.wait;
 
         if (evidenceIds.length > 0 && waiting) {
           result.skippedAwaitingCloses.push({ fundId: fund.id, date });

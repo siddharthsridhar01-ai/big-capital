@@ -16,14 +16,9 @@
  * Auth: the cron secret (Bearer or ?secret=) or a signed-in admin.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, inArray, isNull, desc, gte } from "drizzle-orm";
-import Decimal from "decimal.js";
-import { db } from "@/db/client";
-import { funds, transactions, securities, prices } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
-import { buildLedgerState, type Transaction, type Currency } from "@/lib/performance";
 import { runSplitProcessing } from "@/workers/process-splits-yahoo";
-import { detectCorporateActions, type HeldPriceObservation } from "@/lib/corporate-actions";
+import { runCorporateActionScan } from "@/workers/scan-corporate-actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -52,90 +47,29 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "mode must be process or check" }, { status: 400 });
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const now = new Date();
-    const fundRows = await db.select().from(funds).where(eq(funds.isActive, true));
-
-    // Every currently held security, per fund.
-    const held: Array<{ fund: string; securityId: string }> = [];
-    const booked = new Set<string>();
-    for (const fund of fundRows) {
-      const raw = await db
-        .select()
-        .from(transactions)
-        .where(and(eq(transactions.fundId, fund.id), isNull(transactions.voidedAt)));
-      for (const t of raw) {
-        if (t.transactionType === "corporate_action" && t.securityId) {
-          booked.add(`${t.securityId}|${t.executedAt.toISOString().slice(0, 10)}`);
-        }
-      }
-      const txns: Transaction[] = raw.map((t) => ({
-        id: t.id,
-        fundId: t.fundId,
-        securityId: t.securityId,
-        transactionType: t.transactionType as Transaction["transactionType"],
-        quantity: t.quantity,
-        price: t.price,
-        currency: t.currency as Currency,
-        cashImpact: t.cashImpact,
-        fxRateToBase: t.fxRateToBase,
-        executedAt: t.executedAt,
-      }));
-      const state = buildLedgerState(txns, now);
-      for (const [securityId, pos] of state.positions) {
-        if (!pos.quantity.isZero()) held.push({ fund: fund.slug, securityId });
-      }
-    }
-
-    if (held.length === 0) {
-      return NextResponse.json({ ok: true, mode, checked: 0, alerts: [] });
-    }
-
-    const secIds = Array.from(new Set(held.map((h) => h.securityId)));
-    const secRows = await db
-      .select({ id: securities.id, ticker: securities.ticker })
-      .from(securities)
-      .where(inArray(securities.id, secIds));
-    const tickerOf = new Map(secRows.map((s) => [s.id, s.ticker]));
-
-    // The two most recent closes for each held security, in ONE query bounded to
-    // the last 30 days, rather than a query per security. Unbounded price reads
-    // were the cause of the Supabase egress overage.
-    const floor = new Date();
-    floor.setUTCDate(floor.getUTCDate() - 30);
-    const priceRows = await db
-      .select({ securityId: prices.securityId, date: prices.date, close: prices.closePrice })
-      .from(prices)
-      .where(and(inArray(prices.securityId, secIds), gte(prices.date, floor.toISOString().slice(0, 10))))
-      .orderBy(desc(prices.date));
-    const recent = new Map<string, Array<{ date: string; close: string }>>();
-    for (const r of priceRows) {
-      const list = recent.get(r.securityId) ?? [];
-      if (list.length < 2) list.push({ date: r.date, close: r.close });
-      recent.set(r.securityId, list);
-    }
-
-    const observations: HeldPriceObservation[] = held.map((h) => {
-      const rows = recent.get(h.securityId) ?? [];
-      return {
-        fund: h.fund,
-        securityId: h.securityId,
-        ticker: tickerOf.get(h.securityId) ?? "?",
-        latestDate: rows[0]?.date ?? null,
-        latestClose: rows[0] ? new Decimal(rows[0].close) : null,
-        previousClose: rows[1] ? new Decimal(rows[1].close) : null,
-      };
-    });
-
-    const alerts = detectCorporateActions(observations, booked, today);
-    const body = {
-      ok: alerts.length === 0,
-      mode,
-      checked: observations.length,
-      alerts,
-      summary: alerts.map((a) => a.message),
-    };
-    return NextResponse.json(body, { status: alerts.length === 0 ? 200 : 503 });
+    // Scan filings, headlines and price signatures; every finding lands in the
+    // feed once. Fail (503 -> email) on anything NEW and serious, or on any
+    // holding still unpriced — a zombie position stays loud until booked.
+    const scan = await runCorporateActionScan();
+    const serious = scan.newEvents.filter((e) => e.severity !== "info");
+    const needsAttention = serious.length > 0 || scan.openCritical > 0;
+    return NextResponse.json(
+      {
+        ok: !needsAttention,
+        mode,
+        securitiesScanned: scan.securitiesScanned,
+        newEvents: scan.newEvents,
+        openCritical: scan.openCritical,
+        summary: [
+          ...serious.map((e) => `${e.ticker}: ${e.title}`),
+          ...(scan.openCritical > 0
+            ? [`${scan.openCritical} holding(s) still unpriced and unbooked — see the corporate action feed.`]
+            : []),
+        ],
+        errors: scan.errors,
+      },
+      { status: needsAttention ? 503 : 200 }
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("corporate-actions failed:", err);

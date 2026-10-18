@@ -14,11 +14,11 @@ import { normaliseSector } from "./sectors";
 
 const yf = new YahooFinance();
 
-const SUPPORTED_CURRENCIES = new Set([
+export const SUPPORTED_CURRENCIES = new Set([
   "GBP", "USD", "EUR", "JPY", "HKD", "CNY", "KRW", "SGD", "INR", "TWD",
 ]);
 
-const SUFFIX_TO_EXCHANGE: Record<string, string> = {
+export const SUFFIX_TO_EXCHANGE: Record<string, string> = {
   ".L": "LSE", ".DE": "XETRA", ".F": "FRANKFURT", ".PA": "EURONEXT PARIS",
   ".AS": "EURONEXT AMSTERDAM", ".BR": "EURONEXT BRUSSELS", ".MI": "BORSA ITALIANA",
   ".SW": "SIX", ".TO": "TSX", ".HK": "HKEX", ".NS": "NSE", ".BO": "BSE",
@@ -26,7 +26,7 @@ const SUFFIX_TO_EXCHANGE: Record<string, string> = {
   ".MX": "BOLSA MEXICANA DE VALORES", ".TW": "TWSE", ".KS": "KRX",
 };
 
-function normaliseCurrency(c: string): string {
+export function normaliseCurrency(c: string): string {
   const u = c.trim();
   if (u === "GBp" || u === "GBX") return "GBP";
   if (u === "ZAc") return "ZAR";
@@ -220,4 +220,100 @@ export async function addSecurityToWatchlist(
     ok: true, status: 200,
     body: { ok: true, added: true, securityCreated, daysStored, security: { ticker, name, exchange, currency, type: qType, sector }, warning },
   };
+}
+
+
+/**
+ * Ensure a security exists, WITHOUT adding it to any fund's universe and WITHOUT
+ * the mandate gate. For corporate actions only.
+ *
+ * A fund receives an acquirer's or spin-off's shares whether or not its mandate
+ * allows them: a European holding bought by a US company still pays out US
+ * shares. Refusing to book that would leave the position wrong. So the security
+ * is created and priced, but not linked to the fund — the PM can sell it (sales
+ * are always allowed outside the universe) but cannot add to an off-mandate
+ * name. That is how real funds treat shares received in a merger.
+ *
+ * Validation is identical to adding a security normally: a live Yahoo quote, an
+ * equity, a supported currency and exchange.
+ */
+export async function ensureSecurityForCorporateAction(
+  rawSymbol: string
+): Promise<
+  | { ok: true; securityId: string; ticker: string; exchange: string; currency: Currency10; name: string; created: boolean }
+  | { ok: false; error: string }
+> {
+  const raw = (rawSymbol ?? "").trim().toUpperCase();
+  if (!raw) return { ok: false, error: "Enter the ticker of the security received" };
+  const dot = raw.lastIndexOf(".");
+  const suffix = dot > 0 ? raw.slice(dot) : "";
+  const ticker = dot > 0 ? raw.slice(0, dot) : raw;
+
+  let quote: {
+    quoteType?: string; regularMarketPrice?: number; currency?: string;
+    shortName?: string; longName?: string; fullExchangeName?: string; exchange?: string;
+  } | null;
+  try {
+    quote = (await yf.quote(raw)) as typeof quote;
+  } catch {
+    return { ok: false, error: `Couldn't find "${raw}" on the data feed. Check the exact Yahoo symbol.` };
+  }
+  if (!quote || typeof quote.regularMarketPrice !== "number" || quote.regularMarketPrice <= 0) {
+    return { ok: false, error: `Couldn't get a valid price for "${raw}".` };
+  }
+  if ((quote.quoteType ?? "").toUpperCase() !== "EQUITY") {
+    return { ok: false, error: `"${raw}" is not a single-name equity.` };
+  }
+  const currency = normaliseCurrency(quote.currency ?? "");
+  if (!SUPPORTED_CURRENCIES.has(currency)) {
+    return { ok: false, error: `"${raw}" is priced in ${currency || "an unknown currency"}, which isn't supported.` };
+  }
+  let exchange: string;
+  if (suffix === "") {
+    const ex = (quote.fullExchangeName ?? quote.exchange ?? "").toUpperCase();
+    exchange = ex.includes("NAS") ? "NASDAQ" : "NYSE";
+  } else {
+    const mapped = SUFFIX_TO_EXCHANGE[suffix];
+    if (!mapped) return { ok: false, error: `Exchange "${suffix}" isn't supported.` };
+    exchange = mapped;
+  }
+  const name = quote.longName || quote.shortName || ticker;
+
+  const existing = await db
+    .select({ id: securitiesTable.id })
+    .from(securitiesTable)
+    .where(and(eq(securitiesTable.ticker, ticker), eq(securitiesTable.exchange, exchange)))
+    .limit(1);
+  let securityId: string;
+  let created = false;
+  if (existing.length > 0) {
+    securityId = existing[0].id;
+  } else {
+    let sector: string | null = null;
+    try {
+      const profile = await yf.quoteSummary(raw, { modules: ["assetProfile"] });
+      sector = normaliseSector(profile?.assetProfile?.sector as string | undefined);
+    } catch { /* optional */ }
+    const inserted = await db
+      .insert(securitiesTable)
+      .values({
+        ticker, exchange, name,
+        currency: currency as Currency10,
+        securityType: "equity",
+        gicsSector: sector,
+        isBenchmark: false,
+        isActive: true,
+      })
+      .returning({ id: securitiesTable.id });
+    securityId = inserted[0].id;
+    created = true;
+  }
+
+  // Priced immediately, so NAV can value the received shares from day one.
+  const hasPrice = await db.select({ d: prices.date }).from(prices).where(eq(prices.securityId, securityId)).limit(1);
+  if (hasPrice.length === 0) {
+    await backfillSecurityPrices(securityId, raw, currency as Currency10);
+  }
+
+  return { ok: true, securityId, ticker, exchange, currency: currency as Currency10, name, created };
 }

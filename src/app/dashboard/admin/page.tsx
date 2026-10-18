@@ -8,6 +8,7 @@ import { serif } from "@/lib/typography";
 import AdminFundsPanel from "@/components/AdminFundsPanel";
 import LaunchResetPanel from "@/components/LaunchResetPanel";
 import ClearResearchPanel from "@/components/ClearResearchPanel";
+import AdminCorporateActionsPanel from "@/components/AdminCorporateActionsPanel";
 import AdminPeoplePanel from "@/components/AdminPeoplePanel";
 
 export const dynamic = "force-dynamic";
@@ -163,6 +164,13 @@ export default async function AdminPage() {
             People and fund access
           </h2>
           <AdminPeoplePanel />
+        </section>
+
+        <section style={{ marginTop: 36 }}>
+          <h2 style={{ ...serif, fontSize: 18, color: "#00183A", margin: "0 0 10px" }}>
+            Corporate actions
+          </h2>
+          <AdminCorporateActionsPanel />
         </section>
 
         <section style={{ marginTop: 36 }}>

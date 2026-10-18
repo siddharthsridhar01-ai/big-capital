@@ -40,6 +40,7 @@ import {
   prices as pricesTable,
   fxRates,
   users,
+  corporateActionEvents,
 } from "../db/schema";
 import { and, eq, lte, desc, inArray, isNull } from "drizzle-orm";
 import Decimal from "decimal.js";
@@ -260,54 +261,95 @@ export async function runSplitProcessing(opts: { fundSlug?: string } = {}): Prom
         const exStamp = new Date(`${exDate}T00:00:00Z`);
 
         try {
-          await db.insert(transactionsTable).values({
-            fundId: fund.id,
-            securityId: secId,
-            transactionType: "corporate_action",
-            quantity: plan.restateDelta.toString(),
-            price: "0",
-            currency,
-            cashImpact: "0",
-            fxRateToBase: fx,
-            executedAt: exStamp,
-            submittedAt: new Date(),
-            executedByUserId: systemUserId,
-            feeAmount: "0",
-            rationale:
-              `Automatic ${label} stock split (Yahoo), ex-date ${exDate}: ` +
-              `${heldQty.toString()} shares restated to ${plan.exactShares.toString()}, ` +
-              `total cost basis unchanged.`,
-            memoId: null,
-            thesisId: null,
-          });
-          booked.add(key);
-          result.splitsBooked += 1;
-
-          if (refPrice && !plan.fractional.isZero()) {
-            const cil = cashInLieu(plan.fractional, refPrice);
-            await db.insert(transactionsTable).values({
+          // Ledger entries and the feed record commit together or not at all.
+          // Written separately, a failed feed write would leave a split booked
+          // but never recorded — and, being marked done, never retried.
+          let cilBooked = false;
+          await db.transaction(async (tx) => {
+            const restateRows = await tx.insert(transactionsTable).values({
               fundId: fund.id,
               securityId: secId,
-              transactionType: cil.transactionType,
-              quantity: cil.quantity.toString(),
-              price: refPrice.toString(),
+              transactionType: "corporate_action",
+              quantity: plan.restateDelta.toString(),
+              price: "0",
               currency,
-              cashImpact: cil.cashImpact.toString(),
+              cashImpact: "0",
               fxRateToBase: fx,
-              // A millisecond after the restatement, so it applies to restated shares.
-              executedAt: new Date(exStamp.getTime() + 1),
+              executedAt: exStamp,
               submittedAt: new Date(),
               executedByUserId: systemUserId,
               feeAmount: "0",
               rationale:
-                `Cash in lieu of ${plan.fractional.abs().toString()} fractional share(s) ` +
-                `from the ${label} split, settled at the ex-date close of ${refPrice.toString()} ${currency}.`,
+                `Automatic ${label} stock split (Yahoo), ex-date ${exDate}: ` +
+                `${heldQty.toString()} shares restated to ${plan.exactShares.toString()}, ` +
+                `total cost basis unchanged.`,
               memoId: null,
               thesisId: null,
-            });
-            result.cashInLieuBooked += 1;
-          }
+            }).returning({ id: transactionsTable.id });
+            const txnIds = restateRows.map((r) => r.id);
 
+            if (refPrice && !plan.fractional.isZero()) {
+              const cil = cashInLieu(plan.fractional, refPrice);
+              const cilRows = await tx.insert(transactionsTable).values({
+                fundId: fund.id,
+                securityId: secId,
+                transactionType: cil.transactionType,
+                quantity: cil.quantity.toString(),
+                price: refPrice.toString(),
+                currency,
+                cashImpact: cil.cashImpact.toString(),
+                fxRateToBase: fx,
+                // A millisecond after the restatement, so it applies to restated shares.
+                executedAt: new Date(exStamp.getTime() + 1),
+                submittedAt: new Date(),
+                executedByUserId: systemUserId,
+                feeAmount: "0",
+                rationale:
+                  `Cash in lieu of ${plan.fractional.abs().toString()} fractional share(s) ` +
+                  `from the ${label} split, settled at the ex-date close of ${refPrice.toString()} ${currency}.`,
+                memoId: null,
+                thesisId: null,
+              }).returning({ id: transactionsTable.id });
+              cilRows.forEach((r) => txnIds.push(r.id));
+              cilBooked = true;
+            }
+
+            // Record in the feed as BOOKED, with the holding before and after, so
+            // the feed is a complete record of what was done, not only of warnings.
+            await tx
+              .insert(corporateActionEvents)
+              .values({
+                securityId: secId,
+                fundId: fund.id,
+                kind: "split",
+                status: "booked",
+                source: "yahoo_split",
+                title: `${sec.ticker}: ${label} stock split`,
+                detail:
+                  `Booked automatically. ${heldQty.toString()} shares became ${plan.wholeShares.toString()}` +
+                  (plan.fractional.isZero()
+                    ? "."
+                    : `, with ${plan.fractional.abs().toString()} fractional share(s) paid as cash in lieu.`) +
+                  " Total cost basis unchanged.",
+                eventDate: exDate,
+                dedupeKey: `split|${fund.id}|${secId}|${exDate}`,
+                impact: {
+                  severity: "info",
+                  before: { shares: heldQty.toString() },
+                  after: { shares: plan.wholeShares.toString() },
+                  ratio: label,
+                  cashInLieu: refPrice && !plan.fractional.isZero()
+                    ? plan.fractional.times(refPrice).toString()
+                    : "0",
+                },
+                transactionIds: txnIds,
+                resolvedAt: new Date(),
+              })
+              .onConflictDoNothing({ target: corporateActionEvents.dedupeKey });
+          });
+          booked.add(key);
+          result.splitsBooked += 1;
+          if (cilBooked) result.cashInLieuBooked += 1;
           result.booked.push({
             fund: fund.slug,
             ticker: sec.ticker,

@@ -209,3 +209,91 @@ export function detectCorporateActions(
 
   return alerts;
 }
+
+// ---------------------------------------------------------------------------
+// Early warning — what SEC filings and headlines mean
+// ---------------------------------------------------------------------------
+//
+// Yahoo has no structured takeover event, but for US-listed securities it does
+// expose SEC filings, and those are the official paper trail of a deal from
+// first stake to delisting. Form 25-NSE in particular is the exchange
+// confirming the stock has been removed — the one signal that distinguishes a
+// completed takeover from a ticker change or data outage, which prices alone
+// cannot. European stocks file nothing with the SEC, so for them the best
+// available signal is headlines.
+
+export type WarningSeverity = "info" | "warning" | "critical";
+
+export interface FilingMeaning {
+  severity: WarningSeverity;
+  meaning: string;
+}
+
+/**
+ * SEC filing types that bear on a corporate action, and what each means for a
+ * holder. Anything not listed (10-K, 10-Q, routine 8-Ks) is ignored.
+ */
+export const SEC_FILING_MEANINGS: Record<string, FilingMeaning> = {
+  "25-NSE": {
+    severity: "critical",
+    meaning: "The exchange has filed to delist this security — a deal has completed or the listing is ending.",
+  },
+  "SC 13D": {
+    severity: "warning",
+    meaning: "An investor has taken a stake of 5% or more with intent to influence — often the first sign of a bid.",
+  },
+  "SC 13D/A": {
+    severity: "info",
+    meaning: "An activist or strategic holder has changed its stake.",
+  },
+  "425": {
+    severity: "warning",
+    meaning: "A business combination has been announced and its communications filed.",
+  },
+  "S-4": {
+    severity: "warning",
+    meaning: "Shares are being registered for a merger — likely a stock-for-stock deal.",
+  },
+  "S4": {
+    severity: "warning",
+    meaning: "Shares are being registered for a merger — likely a stock-for-stock deal.",
+  },
+  "S-4/A": {
+    severity: "info",
+    meaning: "The merger registration has been amended.",
+  },
+  "SC14D9C": {
+    severity: "warning",
+    meaning: "The company is responding to a tender offer for its shares.",
+  },
+  "DEFA14A": {
+    severity: "info",
+    meaning: "Additional proxy material — may relate to a shareholder vote on a deal.",
+  },
+};
+
+export function classifyFiling(type: string): FilingMeaning | null {
+  return SEC_FILING_MEANINGS[type] ?? null;
+}
+
+/**
+ * Headline phrases that indicate a corporate action. Deliberately specific
+ * phrases rather than single words: "acquisition" alone matches every company
+ * that bought a smaller one, which is noise for its shareholders. What matters
+ * is the HELD company being acquired, merging, or spinning something off.
+ */
+const NEWS_PATTERNS: Array<{ pattern: RegExp; severity: WarningSeverity; label: string }> = [
+  { pattern: /\b(to be acquired|agrees? to be (bought|acquired)|takeover (bid|offer|approach)|tender offer|buyout offer)\b/i, severity: "warning", label: "possible takeover" },
+  { pattern: /\b(recommended (cash )?offer|firm offer|possible offer|rule 2\.[47])\b/i, severity: "warning", label: "UK takeover code announcement" },
+  { pattern: /\b(merger agreement|agree(s|d)? to merge|all-share (merger|deal)|stock-for-stock)\b/i, severity: "warning", label: "possible merger" },
+  { pattern: /\b(spin[- ]?off|spins? off|demerger|demerge[sd]?|separation of)\b/i, severity: "warning", label: "possible spin-off" },
+  { pattern: /\b(rights issue|rights offering)\b/i, severity: "info", label: "possible rights issue" },
+  { pattern: /\b(delist(ed|ing)?|taken private|go(es|ing)? private)\b/i, severity: "warning", label: "possible delisting" },
+];
+
+export function classifyHeadline(title: string): { severity: WarningSeverity; label: string } | null {
+  for (const p of NEWS_PATTERNS) {
+    if (p.pattern.test(title)) return { severity: p.severity, label: p.label };
+  }
+  return null;
+}

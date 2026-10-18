@@ -391,7 +391,7 @@ export const transactions = pgTable(
     // from fund.tradingFeesBps * |notional|. Cash impact already accounts for this.
     feeAmount: numeric("fee_amount", { precision: 20, scale: 6 }).notNull().default("0"),
 
-    rationale: text("rationale").notNull(), // required, min 20 chars enforced in app
+    rationale: text("rationale").notNull(), // optional in the app; stored as "" when omitted
     memoId: uuid("memo_id").references(() => investmentMemos.id), // link to investment thesis
     // Link to a Phase 2c thesis (theses.id). The DB column + FK
     // (ON DELETE SET NULL) and index are created by /api/admin/migrate-2c.
@@ -785,3 +785,33 @@ export const jobRuns = pgTable(
     jobStartedIdx: index("job_runs_job_started_idx").on(t.jobName, t.startedAt),
   })
 );
+
+/**
+ * The corporate action feed: every event the system has seen, and what was
+ * done about it. Created by /api/admin/migrate-corporate-action-events.
+ *
+ *   kind    split | takeover_cash | merger_stock | spin_off   (bookable events)
+ *           filing | news                                     (early warnings)
+ *           large_move | stale_price                          (price signatures)
+ *   status  detected  — seen, awaiting a decision (or informational)
+ *           booked    — processed into the ledger; `impact` holds before/after
+ *           dismissed — reviewed and judged not to need action
+ */
+export const corporateActionEvents = pgTable("corporate_action_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  securityId: uuid("security_id").notNull(),
+  fundId: uuid("fund_id"),
+  kind: text("kind").notNull(),
+  status: text("status").notNull().default("detected"),
+  source: text("source").notNull(),
+  title: text("title").notNull(),
+  detail: text("detail"),
+  evidenceUrl: text("evidence_url"),
+  eventDate: date("event_date"),
+  dedupeKey: text("dedupe_key").notNull().unique(),
+  impact: jsonb("impact"),
+  transactionIds: jsonb("transaction_ids"),
+  detectedAt: timestamp("detected_at").notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedByUserId: uuid("resolved_by_user_id"),
+});

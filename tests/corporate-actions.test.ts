@@ -285,3 +285,52 @@ describe("detectCorporateActions", () => {
     expect(a[0].kind).toBe("stale_price");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Early-warning classification
+// ---------------------------------------------------------------------------
+import { classifyFiling, classifyHeadline } from "../src/lib/corporate-actions";
+
+describe("classifyFiling", () => {
+  it("treats a delisting notice as critical", () => {
+    expect(classifyFiling("25-NSE")?.severity).toBe("critical");
+  });
+  it("flags the early signs of a deal", () => {
+    expect(classifyFiling("SC 13D")?.severity).toBe("warning");
+    expect(classifyFiling("425")?.severity).toBe("warning");
+    expect(classifyFiling("S-4")?.severity).toBe("warning");
+  });
+  it("ignores routine filings", () => {
+    expect(classifyFiling("10-Q")).toBeNull();
+    expect(classifyFiling("10-K")).toBeNull();
+    expect(classifyFiling("8-K")).toBeNull();
+  });
+});
+
+describe("classifyHeadline", () => {
+  it("catches a held company being taken over", () => {
+    expect(classifyHeadline("Rival agrees to be acquired in $40bn deal")?.label).toBe("possible takeover");
+    expect(classifyHeadline("Board rejects takeover bid from private equity")?.label).toBe("possible takeover");
+  });
+
+  it("catches UK Takeover Code announcements", () => {
+    expect(classifyHeadline("Statement regarding possible offer for the company")?.label).toBe("UK takeover code announcement");
+    expect(classifyHeadline("Rule 2.7 announcement: recommended cash offer")).not.toBeNull();
+  });
+
+  it("catches spin-offs and demergers", () => {
+    expect(classifyHeadline("Unilever completes demerger of ice cream business")?.label).toBe("possible spin-off");
+    expect(classifyHeadline("Siemens to spin off energy unit")?.label).toBe("possible spin-off");
+  });
+
+  it("does not fire when the held company is the BUYER", () => {
+    // These are acquisitions BY the holding — not an event for its shareholders.
+    expect(classifyHeadline("ASML completes acquisition of optics supplier")).toBeNull();
+    expect(classifyHeadline("Nestlé buys stake in coffee chain")).toBeNull();
+  });
+
+  it("ignores ordinary news", () => {
+    expect(classifyHeadline("Shares rise after strong quarterly results")).toBeNull();
+    expect(classifyHeadline("CEO to step down at year end")).toBeNull();
+  });
+});
