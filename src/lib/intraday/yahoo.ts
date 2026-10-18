@@ -28,9 +28,14 @@ const yahooFinance = new YahooFinance();
  * Comprehensive list at https://help.yahoo.com/kb/SLN2310.html — adding the
  * exchanges we actually have in our seeded universe.
  */
-export function exchangeToYahooSuffix(exchange: string): string {
-  const norm = exchange.toUpperCase().trim();
-  const map: Record<string, string> = {
+/**
+ * Exchange name -> Yahoo symbol suffix. The SINGLE source of truth: the
+ * add-security path derives its suffix -> exchange table from this, so the two
+ * can no longer drift apart. They did: this had no Copenhagen, Stockholm, Oslo
+ * or Madrid, and an unknown exchange falls through to "" (US) — so every Nordic
+ * and Spanish name in the European universe was refused when it was seeded.
+ */
+export const EXCHANGE_SUFFIX: Record<string, string> = {
     LSE: ".L",
     "LONDON STOCK EXCHANGE": ".L",
     NYSE: "",
@@ -64,8 +69,20 @@ export function exchangeToYahooSuffix(exchange: string): string {
     "KOREA EXCHANGE": ".KS",
     KOSPI: ".KS",
     KRX: ".KS",
-  };
-  return map[norm] ?? "";
+    // Nordic and Iberian venues, and the rest of the Euronext family.
+    COPENHAGEN: ".CO",
+    STOCKHOLM: ".ST",
+    OSLO: ".OL",
+    HELSINKI: ".HE",
+    MADRID: ".MC",
+    "EURONEXT LISBON": ".LS",
+    "EURONEXT DUBLIN": ".IR",
+    VIENNA: ".VI",
+};
+
+export function exchangeToYahooSuffix(exchange: string): string {
+  const norm = exchange.toUpperCase().trim();
+  return EXCHANGE_SUFFIX[norm] ?? "";
 }
 
 /**

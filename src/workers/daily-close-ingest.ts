@@ -19,13 +19,18 @@ import { activeProvider } from "@/lib/intraday/provider";
 import YahooFinance from "yahoo-finance2";
 import type { Currency } from "@/lib/currency";
 
+import { CURRENCIES } from "../lib/currency";
+
 const yf = new YahooFinance();
 
 type StoreCurrency =
   | Currency;
-const SUPPORTED: StoreCurrency[] = [
-  "GBP", "USD", "EUR", "JPY", "HKD", "CNY", "KRW", "SGD", "INR", "TWD",
-];
+// Derived from the central list, never copied. This was a third hand-written
+// copy without the Swiss franc or Nordic currencies, so a Swiss or Nordic
+// holding was skipped as "unsupported_currency" every night and never received a
+// close. NAV waits for every holding to close, so the first such purchase would
+// have frozen the European fund's NAV permanently.
+const SUPPORTED: StoreCurrency[] = [...CURRENCIES];
 
 export interface DailyCloseIngestResult {
   from: string;

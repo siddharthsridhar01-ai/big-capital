@@ -15,11 +15,19 @@ export interface Mandate {
 }
 
 export const FUND_MANDATES: Record<string, Mandate> = {
-  "uk-equity": {
-    label: "UK-listed equities",
-    allowedCurrencies: ["GBP"],
-    allowedExchanges: ["LSE"],
-    hint: "UK-listed names only (London Stock Exchange).",
+  // Replaces the old "uk-equity" rule, which was keyed to a slug that no longer
+  // exists after the conversion — leaving the European fund with no geographic
+  // restriction at all. Shares received in a corporate action bypass this, as
+  // they must: a fund receives an acquirer's shares whatever its mandate says.
+  "european-equity": {
+    label: "developed European equities",
+    allowedCurrencies: ["GBP", "EUR", "CHF", "DKK", "SEK", "NOK"],
+    allowedExchanges: [
+      "LSE", "XETRA", "FRANKFURT", "EURONEXT PARIS", "EURONEXT AMSTERDAM",
+      "EURONEXT BRUSSELS", "EURONEXT LISBON", "EURONEXT DUBLIN", "BORSA ITALIANA",
+      "SIX", "COPENHAGEN", "STOCKHOLM", "OSLO", "HELSINKI", "MADRID", "VIENNA",
+    ],
+    hint: "European listings only — London, Euronext, Xetra, SIX, the Nordics, Madrid, Milan or Vienna.",
   },
   // global-equity, long-short, market-neutral, systematic-equity: unrestricted.
 };

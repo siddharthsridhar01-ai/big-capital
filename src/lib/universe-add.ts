@@ -7,6 +7,7 @@ import { db } from "@/db/client";
 import { securities as securitiesTable, investableUniverses, prices } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { toYahooSymbol } from "@/lib/intraday/yahoo";
+import { CURRENCIES } from "@/lib/currency";
 import { checkMandate } from "@/lib/mandates";
 import YahooFinance from "yahoo-finance2";
 import type { Currency } from "@/lib/currency";
@@ -14,16 +15,27 @@ import { normaliseSector } from "./sectors";
 
 const yf = new YahooFinance();
 
-export const SUPPORTED_CURRENCIES = new Set([
-  "GBP", "USD", "EUR", "JPY", "HKD", "CNY", "KRW", "SGD", "INR", "TWD",
-]);
+// Derived from the central currency list, never copied. This was a separate
+// hand-written list, missed when currencies were centralised in September, so it
+// still refused Swiss francs and the Nordic currencies — every Swiss name in the
+// European universe was rejected at seed.
+export const SUPPORTED_CURRENCIES = new Set<string>(CURRENCIES);
 
+// Suffix -> the CANONICAL exchange name stored on a security. Explicit rather
+// than derived, because existing rows are matched on (ticker, exchange): deriving
+// it would have changed names like "TSE" to "TOKYO STOCK EXCHANGE" and created
+// duplicates of securities already held. Every value here must map back to its
+// suffix through EXCHANGE_SUFFIX — tests/exchanges.test.ts enforces that, which
+// is what stops this table and that one drifting apart again.
 export const SUFFIX_TO_EXCHANGE: Record<string, string> = {
   ".L": "LSE", ".DE": "XETRA", ".F": "FRANKFURT", ".PA": "EURONEXT PARIS",
   ".AS": "EURONEXT AMSTERDAM", ".BR": "EURONEXT BRUSSELS", ".MI": "BORSA ITALIANA",
   ".SW": "SIX", ".TO": "TSX", ".HK": "HKEX", ".NS": "NSE", ".BO": "BSE",
   ".T": "TSE", ".AX": "ASX", ".JO": "JSE", ".SA": "B3",
   ".MX": "BOLSA MEXICANA DE VALORES", ".TW": "TWSE", ".KS": "KRX",
+  // Added: these were missing, so every Nordic and Spanish name was refused.
+  ".CO": "COPENHAGEN", ".ST": "STOCKHOLM", ".OL": "OSLO", ".HE": "HELSINKI",
+  ".MC": "MADRID", ".LS": "EURONEXT LISBON", ".IR": "EURONEXT DUBLIN", ".VI": "VIENNA",
 };
 
 export function normaliseCurrency(c: string): string {
