@@ -7,13 +7,6 @@ import PdfMemoCard from "@/components/PdfMemoCard";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import type { Currency } from "@/lib/currency";
 
-// Simplified short-borrow-fee model: every fund assumes a flat annual borrow
-// rate of 2.00% on shorted positions. Real borrow rates vary by security and
-// liquidity — hard-to-borrow names can run 10-50% annually. This is a
-// simplifying assumption appropriate for a paper-trading student fund.
-// Phase 2b.4 will move this to `funds.assumed_short_borrow_rate_bps` and
-// accrue daily via a background job.
-const ASSUMED_SHORT_BORROW_RATE_BPS = 200; // 2.00% per annum
 
 // ---------------------------------------------------------------------------
 // Props from server
@@ -977,10 +970,16 @@ export default function TradeTicket(props: TradeTicketProps) {
                 <span style={{ fontSize: 12, color: "#6B6B66" }}>Notional</span>
                 <span style={{ ...numeric, fontSize: 12, color: "#00183A" }}>{fmtMoney(projection.tradeNotionalBase, fund.baseCurrency)}</span>
               </div>
-              <div style={{ padding: "9px 14px", borderBottom: "1px solid #EEEDE7", display: "flex", justifyContent: "space-between", gap: 8 }}>
-                <span style={{ fontSize: 12, color: "#6B6B66" }}>Fee ({fund.tradingFeesBps} bps)</span>
-                <span style={{ ...numeric, fontSize: 12, color: "#00183A" }}>{fmtMoney(projection.feeBase, fund.baseCurrency)}</span>
-              </div>
+              {/* Only shown when the fund charges a fee. Trading costs are modelled as
+                  zero, and a permanent "Fee (0 bps) 0.00" row is noise. */}
+              {fund.tradingFeesBps > 0 ? (
+                <div style={{ padding: "9px 14px", borderBottom: "1px solid #EEEDE7", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 12, color: "#6B6B66" }}>Fee ({fund.tradingFeesBps} bps)</span>
+                  <span style={{ ...numeric, fontSize: 12, color: "#00183A" }}>{fmtMoney(projection.feeBase, fund.baseCurrency)}</span>
+                </div>
+              ) : (
+                <div style={{ padding: "9px 14px", borderBottom: "1px solid #EEEDE7" }} />
+              )}
               <div style={{ padding: "9px 14px", borderRight: "1px solid #EEEDE7", display: "flex", justifyContent: "space-between", gap: 8, borderBottom: estRealisedPnl ? "none" : "none" }}>
                 <span style={{ fontSize: 12, color: "#6B6B66" }}>Cash impact</span>
                 <span style={{ ...numeric, fontSize: 12, color: projection.totalCashImpact.isNegative() ? "#7A1F1F" : "#1F5C3A" }}>
@@ -1136,16 +1135,10 @@ export default function TradeTicket(props: TradeTicketProps) {
       {/* SHORT-FEE + COMPLIANCE (projection now shown in Order preview above) */}
       {projection && size && priceBase && (
         <>
-          {/* SHORT BORROW FEE DISCLOSURE — only when opening/adding to a short */}
-          {side === "short" && (
-            <Section label="Short position cost (borrow fee)">
-              <ShortFeePanel
-                positionNotionalBase={projection.tradeNotionalBase}
-                baseCurrency={fund.baseCurrency}
-                annualRateBps={ASSUMED_SHORT_BORROW_RATE_BPS}
-              />
-            </Section>
-          )}
+          {/* No short-borrow panel. It showed an estimated 2% borrow fee that was
+              never actually charged anywhere, so it told PMs a short cost money
+              the fund never paid — contradicting the public page, which reports
+              returns gross of short borrow. Shorts are modelled without it. */}
 
           {/* COMPLIANCE CHECK — server-evaluated constraints */}
           <Section label="Compliance check">
@@ -1751,68 +1744,6 @@ function LivePriceStatus({
       />
       <span style={{ color: frozen ? "#5A3F08" : "#6B6B66" }}>{label}</span>
     </div>
-  );
-}
-
-function ShortFeePanel({
-  positionNotionalBase,
-  baseCurrency,
-  annualRateBps,
-}: {
-  positionNotionalBase: Decimal;
-  baseCurrency: Currency;
-  annualRateBps: number;
-}) {
-  const annualRate = new Decimal(annualRateBps).dividedBy(10000);
-  const annualFee = positionNotionalBase.times(annualRate);
-  const monthlyFee = annualFee.dividedBy(12);
-  const dailyFee = annualFee.dividedBy(365);
-
-  return (
-    <>
-      <ProjectionTable>
-        <ExecRow
-          label="Assumed annual borrow rate"
-          value={`${(annualRateBps / 100).toFixed(2)}% / yr`}
-        />
-        <ExecRow
-          label="Estimated daily fee"
-          value={fmtMoney(dailyFee, baseCurrency)}
-        />
-        <ExecRow
-          label="Estimated monthly fee"
-          value={fmtMoney(monthlyFee, baseCurrency)}
-        />
-        <ExecRow
-          label="Estimated annual fee"
-          value={fmtMoney(annualFee, baseCurrency)}
-          emphasis
-        />
-      </ProjectionTable>
-      <div
-        style={{
-          fontSize: 11,
-          marginTop: 10,
-          lineHeight: 1.55,
-          padding: "10px 14px",
-          background: "#FBF3E5",
-          border: "1px solid #E8D7AA",
-          color: "#5A3F08",
-        }}
-      >
-        <strong style={{ fontWeight: 600 }}>Note on borrow fees: </strong>
-        Real borrow rates vary by security. Liquid large-caps cost
-        ~0.3–1% / yr; hard-to-borrow names can run 10–50% / yr. The 2% rate
-        is a simplifying assumption for paper trading.{" "}
-        <strong style={{ fontWeight: 600 }}>Dividends</strong> paid by the
-        shorted company will also be debited to cash on the ex-date.{" "}
-        <strong style={{ fontWeight: 600 }}>
-          Gross exposure
-        </strong>{" "}
-        rises by the short notional; ensure you stay within fund leverage
-        constraints.
-      </div>
-    </>
   );
 }
 
