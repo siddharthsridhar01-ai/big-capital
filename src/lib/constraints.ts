@@ -423,22 +423,34 @@ export function checkTrade(
     (c) => c.constraintType === "long_only" && c.value === true
   );
   if (isLongOnlyFund && (trade.side === "buy" || trade.side === "cover")) {
-    const cashAfter = postTradeCash.get(trade.currency) ?? new Decimal(0);
+    // TOTAL cash in the base currency, not the balance in the trade's currency.
+    //
+    // The ledger is multi-currency: buying a euro stock takes the EUR balance
+    // negative while the GBP balance stays positive, and NAV nets them in base.
+    // Checking only the trade's currency read a GBP fund buying a EUR stock as
+    // having no cash at all, and blocked every non-base-currency trade.
+    const toBase = (amt: Decimal, ccy: Currency) =>
+      convertToBase(amt, ccy, ctx.baseCurrency, ctx.date, ctx.fxRates);
+    let cashBefore = new Decimal(0);
+    for (const [ccy, amt] of ctx.cashByCurrency) cashBefore = cashBefore.plus(toBase(amt, ccy));
+    let cashAfter = new Decimal(0);
+    for (const [ccy, amt] of postTradeCash) cashAfter = cashAfter.plus(toBase(amt, ccy));
+
     if (cashAfter.isNegative()) {
-      const cost = trade.price.times(trade.quantity);
-      const available = ctx.cashByCurrency.get(trade.currency) ?? new Decimal(0);
-      const affordable = trade.price.isZero()
+      const costBase = toBase(trade.price.times(trade.quantity), trade.currency);
+      const perShareBase = toBase(trade.price, trade.currency);
+      const affordable = perShareBase.isZero()
         ? new Decimal(0)
-        : available.dividedBy(trade.price).floor();
+        : Decimal.max(cashBefore, 0).dividedBy(perShareBase).floor();
       hard.push({
         constraintId: "solvency",
         constraintType: "min_cash_pct",
         isHard: true,
         message:
-          `Insufficient cash. This trade costs ${cost.toFixed(2)} ${trade.currency} but only ` +
-          `${available.toFixed(2)} is available — at most ${affordable.toFixed(0)} shares.`,
-        currentValue: available.toFixed(2),
-        limit: cost.toFixed(2),
+          `Insufficient cash. This trade costs ${costBase.toFixed(2)} ${ctx.baseCurrency} but only ` +
+          `${cashBefore.toFixed(2)} ${ctx.baseCurrency} is available — at most ${affordable.toFixed(0)} shares.`,
+        currentValue: cashBefore.toFixed(2),
+        limit: costBase.toFixed(2),
       });
     }
   }

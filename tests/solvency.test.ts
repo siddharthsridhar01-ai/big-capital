@@ -122,3 +122,59 @@ describe("concentration limits block rather than warn", () => {
     expect(r.pass).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cross-currency: a GBP fund buying a EUR stock
+// ---------------------------------------------------------------------------
+// The ledger is multi-currency — a EUR purchase takes the EUR balance negative
+// while GBP stays positive, and NAV nets them in base. Solvency must judge the
+// TOTAL in base. Checking only the trade's currency saw a pound fund with no
+// euros and blocked every European purchase.
+describe("solvency across currencies", () => {
+  const EUR_SEC = "sec_sap";
+  const DATE = "2026-10-19";
+  // 1 EUR = 0.86 GBP
+  const fx = new Map([["EUR/GBP/" + DATE, "0.86"]]);
+
+  function gbpFund(gbpCash: number): PortfolioContext {
+    return {
+      navBase: new Decimal(100000),
+      cashByCurrency: new Map([["GBP", new Decimal(gbpCash)]]),
+      positions: new Map(),
+      fxRates: fx,
+      baseCurrency: "GBP",
+      date: DATE,
+      securityMeta: new Map([[EUR_SEC, { ticker: "SAP", sector: "Information Technology", currency: "EUR" }]]),
+      investableUniverse: new Set([EUR_SEC]),
+    };
+  }
+  function eurBuy(qty: number, price: number): ProposedTrade {
+    return {
+      securityId: EUR_SEC,
+      side: "buy",
+      quantity: new Decimal(qty),
+      price: new Decimal(price),
+      currency: "EUR",
+    } as ProposedTrade;
+  }
+  const EUR_PRICES = new Map([[EUR_SEC, new Decimal(200)]]);
+
+  it("lets a pound fund buy a euro stock it can afford", () => {
+    // ~€6,075 is ~£5,224 — well inside £100,000. This was being blocked.
+    const r = checkTrade(LONG_ONLY, eurBuy(30, 202.49), gbpFund(100000), EUR_PRICES);
+    expect(r.hardViolations.some((v) => v.constraintId === "solvency")).toBe(false);
+  });
+
+  it("still blocks a euro purchase the fund genuinely cannot afford", () => {
+    const r = checkTrade(LONG_ONLY, eurBuy(30, 202.49), gbpFund(1000), EUR_PRICES);
+    expect(r.hardViolations.some((v) => v.constraintId === "solvency")).toBe(true);
+  });
+
+  it("states the shortfall in the fund's own currency", () => {
+    const r = checkTrade(LONG_ONLY, eurBuy(30, 202.49), gbpFund(1000), EUR_PRICES);
+    const v = r.hardViolations.find((x) => x.constraintId === "solvency")!;
+    expect(v.message).toContain("GBP");
+    // £1,000 / (€202.49 x 0.86) = 5.74 → 5 shares
+    expect(v.message).toContain("at most 5 shares");
+  });
+});
