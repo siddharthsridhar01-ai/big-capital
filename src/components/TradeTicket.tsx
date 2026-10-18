@@ -1039,11 +1039,10 @@ export default function TradeTicket(props: TradeTicketProps) {
                 at 30% before anything has traded would read as a mistake. */}
             {(portfolioSnapshot.pendingOrdersIncluded ?? 0) > 0 ? (
               <div style={{ padding: "7px 14px", borderTop: "1px solid #E5E5DE", fontSize: 11, color: "#8A6D1F", lineHeight: 1.5 }}>
-                Includes {portfolioSnapshot.pendingOrdersIncluded} queued order
-                {portfolioSnapshot.pendingOrdersIncluded === 1 ? "" : "s"}, estimated at their latest prices.
-                Actual fills happen at the next opening price, sales before purchases.
+                Estimated including {portfolioSnapshot.pendingOrdersIncluded} queued order
+                {portfolioSnapshot.pendingOrdersIncluded === 1 ? "" : "s"} at last price.
                 {(portfolioSnapshot.pendingOrdersUnpriced ?? 0) > 0
-                  ? ` ${portfolioSnapshot.pendingOrdersUnpriced} more could not be estimated and are left out.`
+                  ? ` ${portfolioSnapshot.pendingOrdersUnpriced} unpriced, excluded.`
                   : ""}
               </div>
             ) : null}

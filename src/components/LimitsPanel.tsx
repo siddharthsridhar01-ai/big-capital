@@ -131,8 +131,8 @@ export default function LimitsPanel({ data }: { data: BookLimitsResult }) {
         </div>
         {data.pendingOrdersIncluded > 0 ? (
           <div style={{ fontSize: 11, color: WARN, margin: "-4px 0 10px", lineHeight: 1.5 }}>
-            Showing where each limit stands now, and after {data.pendingOrdersIncluded} queued order
-            {data.pendingOrdersIncluded === 1 ? "" : "s"} fill at their latest prices.
+            Estimated including {data.pendingOrdersIncluded} queued order
+            {data.pendingOrdersIncluded === 1 ? "" : "s"} at last price.
           </div>
         ) : null}
 
