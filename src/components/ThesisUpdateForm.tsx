@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { currencySymbol } from "@/lib/currency";
 
 type Conviction = "high" | "medium" | "low";
 type HoldingPeriod = "short" | "medium" | "long" | "indefinite";
@@ -59,7 +60,7 @@ export default function ThesisUpdateForm({
   currency?: string;
 }) {
   const router = useRouter();
-  const sym = currency === "GBP" ? "£" : currency === "EUR" ? "€" : "$";
+  const sym = currencySymbol(currency);
 
   const [note, setNote] = useState("");
   const [conviction, setConviction] = useState<Conviction | "">("");

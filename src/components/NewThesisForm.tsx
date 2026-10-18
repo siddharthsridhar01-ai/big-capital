@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { serif, numeric } from "@/lib/typography";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol as ccySymbol } from "@/lib/currency";
 
 interface UniverseEntry {
   securityId: string;
@@ -114,11 +115,7 @@ export default function NewThesisForm({
     [universe, securityId]
   );
   const currencySymbol =
-    selectedSecurity?.currency === "GBP"
-      ? "£"
-      : selectedSecurity?.currency === "EUR"
-        ? "€"
-        : "$";
+    ccySymbol(selectedSecurity?.currency);
 
   const summaryLen = summary.trim().length;
   const summaryValid = summaryLen > 0 && summaryLen <= 500;

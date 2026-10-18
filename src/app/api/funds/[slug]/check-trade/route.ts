@@ -31,6 +31,8 @@ import {
   prices,
 } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/auth";
+import { fxRateMapForEngine } from "@/lib/fx";
+import type { Currency } from "@/lib/currency";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import Decimal from "decimal.js";
 import {
@@ -40,7 +42,7 @@ import {
   type PortfolioContext,
   type ConstraintViolation,
 } from "@/lib/constraints";
-import { computePortfolioState, staticFxFallback } from "@/lib/portfolio";
+import { computePortfolioState } from "@/lib/portfolio";
 
 export const dynamic = "force-dynamic";
 
@@ -206,32 +208,20 @@ export async function POST(
     });
   }
 
-  // FX rates: same-currency = 1; cross-currency falls back to static rate
+  // FX rates for EVERY currency in the book, from stored ECB rates — the same
+  // source the trade executes at. This used the static fallback table for the
+  // trade's currency only: the preview disagreed with the fill, and a second
+  // foreign currency made the check throw.
   const dateStr = new Date().toISOString().slice(0, 10);
-  const fxRates = new Map<string, string>();
-  if (security.currency !== fund.baseCurrency) {
-    try {
-      const rate = staticFxFallback(
-        security.currency as Parameters<typeof staticFxFallback>[0],
-        fund.baseCurrency as Parameters<typeof staticFxFallback>[1]
-      );
-      fxRates.set(
-        `${security.currency}/${fund.baseCurrency}/${dateStr}`,
-        rate.toString()
-      );
-    } catch (err) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            err instanceof Error
-              ? err.message
-              : "No FX rate available for this cross-currency trade",
-        },
-        { status: 400 }
-      );
-    }
-  }
+  const fxRates = await fxRateMapForEngine(
+    [
+      security.currency,
+      ...Array.from(state.positions.values()).map((p) => p.currency),
+      ...Array.from(state.cashByCurrency.keys()),
+    ],
+    fund.baseCurrency as Currency,
+    dateStr
+  );
 
   const ctx: PortfolioContext = {
     navBase: state.navBase,

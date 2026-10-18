@@ -86,6 +86,7 @@ export default async function EditThesisPage({
           targetWeightPct: twPercent,
           targetPriceNative: t.targetPriceNative != null ? String(t.targetPriceNative) : "",
           memoFilename: t.memoBlobFilename ?? null,
+          modelFilename: (t as { modelBlobFilename?: string | null }).modelBlobFilename ?? null,
         }}
       />
     </div>

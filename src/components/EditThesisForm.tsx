@@ -19,6 +19,7 @@ interface Props {
     targetWeightPct: string; // as % e.g. "5" (already converted from stored 0.05)
     targetPriceNative: string;
     memoFilename: string | null;
+    modelFilename?: string | null;
   };
 }
 
@@ -77,6 +78,7 @@ export default function EditThesisForm({
   const [targetWeightPct, setTargetWeightPct] = useState(initial.targetWeightPct);
   const [targetPriceNative, setTargetPriceNative] = useState(initial.targetPriceNative);
   const [memoFile, setMemoFile] = useState<File | null>(null);
+  const [modelFile, setModelFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,6 +100,7 @@ export default function EditThesisForm({
     }
     if (targetPriceNative) form.append("targetPriceNative", targetPriceNative);
     if (memoFile) form.append("memo", memoFile);
+    if (modelFile) form.append("model", modelFile);
 
     try {
       const res = await fetch(`/api/funds/${fundSlug}/theses/${thesisId}`, {
@@ -219,6 +222,32 @@ export default function EditThesisForm({
           </div>
         )}
         <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: "#9A9A8E", marginTop: 6 }}>PDF only · max 10 MB</div>
+      </div>
+
+      {/* Financial model */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={SECTION_HEADER}>Financial model (optional)</div>
+        {initial.modelFilename && !modelFile && (
+          <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66", marginBottom: 8 }}>
+            Current: <span style={{ color: "#00183A" }}>{initial.modelFilename}</span>. Uploading a new file replaces it.
+          </div>
+        )}
+        <input
+          type="file"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          onChange={(e) => setModelFile(e.target.files?.[0] ?? null)}
+          style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#6B6B66" }}
+        />
+        {modelFile && (
+          <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#1F5C3A", marginTop: 6 }}>
+            New file: {modelFile.name} ({(modelFile.size / 1024 / 1024).toFixed(1)}MB)
+          </div>
+        )}
+        <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: "#9A9A8E", marginTop: 6 }}>Excel .xlsx only · max 20 MB</div>
+      </div>
+
+      <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, color: "#8A6D1F", marginBottom: 16, lineHeight: 1.5 }}>
+        Saving changes sends the thesis back to your PM for approval, unless you are the PM.
       </div>
 
       {error && (

@@ -12,6 +12,7 @@ import {
 import { useMemo, useState } from "react";
 import { serif, numeric } from "@/lib/typography";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol as centralSymbol } from "@/lib/currency";
 
 export interface NavPoint {
   date: string; // YYYY-MM-DD
@@ -59,10 +60,9 @@ function fundAgeDays(inceptionDate: string): number {
   return Math.floor((Date.now() - inception.getTime()) / 86400000);
 }
 
-const baseSyms: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥", KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$" };
 
 function fmtMoney(n: number, currency: string) {
-  return `${baseSyms[currency] ?? "$"}${new Intl.NumberFormat("en-GB", {
+  return `${centralSymbol(currency)}${new Intl.NumberFormat("en-GB", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n)}`;
@@ -146,7 +146,7 @@ export default function NavChart({
     return filtered;
   }, [fullData, activeRange]);
 
-  const sym = baseSyms[fundBaseCurrency] ?? "$";
+  const sym = centralSymbol(fundBaseCurrency);
 
   // Current NAV is the last point in fullData
   const currentNav = fullData[fullData.length - 1]?.nav ?? startingNav;

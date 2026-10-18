@@ -18,6 +18,7 @@ import { db } from "@/db/client";
 import { funds as fundsTable } from "@/db/schema";
 import { theses } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
+import { isFundPm } from "@/lib/fund-role";
 import { and, eq } from "drizzle-orm";
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -65,6 +66,7 @@ export async function PATCH(
   const targetWeightPctRaw = form.get("targetWeightPct");
   const targetPriceNativeRaw = form.get("targetPriceNative");
   const memoFile = form.get("memo");
+  const modelFile = form.get("model");
 
   if (conviction !== "high" && conviction !== "medium" && conviction !== "low") {
     return NextResponse.json({ ok: false, error: "conviction must be high, medium, or low" }, { status: 400 });
@@ -162,6 +164,53 @@ export async function PATCH(
     }
   }
 
+  // Optional new/replacement financial model (.xlsx), validated like the original.
+  if (modelFile && modelFile instanceof File && modelFile.size > 0) {
+    if (modelFile.size > 20 * 1024 * 1024) {
+      return NextResponse.json(
+        { ok: false, error: `Model is ${(modelFile.size / 1024 / 1024).toFixed(1)}MB; max 20MB` },
+        { status: 400 }
+      );
+    }
+    if (!modelFile.name.toLowerCase().endsWith(".xlsx")) {
+      return NextResponse.json({ ok: false, error: "Model must be an Excel .xlsx file" }, { status: 400 });
+    }
+    const head = Array.from(new Uint8Array(await modelFile.slice(0, 4).arrayBuffer()));
+    if (![0x50, 0x4b, 0x03, 0x04].every((b, i) => head[i] === b)) {
+      return NextResponse.json({ ok: false, error: "File doesn't look like a valid .xlsx workbook" }, { status: 400 });
+    }
+    const safeModel = modelFile.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+    try {
+      const blob = await put(`theses/${fund.slug}/models/${Date.now()}_${safeModel}`, modelFile, {
+        access: "private",
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        addRandomSuffix: false,
+      });
+      (updateData as Record<string, unknown>).modelBlobUrl = blob.url;
+      (updateData as Record<string, unknown>).modelBlobFilename = modelFile.name;
+      (updateData as Record<string, unknown>).modelSizeBytes = modelFile.size;
+    } catch {
+      return NextResponse.json({ ok: false, error: "Failed to upload model" }, { status: 500 });
+    }
+  }
+
+  // RE-APPROVAL.
+  //
+  // The PM approved a specific version of this thesis — its targets, its memo,
+  // its model. An analyst editing it afterwards would otherwise leave it marked
+  // approved while the PM was now accountable for something they never saw.
+  // So an edit by anyone other than the fund's PM returns it to review.
+  const editorIsPm = await isFundPm(user, fund.id);
+  if (!editorIsPm) {
+    (updateData as Record<string, unknown>).approvalStatus = "pending";
+    (updateData as Record<string, unknown>).approvedByUserId = null;
+    (updateData as Record<string, unknown>).approvedAt = null;
+  }
+
   await db.update(theses).set(updateData).where(eq(theses.id, thesisId));
-  return NextResponse.json({ ok: true, thesisId });
+  return NextResponse.json({
+    ok: true,
+    thesisId,
+    resubmitted: !editorIsPm,
+  });
 }

@@ -2,6 +2,8 @@ import { db } from "@/db/client";
 import { funds as fundsTable, securities, investableUniverses, prices, positions, transactions, fxRates, users, fundMembers } from "@/db/schema";
 import { theses, thesisPostMortems } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
+import { resolveFxToBase } from "@/lib/fx";
+import type { Currency } from "@/lib/currency";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -12,6 +14,7 @@ import { computeDailyChange } from "@/lib/derived";
 import LivePriceHeadline from "@/components/LivePriceHeadline";
 import SecurityPriceChart from "@/components/SecurityPriceChart";
 import Decimal from "decimal.js";
+import { currencySymbol as ccySymbol } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -169,25 +172,24 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
       new Decimal(0)
     : new Decimal(0);
 
-  // FX rate to convert security ccy → fund base ccy
-  let fxRateToBase = "1";
-  if (security.currency !== fund.baseCurrency) {
-    try {
-      fxRateToBase = staticFxFallback(
-        security.currency as Parameters<typeof staticFxFallback>[0],
-        fund.baseCurrency as Parameters<typeof staticFxFallback>[1]
-      ).toString();
-    } catch {
-      fxRateToBase = "1";
-    }
-  }
+  // FX rate to convert the security's currency to the fund's base, from the
+  // stored ECB rates the trade will actually execute at.
+  //
+  // This used the static fallback table, and on any error set the rate to "1".
+  // The table had no Swiss franc or Nordic currencies, so those lookups failed
+  // and were silently valued at par: a Danish krone (about 11p) as a pound, so a
+  // Novo Nordisk order showed roughly nine times its real cost — and position
+  // sizing, sector limits and the cash check all read that figure.
+  const fxRateToBase = (
+    await resolveFxToBase(
+      security.currency as Currency,
+      fund.baseCurrency as Currency,
+      new Date().toISOString().slice(0, 10)
+    )
+  ).toString();
 
   const currencySymbol =
-    security.currency === "GBP"
-      ? "£"
-      : security.currency === "EUR"
-        ? "€"
-        : "$";
+    ccySymbol(security.currency);
 
   const fmt = (n: string | number) =>
     new Intl.NumberFormat("en-GB", {
@@ -375,7 +377,7 @@ export default async function FundSecurityPage({ params, searchParams }: PagePro
                   </div>
                   <div style={{ ...numeric, fontSize: 14, color: "#00183A" }}>
                     {livePosition.marketValueBase
-                      ? `${fund.baseCurrency === "GBP" ? "£" : fund.baseCurrency === "EUR" ? "€" : "$"}${fmt(livePosition.marketValueBase.toString())}`
+                      ? `${ccySymbol(fund.baseCurrency)}${fmt(livePosition.marketValueBase.toString())}`
                       : "—"}
                   </div>
                 </div>

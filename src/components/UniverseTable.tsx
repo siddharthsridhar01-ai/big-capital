@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import { numeric } from "@/lib/typography";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol as centralSymbol } from "@/lib/currency";
 
 interface UniverseRow {
   securityId: string;
@@ -38,11 +39,7 @@ type SortKey =
 
 type SortDir = "asc" | "desc";
 
-const CCY_SYMBOLS: Record<string, string> = {
-  GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥",
-  KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$",
-};
-const currencySymbol = (ccy: string) => CCY_SYMBOLS[ccy] ?? "$";
+const currencySymbol = (ccy: string) => centralSymbol(ccy);
 
 export default function UniverseTable({
   rows,

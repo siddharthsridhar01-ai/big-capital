@@ -4,16 +4,13 @@ import { useMemo, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
+import { currencySymbol as centralSymbol } from "@/lib/currency";
 
 export interface PricePoint {
   date: string; // YYYY-MM-DD
   close: number;
 }
 
-const CCY_SYMBOLS: Record<string, string> = {
-  GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥",
-  KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$",
-};
 
 // No "All" — with ~1y of history it duplicates 1Y. No "1D" — daily closes
 // make a single-day view flat and uninformative.
@@ -41,7 +38,7 @@ export default function SecurityPriceChart({
   points: PricePoint[];
   currency: string;
 }) {
-  const sym = CCY_SYMBOLS[currency] ?? "$";
+  const sym = centralSymbol(currency);
   const [range, setRange] = useState<string>("1M");
 
   // Age of the series in days (for disabling ranges we can't cover)

@@ -11,6 +11,7 @@ import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { serif, numeric } from "@/lib/typography";
+import { currencySymbol } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -148,13 +149,9 @@ export default async function AdminTransactionsPage() {
             <tbody>
               {rows.map(({ txn, fund, security, executedBy }) => {
                 const sym =
-                  txn.currency === "GBP" ? "£" : txn.currency === "EUR" ? "€" : "$";
+                  currencySymbol(txn.currency);
                 const baseSym =
-                  fund?.baseCurrency === "GBP"
-                    ? "£"
-                    : fund?.baseCurrency === "EUR"
-                      ? "€"
-                      : "$";
+                  currencySymbol(fund?.baseCurrency);
                 const cashImpactBase = Number(txn.cashImpact) * Number(txn.fxRateToBase);
                 return (
                   <tr key={txn.id}>

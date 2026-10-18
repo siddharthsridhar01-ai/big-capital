@@ -4,6 +4,7 @@ import { serif as serif_, numeric } from "@/lib/typography";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol as ccySymbol } from "@/lib/currency";
 
 interface SearchResult {
   id: string;
@@ -119,7 +120,7 @@ export default function SearchModal() {
   };
 
   const currencySymbol = (c: string) =>
-    c === "GBP" ? "£" : c === "EUR" ? "€" : "$";
+    ccySymbol(c);
 
   const fmt = (n: string) => {
     const num = Number(n);

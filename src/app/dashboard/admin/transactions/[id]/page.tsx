@@ -12,6 +12,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { serif, numeric } from "@/lib/typography";
 import VoidTradePanel from "@/components/VoidTradePanel";
+import { currencySymbol } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -75,9 +76,9 @@ export default async function AdminTransactionDetailPage({
     .from(tradeAttachments)
     .where(eq(tradeAttachments.transactionId, id));
 
-  const sym = txn.currency === "GBP" ? "£" : txn.currency === "EUR" ? "€" : "$";
+  const sym = currencySymbol(txn.currency);
   const baseSym =
-    fund?.baseCurrency === "GBP" ? "£" : fund?.baseCurrency === "EUR" ? "€" : "$";
+    currencySymbol(fund?.baseCurrency);
 
   const overridden = txn.overriddenConstraints as
     | {

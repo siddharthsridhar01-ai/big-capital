@@ -22,11 +22,12 @@ import PostMortemForm from "@/components/PostMortemForm";
 import ThesisUpdateForm from "@/components/ThesisUpdateForm";
 import AbandonThesisButton from "@/components/AbandonThesisButton";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
 type Cur = Currency;
-const sym = (c: string) => (c === "GBP" ? "£" : c === "EUR" ? "€" : "$");
+const sym = (c: string) => (currencySymbol(c));
 function money(v: string | number | null, c: string) {
   const n = Number(v ?? 0);
   return (

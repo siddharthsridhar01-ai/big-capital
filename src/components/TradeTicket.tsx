@@ -6,6 +6,7 @@ import { serif, numeric } from "@/lib/typography";
 import PdfMemoCard from "@/components/PdfMemoCard";
 import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol as ccySymbol } from "@/lib/currency";
 
 
 // ---------------------------------------------------------------------------
@@ -111,7 +112,7 @@ interface ComputedSize {
 }
 
 function fmtMoney(d: Decimal, currency: Currency): string {
-  const sym = currency === "GBP" ? "£" : currency === "EUR" ? "€" : "$";
+  const sym = ccySymbol(currency);
   const n = d.toNumber();
   const formatted = new Intl.NumberFormat("en-GB", {
     minimumFractionDigits: 2,
@@ -1674,7 +1675,7 @@ function LivePriceStatus({
   liveUpdatedAt: Date | null;
 }) {
   const sym =
-    securityCurrency === "GBP" ? "£" : securityCurrency === "EUR" ? "€" : "$";
+    ccySymbol(securityCurrency);
 
   // Tick once per second to update "Xs ago"
   const [, setTick] = useState(0);
@@ -2515,7 +2516,7 @@ function ThesisPicker(props: ThesisPickerProps) {
   } = props;
 
   const currencySymbol =
-    security.currency === "GBP" ? "£" : security.currency === "EUR" ? "€" : "$";
+    ccySymbol(security.currency);
   const summaryValid = summaryLen > 0 && summaryLen <= 500;
 
   const muted: React.CSSProperties = { fontSize: 12, color: "#9A9A8E" };

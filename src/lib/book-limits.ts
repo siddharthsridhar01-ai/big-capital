@@ -13,6 +13,7 @@
  */
 import { and, eq, isNull } from "drizzle-orm";
 import Decimal from "decimal.js";
+import { fxRateMapForEngine } from "./fx";
 import { db } from "@/db/client";
 import { funds, fundConstraints, investableUniverses } from "@/db/schema";
 import {
@@ -21,7 +22,7 @@ import {
   type LimitUtilisation,
   type PortfolioContext,
 } from "@/lib/constraints";
-import { computePortfolioState, staticFxFallback } from "@/lib/portfolio";
+import { computePortfolioState } from "@/lib/portfolio";
 
 export interface BookLimitsResult {
   limits: LimitUtilisation[];
@@ -70,8 +71,6 @@ export async function loadBookLimits(fundId: string): Promise<BookLimitsResult |
   const securityMeta: PortfolioContext["securityMeta"] = new Map();
   const positions: PortfolioContext["positions"] = new Map();
   const prices = new Map<string, Decimal>();
-  const fxRates = new Map<string, string>();
-
   for (const [id, p] of state.positions) {
     securityMeta.set(id, { ticker: p.ticker, sector: p.gicsSector, currency: p.currency });
     positions.set(id, {
@@ -85,17 +84,19 @@ export async function loadBookLimits(fundId: string): Promise<BookLimitsResult |
     // surface the gap rather than silently valuing it at zero.
     if (p.latestPriceNative) prices.set(id, p.latestPriceNative);
 
-    if (p.currency !== baseCurrency) {
-      const key = `${p.currency}/${baseCurrency}/${dateStr}`;
-      if (!fxRates.has(key)) {
-        try {
-          fxRates.set(key, staticFxFallback(p.currency, baseCurrency).toString());
-        } catch {
-          /* no rate: evaluateBookLimits will throw on this security, caught below */
-        }
-      }
-    }
   }
+
+  // Stored ECB rates for every currency held or in cash — the same source NAV
+  // and trades use. This read the static fallback table, which disagreed with
+  // the real rate and had no entry at all for the Swiss franc or Nordic currencies.
+  const fxRates = await fxRateMapForEngine(
+    [
+      ...Array.from(state.positions.values()).map((p) => p.currency),
+      ...Array.from(state.cashByCurrency.keys()),
+    ],
+    baseCurrency,
+    dateStr
+  );
 
   const ctx: PortfolioContext = {
     navBase: state.navBase,

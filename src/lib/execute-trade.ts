@@ -19,6 +19,7 @@ import {
 import { theses as thesesTable, thesisUpdates } from "@/db/schema-theses";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import Decimal from "decimal.js";
+import { fxRateMapForEngine } from "./fx";
 import {
   checkTrade,
   type FundConstraint,
@@ -103,11 +104,18 @@ export async function executeTrade(p: ExecuteTradeParams): Promise<ExecuteTradeR
         });
       }
 
-      const fxRates = new Map<string, string>();
       const dateStr = executedAt.toISOString().slice(0, 10);
-      fxRates.set(
-        `${security.currency}/${fund.baseCurrency}/${dateStr}`,
-        fxToBase.toString()
+      // Every currency held or in cash, not just the trade's: the engine values
+      // the whole book, and a missing rate made multi-currency trades fail.
+      const fxRates = await fxRateMapForEngine(
+        [
+          security.currency,
+          ...Array.from(state.positions.values()).map((p) => p.currency),
+          ...Array.from(state.cashByCurrency.keys()),
+        ],
+        fund.baseCurrency as Currency,
+        dateStr,
+        { currency: security.currency, rate: fxToBase }
       );
 
       const enginePositions = new Map();

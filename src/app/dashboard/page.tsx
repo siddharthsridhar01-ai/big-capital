@@ -10,6 +10,7 @@ import Link from "next/link";
 import { serif as serif_, numeric } from "@/lib/typography";
 import { computePortfolioState } from "@/lib/portfolio";
 import Sparkline from "@/components/Sparkline";
+import { currencySymbol as ccySymbol } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,7 @@ export default async function DashboardHome() {
   const summaryById = new Map(summaries.map((s) => [s.fundId, s]));
 
   const currencySymbol = (ccy: string) =>
-    ccy === "GBP" ? "£" : ccy === "EUR" ? "€" : "$";
+    ccySymbol(ccy);
   const fmtMoney = (n: number) =>
     new Intl.NumberFormat("en-GB", {
       minimumFractionDigits: 2,

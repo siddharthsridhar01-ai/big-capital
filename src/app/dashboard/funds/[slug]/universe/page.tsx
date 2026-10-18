@@ -16,6 +16,7 @@ import UniverseTable from "@/components/UniverseTable";
 import AddToUniverse from "@/components/AddToUniverse";
 import { mandateHint } from "@/lib/mandates";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -130,7 +131,7 @@ export default async function FundUniversePage({
   }));
 
   const baseSym =
-    fund.baseCurrency === "GBP" ? "£" : fund.baseCurrency === "EUR" ? "€" : "$";
+    currencySymbol(fund.baseCurrency);
   void baseSym;
 
   return (

@@ -47,8 +47,7 @@ const SERIF: React.CSSProperties = {
 };
 
 function symbolOf(ccy: string) {
-  const m: Record<string, string> = { GBP: "£", EUR: "€", USD: "$", JPY: "¥", HKD: "HK$", CNY: "¥", KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$" };
-  return m[ccy] ?? "$";
+  return centralSymbol(ccy);
 }
 
 function fmtMoney(n: number, decimals = 2) {
@@ -602,3 +601,4 @@ function useTick(ms: number): [number, (n: number) => void] {
 // Import shims so we don't expand React imports up top
 import { useState as useStateImpl, useEffect as useEffectImpl } from "react";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol as centralSymbol } from "@/lib/currency";

@@ -11,6 +11,7 @@
 
 import { serif, numeric } from "@/lib/typography";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol as centralSymbol } from "@/lib/currency";
 
 interface ExposuresPanelProps {
   baseCurrency: Currency;
@@ -35,10 +36,9 @@ interface ExposuresPanelProps {
   netExposure: number;
 }
 
-const baseSyms: Record<string, string> = { GBP: "£", USD: "$", EUR: "€", JPY: "¥", HKD: "HK$", CNY: "¥", KRW: "₩", SGD: "S$", INR: "₹", TWD: "NT$" };
 
 function fmtMoney(n: number, ccy: string) {
-  return `${baseSyms[ccy] ?? "$"}${new Intl.NumberFormat("en-GB", {
+  return `${centralSymbol(ccy)}${new Intl.NumberFormat("en-GB", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n)}`;

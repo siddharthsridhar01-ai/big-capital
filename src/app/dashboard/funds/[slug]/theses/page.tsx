@@ -8,6 +8,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { serif, numeric } from "@/lib/typography";
 import PdfMemoCard from "@/components/PdfMemoCard";
+import { currencySymbol } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -140,7 +141,7 @@ export default async function ThesesListPage({
   ).length;
 
   const baseSym =
-    fund.baseCurrency === "GBP" ? "£" : fund.baseCurrency === "EUR" ? "€" : "$";
+    currencySymbol(fund.baseCurrency);
   void baseSym;
 
   return (

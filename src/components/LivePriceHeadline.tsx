@@ -5,6 +5,7 @@ import { useIntradayPrices } from "@/hooks/useIntradayPrices";
 import { computeDailyChange } from "@/lib/derived";
 import { numeric } from "@/lib/typography";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol } from "@/lib/currency";
 
 interface LivePriceHeadlineProps {
   securityId: string;
@@ -23,7 +24,7 @@ export default function LivePriceHeadline({
   snapshotDate,
   currency,
 }: LivePriceHeadlineProps) {
-  const sym = currency === "GBP" ? "£" : currency === "EUR" ? "€" : "$";
+  const sym = currencySymbol(currency);
 
   const securityIds = [securityId];
   const { quotes, lastUpdated } = useIntradayPrices(securityIds, {

@@ -23,6 +23,7 @@
 
 import Decimal from "decimal.js";
 import { restatePosition } from "./corporate-actions";
+import { FALLBACK_PER_EUR } from "./currency";
 import { eq, and, desc, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
@@ -114,7 +115,14 @@ export function aggregatePortfolioFromTransactions(
   transactions: RawTransaction[],
   securityMetaList: SecurityMeta[],
   latestPriceMap: Map<string, { close: string; date: string }>,
-  asOfDate?: Date
+  asOfDate?: Date,
+  /**
+   * Current rate to base for each currency. When given, holdings AND cash are
+   * converted at it. Without it, holdings used the rate on the day they were
+   * last traded and cash a hard-coded table — so the two never offset, neither
+   * moved with the market, and a currency missing from the table threw.
+   */
+  currentFx?: Map<string, Decimal>
 ): Omit<PortfolioState, "fundId" | "fundSlug"> {
   const txnsInScope = asOfDate
     ? transactions.filter((t) => t.executedAt <= asOfDate)
@@ -214,11 +222,16 @@ export function aggregatePortfolioFromTransactions(
 
     let fxToBase = new Decimal(1);
     if (meta.currency !== baseCurrency) {
-      const lastTxn = txnsInScope
-        .filter((t) => t.securityId === secId)
-        .pop();
-      if (lastTxn) fxToBase = new Decimal(lastTxn.fxRateToBase);
-      else fxToBase = staticFxFallback(meta.currency, baseCurrency);
+      const current = currentFx?.get(meta.currency);
+      if (current) {
+        fxToBase = current;
+      } else {
+        const lastTxn = txnsInScope
+          .filter((t) => t.securityId === secId)
+          .pop();
+        if (lastTxn) fxToBase = new Decimal(lastTxn.fxRateToBase);
+        else fxToBase = staticFxFallback(meta.currency, baseCurrency);
+      }
     }
 
     const marketValueNative = latestPriceNative
@@ -258,7 +271,7 @@ export function aggregatePortfolioFromTransactions(
   for (const [ccy, amt] of cashByCurrency) {
     if (ccy === baseCurrency) cashBase = cashBase.plus(amt);
     else {
-      const fx = staticFxFallback(ccy, baseCurrency);
+      const fx = currentFx?.get(ccy) ?? staticFxFallback(ccy, baseCurrency);
       cashBase = cashBase.plus(amt.times(fx));
     }
   }
@@ -376,6 +389,13 @@ export async function computePortfolioState(
     }
   }
 
+  // 3b) Current rates for every currency the fund holds or has cash in.
+  const { currentFxToBase } = await import("./fx");
+  const currentFx = await currentFxToBase(
+    [...txns.map((t) => t.currency), ...securityMetaList.map((m) => m.currency)],
+    fund.baseCurrency as Currency
+  );
+
   // 4) Run pure aggregation
   const result = aggregatePortfolioFromTransactions(
     fund.baseCurrency as Currency,
@@ -392,7 +412,8 @@ export async function computePortfolioState(
     })),
     securityMetaList,
     latestPriceMap,
-    asOfDate
+    asOfDate,
+    currentFx
   );
 
   return {
@@ -496,18 +517,7 @@ export const FALLBACK_FX_SOURCE = "FALLBACK_FX_RATE_v1";
 // fallback only — the live daily ECB rates are used in normal operation. Any
 // pair is derived via EUR (1 from = (perEur[to]/perEur[from]) to), so no pair
 // throws. Values are indicative; they only matter if a daily rate is missing.
-const FALLBACK_PER_EUR: Record<string, number> = {
-  EUR: 1,
-  USD: 1.08,
-  GBP: 0.84,
-  JPY: 170,
-  HKD: 8.4,
-  CNY: 7.8,
-  KRW: 1480,
-  SGD: 1.45,
-  INR: 90,
-  TWD: 35,
-};
+// See FALLBACK_PER_EUR in currency.ts — one table, complete by construction.
 
 export function staticFxFallback(from: Currency, to: Currency): Decimal {
   if (from === to) return new Decimal(1);

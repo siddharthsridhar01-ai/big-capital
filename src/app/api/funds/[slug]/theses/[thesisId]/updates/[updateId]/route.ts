@@ -14,6 +14,7 @@ import { db } from "@/db/client";
 import { funds as fundsTable } from "@/db/schema";
 import { theses, thesisUpdates } from "@/db/schema-theses";
 import { getOrCreateUser } from "@/lib/auth";
+import { isFundPm } from "@/lib/fund-role";
 import { and, eq } from "drizzle-orm";
 
 const MAX_PDF_SIZE = 10 * 1024 * 1024;
@@ -134,6 +135,14 @@ export async function PATCH(
     } catch {
       return NextResponse.json({ ok: false, error: "Failed to upload attachment" }, { status: 500 });
     }
+  }
+
+  // An edited update goes back to the PM, for the same reason an edited thesis
+  // does: the approval was given to the version they saw, not this one.
+  if (!(await isFundPm(user, fund.id))) {
+    (updateData as Record<string, unknown>).approvalStatus = "pending";
+    (updateData as Record<string, unknown>).approvedByUserId = null;
+    (updateData as Record<string, unknown>).approvedAt = null;
   }
 
   await db.update(thesisUpdates).set(updateData).where(eq(thesisUpdates.id, updateId));

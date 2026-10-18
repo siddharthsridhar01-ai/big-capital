@@ -28,6 +28,7 @@ import { loadBookLimits } from "@/lib/book-limits";
 import ActivityThesisCell, { type ThesisOption } from "@/components/ActivityThesisCell";
 import PendingOrdersPanel from "@/components/PendingOrdersPanel";
 import type { Currency } from "@/lib/currency";
+import { currencySymbol as ccySymbol } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,7 @@ export default async function FundPage({
     .limit(1);
 
   const currencySymbol =
-    fund.baseCurrency === "GBP" ? "£" : fund.baseCurrency === "EUR" ? "€" : "$";
+    ccySymbol(fund.baseCurrency);
 
   // Benchmark since-inception comparison for the "Since inception" card.
   let benchmarkSinceInceptionPct: number | null = null;
@@ -569,7 +570,7 @@ export default async function FundPage({
       />
 
       {activityRows.length > 0 && (() => {
-        const ccySym = (c: string) => (c === "GBP" ? "£" : c === "EUR" ? "€" : "$");
+        const ccySym = (c: string) => (ccySymbol(c));
         const money = (v: number) =>
           new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(v));
         const ACTIVITY: Record<string, { label: string; color: string }> = {
