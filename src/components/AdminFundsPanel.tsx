@@ -128,6 +128,20 @@ export default function AdminFundsPanel({ funds }: { funds: Fund[] }) {
               Feature disclosed only
             </label>
             <Link
+              href={`/dashboard/admin/funds/${f.slug}/limits`}
+              style={{
+                fontSize: 12,
+                color: "#00183A",
+                textDecoration: "none",
+                padding: "6px 12px",
+                border: "1px solid #C8C8C0",
+                borderRadius: 3,
+                background: "white",
+              }}
+            >
+              Limits
+            </Link>
+            <Link
               href={`/dashboard/funds/${f.slug}`}
               style={{
                 fontSize: 12,
