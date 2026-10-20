@@ -12,6 +12,7 @@
 import { serif, numeric } from "@/lib/typography";
 import type { Currency } from "@/lib/currency";
 import { currencySymbol as centralSymbol } from "@/lib/currency";
+import { exchangeToCountry } from "@/lib/exchange-country";
 
 interface ExposuresPanelProps {
   baseCurrency: Currency;
@@ -48,50 +49,6 @@ function fmtPct(n: number) {
   return `${(n * 100).toFixed(2)}%`;
 }
 
-/**
- * Map an exchange code to a country. Country of LISTING, not country of
- * revenue. Revenue-weighted geographic exposure requires paid data we don't
- * have for v1.
- */
-function exchangeToCountry(exchange: string): string {
-  const norm = exchange.toUpperCase().trim();
-  const map: Record<string, string> = {
-    LSE: "United Kingdom",
-    "LONDON STOCK EXCHANGE": "United Kingdom",
-    NYSE: "United States",
-    NASDAQ: "United States",
-    XETRA: "Germany",
-    FRANKFURT: "Germany",
-    "EURONEXT PARIS": "France",
-    "EURONEXT AMSTERDAM": "Netherlands",
-    "EURONEXT BRUSSELS": "Belgium",
-    "BORSA ITALIANA": "Italy",
-    MILAN: "Italy",
-    SIX: "Switzerland",
-    "SWISS EXCHANGE": "Switzerland",
-    TSX: "Canada",
-    "TORONTO STOCK EXCHANGE": "Canada",
-    HKEX: "Hong Kong",
-    "HONG KONG STOCK EXCHANGE": "Hong Kong",
-    NSE: "India",
-    BSE: "India",
-    "TOKYO STOCK EXCHANGE": "Japan",
-    TSE: "Japan",
-    "AUSTRALIAN SECURITIES EXCHANGE": "Australia",
-    ASX: "Australia",
-    JSE: "South Africa",
-    "JOHANNESBURG STOCK EXCHANGE": "South Africa",
-    B3: "Brazil",
-    "BOLSA DE VALORES DE SAO PAULO": "Brazil",
-    "BOLSA MEXICANA DE VALORES": "Mexico",
-    TWSE: "Taiwan",
-    "TAIWAN STOCK EXCHANGE": "Taiwan",
-    KRX: "South Korea",
-    KOSPI: "South Korea",
-    "KOREA EXCHANGE": "South Korea",
-  };
-  return map[norm] ?? exchange;
-}
 
 const SECTION_HEADER: React.CSSProperties = {
   fontFamily: "system-ui, sans-serif",

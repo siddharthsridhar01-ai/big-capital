@@ -77,3 +77,22 @@ describe("European Equity mandate", () => {
     expect(checkMandate("global-equity", "CHF", "SIX").ok).toBe(true);
   });
 });
+
+import { EXCHANGE_COUNTRY, exchangeToCountry } from "../src/lib/exchange-country";
+
+describe("country of listing", () => {
+  it("has a country for every exchange the system can list", () => {
+    for (const exchange of Object.keys(EXCHANGE_SUFFIX)) {
+      expect(EXCHANGE_COUNTRY[exchange], exchange).toBeTruthy();
+    }
+  });
+  it("maps the European venues", () => {
+    expect(exchangeToCountry("MADRID")).toBe("Spain");
+    expect(exchangeToCountry("COPENHAGEN")).toBe("Denmark");
+    expect(exchangeToCountry("STOCKHOLM")).toBe("Sweden");
+    expect(exchangeToCountry("OSLO")).toBe("Norway");
+  });
+  it("never shows a raw exchange code", () => {
+    expect(exchangeToCountry("SOMEWHERE NEW")).toBe("Other");
+  });
+});
