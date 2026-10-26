@@ -187,24 +187,33 @@ export async function runYahooDividendIngest(opts: DividendIngestOptions = {}): 
   const fetchFrom = opts.from ?? fundCtxs.reduce((min, c) => (c.from < min ? c.from : min), today);
   const fetchTo = opts.to ?? today;
   const divCache = new Map<string, { metaCurrency: string; dividends: Array<{ amount: number; date: Date }> }>();
-  for (const secId of allHeldIds) {
-    const sec = secById.get(secId);
-    if (!sec) continue;
-    const yahooSym = toYahooSymbol(sec.ticker, sec.exchange);
-    try {
-      const chart = await yf.chart(yahooSym, {
-        period1: fetchFrom,
-        period2: fetchTo,
-        interval: "1mo", // events (dividends) are returned regardless of bar interval; keep payload small
-        events: "div",
-      });
-      divCache.set(secId, {
-        metaCurrency: chart.meta?.currency ?? "",
-        dividends: (chart.events?.dividends ?? []) as Array<{ amount: number; date: Date }>,
-      });
-    } catch (err) {
-      result.errors.push({ scope: yahooSym, message: err instanceof Error ? err.message : String(err) });
-    }
+  // Fetched in parallel batches, not one at a time. With every fund invested
+  // there are well over a hundred held securities; sequential calls would run
+  // past the function time limit — how the nightly NAV job froze in August.
+  const CONCURRENCY = 8;
+  const ids = Array.from(allHeldIds);
+  for (let i = 0; i < ids.length; i += CONCURRENCY) {
+    await Promise.all(
+      ids.slice(i, i + CONCURRENCY).map(async (secId) => {
+        const sec = secById.get(secId);
+        if (!sec) return;
+        const yahooSym = toYahooSymbol(sec.ticker, sec.exchange);
+        try {
+          const chart = await yf.chart(yahooSym, {
+            period1: fetchFrom,
+            period2: fetchTo,
+            interval: "1mo", // events (dividends) are returned regardless of bar interval; keep payload small
+            events: "div",
+          });
+          divCache.set(secId, {
+            metaCurrency: chart.meta?.currency ?? "",
+            dividends: (chart.events?.dividends ?? []) as Array<{ amount: number; date: Date }>,
+          });
+        } catch (err) {
+          result.errors.push({ scope: yahooSym, message: err instanceof Error ? err.message : String(err) });
+        }
+      })
+    );
   }
 
   // ----- Pass 2: book per fund (logic identical to the original) -----

@@ -9,7 +9,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { runYahooDividendIngest } from "@/workers/ingest-dividends-yahoo";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+// Within the plan's function limit; the fetches are batched to fit.
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");

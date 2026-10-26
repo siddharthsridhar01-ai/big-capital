@@ -55,6 +55,21 @@ jobs:
           echo "PRICES -> HTTP $code"
           head -c 500 /tmp/prices.json 2>/dev/null || true
 
+      # Dividends were never scheduled: the route existed but nothing called it,
+      # so income was credited only when someone ran it by hand. Runs before the
+      # NAV strike so a dividend is booked on its ex-date, offsetting that day's
+      # ex-dividend price drop rather than showing it as a loss. Idempotent.
+      - name: Dividends
+        id: div
+        if: always()
+        run: |
+          code=$(curl -s -o /tmp/div.json -w "%{http_code}" --max-time 90 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$BASE_URL/api/cron/dividends" || echo 000)
+          echo "status=$code" >> "$GITHUB_OUTPUT"
+          echo "DIVIDENDS -> HTTP $code"
+          head -c 800 /tmp/div.json 2>/dev/null || true
+
       - name: Corporate actions
         if: always()
         continue-on-error: true
@@ -103,9 +118,10 @@ jobs:
           fx="${{ steps.fx.outputs.status }}"
           prices="${{ steps.prices.outputs.status }}"
           nav="${{ steps.nav.outputs.status }}"
-          echo "fx=$fx prices=$prices nav=$nav"
+          div="${{ steps.div.outputs.status }}"
+          echo "fx=$fx prices=$prices dividends=$div nav=$nav"
           bad=0
-          for pair in "fx:$fx" "prices:$prices" "nav:$nav"; do
+          for pair in "fx:$fx" "prices:$prices" "dividends:$div" "nav:$nav"; do
             name="${pair%%:*}"; code="${pair##*:}"
             case "$code" in
               2*) ;;
