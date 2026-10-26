@@ -47,8 +47,14 @@ const CANDIDATES: Record<string, { benchmarkName: string; baseCurrency: Currency
     benchmarkName: "MSCI Europe (total-return proxy)",
     baseCurrency: "GBP",
     options: [
-      { symbol: "IMEU.L", ticker: "IMEU", exchange: "LSE", label: "iShares Core MSCI Europe UCITS ETF (Acc), GBP line" },
-      { symbol: "SMEA.L", ticker: "SMEA", exchange: "LSE", label: "iShares Core MSCI Europe UCITS ETF (Acc), alternate line" },
+      // SMEA is the ACCUMULATING share class: dividends are reinvested, so its
+      // price is a total return. IMEU is the same fund's DISTRIBUTING class —
+      // it was listed first here and mislabelled "(Acc)". A distributing price
+      // falls on every ex-date and never recovers the dividend, so it measures
+      // price return only, and the fund (which books its dividends) would beat
+      // it by the index's yield, about 3% a year, through income rather than skill.
+      { symbol: "SMEA.L", ticker: "SMEA", exchange: "LSE", label: "iShares Core MSCI Europe UCITS ETF EUR (Acc), GBP line — total return" },
+      { symbol: "IMEU.L", ticker: "IMEU", exchange: "LSE", label: "iShares Core MSCI Europe UCITS ETF (Dist), GBP line — price-return fallback" },
       { symbol: "VEUR.L", ticker: "VEUR", exchange: "LSE", label: "Vanguard FTSE Developed Europe UCITS ETF — distributing, price-return fallback" },
     ],
   },
