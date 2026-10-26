@@ -68,7 +68,7 @@ export default function PendingOrdersPanel({
           marginBottom: 8,
         }}
       >
-        Queued orders · fill at next open
+        Queued orders · market on open
       </div>
       <div style={{ border: "1px solid #E5E5DE", background: "white" }}>
         {orders.map((o, i) => (
@@ -106,7 +106,7 @@ export default function PendingOrdersPanel({
                 whiteSpace: "nowrap",
               }}
             >
-              awaiting open
+              queued
             </div>
             {canManage && (
               <button
@@ -148,8 +148,8 @@ export default function PendingOrdersPanel({
           marginTop: 6,
         }}
       >
-        These execute at the exchange&apos;s next opening price. They can only be
-        cancelled while that market is closed.
+        Each fills at the opening price of the first session after it was placed, sales
+        before purchases, and can be cancelled until that session opens.
       </div>
     </section>
   );

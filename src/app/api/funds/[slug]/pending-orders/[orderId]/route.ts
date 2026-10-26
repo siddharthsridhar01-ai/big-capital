@@ -24,6 +24,11 @@ import { and, eq, isNull } from "drizzle-orm";
 import { toYahooSymbol } from "@/lib/intraday/yahoo";
 import { getQuotes } from "@/lib/intraday/cache";
 import { activeProvider } from "@/lib/intraday/provider";
+import YahooFinance from "yahoo-finance2";
+import { orderMayFillAtOpen } from "@/lib/basket";
+
+const yf = new YahooFinance();
+
 
 export const dynamic = "force-dynamic";
 
@@ -96,39 +101,52 @@ export async function DELETE(
     );
   }
 
-  // ---- Market must still be shut to cancel ----
+  // ---- Is the order committed? ----
+  // Committed only if its market is open AND it will fill at THIS session's open
+  // — placed before the session began. Cancelling then hands the PM a free
+  // option: watch the open, cancel if it moved the wrong way.
+  //
+  // An order placed after today's open fills at the NEXT session, at a price
+  // nobody knows yet, so cancelling it is safe. The old rule blocked every
+  // cancel while the market was open, which left such orders uncancellable all
+  // day.
+  //
+  // Admins may cancel at any time, to clear an order that is stuck; it is
+  // recorded as an admin cancellation.
+  const isAdmin = user.role === "admin";
+  let committedReason: string | null = null;
   const secRows = await db
     .select()
     .from(securitiesTable)
     .where(eq(securitiesTable.id, order.securityId))
     .limit(1);
-  if (secRows.length > 0) {
+  if (secRows.length > 0 && !isAdmin) {
     const security = secRows[0];
+    const sym = toYahooSymbol(security.ticker, security.exchange);
     try {
-      const quotes = await getQuotes(activeProvider, [
-        { securityId: security.id, symbol: toYahooSymbol(security.ticker, security.exchange) },
-      ]);
+      const quotes = await getQuotes(activeProvider, [{ securityId: security.id, symbol: sym }]);
       if (quotes[0]?.quote?.marketState === "REGULAR") {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: `${security.ticker}'s market has opened, so this order is committed and will fill at today's opening price. Orders can only be cancelled while their market is closed.`,
-          },
-          { status: 409 }
-        );
+        const chart = await yf.chart(sym, {
+          period1: new Date(Date.now() - 5 * 86400000),
+          period2: new Date(Date.now() + 86400000),
+          interval: "1d",
+        });
+        const sessionStart = chart.meta?.currentTradingPeriod?.regular?.start;
+        const todayUtc = new Date().toISOString().slice(0, 10);
+        if (orderMayFillAtOpen(new Date(order.submittedAt), sessionStart, todayUtc)) {
+          committedReason = `${security.ticker}'s market has opened and this order fills at today's opening price, so it is committed. Orders placed after the open, or before their market opens, can be cancelled.`;
+        }
       }
     } catch {
-      // Price feed unreachable — refuse the cancel rather than risk allowing one
-      // after the open. Failing closed is the safe direction here.
+      // Feed unreachable: refuse rather than risk a cancel after the open.
       return NextResponse.json(
-        {
-          ok: false,
-          error:
-            "Couldn't confirm whether this market is open, so the cancel was not applied. Please try again shortly.",
-        },
+        { ok: false, error: "Couldn't confirm whether this order is committed, so it was not cancelled. Please try again shortly." },
         { status: 503 }
       );
     }
+  }
+  if (committedReason) {
+    return NextResponse.json({ ok: false, error: committedReason }, { status: 409 });
   }
 
   await db
@@ -136,7 +154,9 @@ export async function DELETE(
     .set({
       status: "cancelled",
       resolvedAt: new Date(),
-      rejectionReason: `Cancelled by ${user.fullName ?? user.email} before the market opened`,
+      rejectionReason: isAdmin
+        ? `Cancelled by admin ${user.fullName ?? user.email}`
+        : `Cancelled by ${user.fullName ?? user.email} before it was committed`,
     })
     .where(and(eq(pendingOrders.id, orderId), eq(pendingOrders.status, "pending")));
 
